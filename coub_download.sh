@@ -2,10 +2,10 @@
 
 # Help text
 usage () {
-echo "Usage: sh $0 -c coub_code [-h] [-s]"
-echo -e "\t-c coub_code: The unique identifier of the coub from its URL"
-echo -e "\t-h: Show help"
-echo -e "\t-s: Toggles shortmode. During shortmode the length of the coub is determined by the video and not the audio. Don't use for perfect loops."
+	echo "Usage: sh $0 -c coub_code [-h] [-s]"
+	echo -e "\t-c coub_code: The unique identifier of the coub from its URL"
+	echo -e "\t-h: Show help"
+	echo -e "\t-s: Toggles shortmode. During shortmode the length of the coub is determined by the video and not the audio. Don't use for perfect loops."
 }
 
 # Assign input parameters, if specfied
