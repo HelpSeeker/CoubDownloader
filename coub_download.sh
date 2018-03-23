@@ -3,9 +3,9 @@
 # Help text
 usage () {
 	echo "Usage: sh $0 -c coub_code [-h] [-s]"
-	echo -e "\t-c coub_code: The unique identifier of the coub from its URL"
-	echo -e "\t-h: Show help"
-	echo -e "\t-s: Toggles shortmode. During shortmode the length of the coub is determined by the video and not the audio. Don't use for perfect loops."
+	echo -e "\\t-c coub_code: The unique identifier of the coub from its URL"
+	echo -e "\\t-h: Show help"
+	echo -e "\\t-s: Toggles shortmode. During shortmode the length of the coub is determined by the video and not the audio. Don't use for perfect loops."
 }
 
 # Assign input parameters, if specfied
@@ -22,19 +22,19 @@ done
 mkdir Done
 
 # Assign default parameters, if not otherwise specified
-[[ -z $coub ]] && { echo -e "A coub code is required!\nEnter a coub code now:" && read coub; }
+[[ -z $coub ]] && { echo -e "A coub code is required!\\nEnter a coub code now:" && read -r coub; }
 [[ -z $short_mode ]] && short_mode=false
 
 # Download video and audio
-youtube-dl -o "$coub.%(ext)s" https://coub.com/view/$coub
-youtube-dl -f bestaudio -o "$coub.%(ext)s" https://coub.com/view/$coub
+youtube-dl -o "$coub.%(ext)s" https://coub.com/view/"$coub"
+youtube-dl -f bestaudio -o "$coub.%(ext)s" https://coub.com/view/"$coub"
 
 # Fix the broken video
-printf '\x00\x00' | dd of=$coub.mp4 bs=1 count=2 conv=notrunc
+printf '\x00\x00' | dd of="$coub".mp4 bs=1 count=2 conv=notrunc
 
 # Combinging video and audio
 if [[ "$short_mode" = true ]]; then
-	ffmpeg -i $coub.mp4 -i $coub.mp3 -shortest -c:v copy -c:a copy Done/$coub.mkv
+	ffmpeg -y -i "$coub".mp4 -i "$coub".mp3 -shortest -c:v copy -c:a copy Done/"$coub".mkv
 else
 	# Get video + audio length and calculate how many times the audio is longer than the video
 	video_length=$(ffprobe -v error -select_streams v:0 -show_entries stream=duration -of default=noprint_wrappers=1:nokey=1 "$coub.mp4")
@@ -42,10 +42,10 @@ else
 	repeat=$(bc <<< "$audio_length/$video_length+1")
 
 	# Print txt file with repeat entries for concat
-	for i in $(eval echo {1.."$repeat"}); do printf "file '%s'\n" $coub.mp4 >> list.txt; done
+	for i in $(eval echo "{1..$repeat}"); do printf "file '%s'\\n" "$coub".mp4 >> list.txt; done
 
-	ffmpeg -f concat -i list.txt -i $coub.mp3 -t $audio_length -c:v copy -c:a copy Done/$coub.mkv
+	ffmpeg -y -f concat -i list.txt -i "$coub".mp3 -t "$audio_length" -c:v copy -c:a copy Done/"$coub".mkv
 fi
 
 # Remove left over files
-rm $coub.mp4 $coub.mp3 list.txt
+rm "$coub".mp4 "$coub".mp3 list.txt
