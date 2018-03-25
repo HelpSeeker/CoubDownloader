@@ -34,7 +34,7 @@ printf '\x00\x00' | dd of="$coub".mp4 bs=1 count=2 conv=notrunc
 
 # Combinging video and audio
 if [[ "$short_mode" = true ]]; then
-	ffmpeg -y -i "$coub".mp4 -i "$coub".mp3 -shortest -c:v copy -c:a copy Done/"$coub".mkv
+	ffmpeg -i "$coub".mp4 -i "$coub".mp3 -shortest -c:v copy -c:a copy Done/"$coub".mkv
 else
 	# Get video + audio length and calculate how many times the audio is longer than the video
 	video_length=$(ffprobe -v error -select_streams v:0 -show_entries stream=duration -of default=noprint_wrappers=1:nokey=1 "$coub.mp4")
@@ -44,8 +44,9 @@ else
 	# Print txt file with repeat entries for concat
 	for i in $(eval echo "{1..$repeat}"); do printf "file '%s'\\n" "$coub".mp4 >> list.txt; done
 
-	ffmpeg -y -f concat -i list.txt -i "$coub".mp3 -t "$audio_length" -c:v copy -c:a copy Done/"$coub".mkv
+	ffmpeg -f concat -i list.txt -i "$coub".mp3 -t "$audio_length" -c:v copy -c:a copy Done/"$coub".mkv
+	rm list.txt
 fi
 
 # Remove left over files
-rm "$coub".mp4 "$coub".mp3 list.txt
+rm "$coub".mp4 "$coub".mp3
