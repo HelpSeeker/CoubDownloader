@@ -14,12 +14,12 @@ do case "$ARG" in
 c) coub="$OPTARG";;
 h) usage && exit;;
 s) short_mode=true;;
-\?) echo "Unknown flag. Type sh $0 -h for all available input parameters." && exit;;
+\?) echo "Unknown flag. Use $0 -h to show all available input parameters." && exit;;
 esac;
 done
 
 # Make directory "Done" to save coubs to
-mkdir Done
+mkdir Done 2> /dev/null
 
 # Assign default parameters, if not otherwise specified
 [[ -z $coub ]] && { echo -e "A coub code is required!\\nEnter a coub code now:" && read -r coub; }
@@ -42,7 +42,7 @@ else
 	repeat=$(bc <<< "$audio_length/$video_length+1")
 
 	# Print txt file with repeat entries for concat
-	for i in $(eval echo "{1..$repeat}"); do printf "file '%s'\\n" "$coub".mp4 >> list.txt; done
+	for (( i = 1; i <= repeat; i++ )); do printf "file '%s'\\n" "$coub".mp4 >> list.txt; done
 
 	ffmpeg -f concat -i list.txt -i "$coub".mp3 -t "$audio_length" -c:v copy -c:a copy Done/"$coub".mkv
 	rm list.txt
