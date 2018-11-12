@@ -1,9 +1,23 @@
 # CoubDownloader
-Shell script to download videos from coub.com. Can use either video or audio to define final length.
+```
+CoubDownloader is a simple download script for coub.com
+Usage: coub.sh [OPTIONS] LINK [LINK]...
 
+Options:
+ -h, --help			show this help
+ -y, --yes			answer all prompts with yes
+ -s, --short			disable video looping
+ -p, --path <path>		set output destination (default: $HOME/coub)
+ --preview <command>		play finished coub via the given command
 ```
-Usage: sh coub_download.sh -c coub_code [-h] [-s]
-  -c coub_code: The unique identifier of the coub from its URL
-  -h: Show help
-  -s: Toggles shortmode. During shortmode the length of the coub is determined by the video and not the audio. Don't use for perfect loops
-```
+
+### Requirements
+
+* [youtube-dl](https://github.com/rg3/youtube-dl)
+* [FFmpeg](https://www.ffmpeg.org/) (incl. ffprobe)
+* Bash >= 4.0
+
+### Change default path
+
+At the beginning of the script change `save_path="$HOME/coub"` to whatever default path you want.
+
