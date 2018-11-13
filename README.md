@@ -34,7 +34,7 @@ All other settings can be made default by changing their value from `false` to `
 
 ### Input list(s)
 
-For easier usage the script accepts list of coub links in the form of text files. Just make sure each link is either on a new line or separated from the prior one by a white space.
+For easier usage the script accepts lists of coub links in the form of text files. Just make sure each link is either on a new line or separated from the prior one by a white space.
 
 For example:
 
