@@ -11,6 +11,7 @@ Options:
  -p, --path <path>		set output destination (default: $HOME/coub)
  -k, --keep			keep the individual video/audio parts
  -l, --list <file>		read coub links from a text file
+ -r, --repeat <n>		repeat video n times (default: until audio ends)
  --preview <command>		play finished coub via the given command
  --audio-only			only download the audio
  --video-only			only download the video
@@ -19,7 +20,7 @@ Options:
 ### Requirements
 
 * [youtube-dl](https://github.com/rg3/youtube-dl)
-* [FFmpeg](https://www.ffmpeg.org/) (incl. ffprobe)
+* [FFmpeg](https://www.ffmpeg.org/)
 * Bash >= 4.0
 
 ### Change defaults
