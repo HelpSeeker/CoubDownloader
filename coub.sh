@@ -18,6 +18,9 @@ audio_only=false
 video_only=false
 # keep=true to keep individual video/audio parts by default
 keep=false 
+# default number of times video gets looped
+# if longer than audio duration -> audio decides length
+repeat=1000
 
 # Don't touch these
 link_list=()
@@ -39,6 +42,7 @@ usage() {
 	echo -e " -p, --path <path>\tset output destination (default: $HOME/coub)"
 	echo -e " -k, --keep\t\tkeep the individual video/audio parts"
 	echo -e " -l, --list <file>\tread coub links from a text file"
+	echo -e " -r, repeat <n>\t\trepeat video n times (default: until audio ends)"
 	echo -e " --preview <command>\tplay finished coub via the given command"
 	echo -e " --audio-only\t\tonly download the audio"
 	echo -e " --video-only\t\tonly download the video"
@@ -95,17 +99,14 @@ merge() {
 		# Doesn't loop video
 		ffmpeg -loglevel panic $prompt_answer -i "${filename}.mp4" -i "${filename}.mp3" -shortest -c copy "${filename}.mkv"
 	else
-		# Get audio length
-		audio_length=$(ffprobe -v error -select_streams a:0 -show_entries stream=duration -of default=noprint_wrappers=1:nokey=1 "${filename}.mp3")
-
 		# Print txt file for ffmpeg's concat
-		for (( i = 1; i <= 100; i++ ))
+		for (( i = 1; i <= repeat; i++ ))
 		do 
 			echo "file '${filename}.mp4'" >> list.txt
 		done
 	
 		# Loop video until audio end
-		ffmpeg -loglevel panic $prompt_answer -f concat -safe 0 -i list.txt -i "${filename}.mp3" -t $audio_length -c copy "${filename}.mkv"
+		ffmpeg -loglevel panic $prompt_answer -f concat -safe 0 -i list.txt -i "${filename}.mp3" -c copy -shortest "${filename}.mkv"
 		rm list.txt
 	fi
 	echo "Created: ${filename}.mkv"
@@ -151,6 +152,7 @@ do
 	-p | --path) save_path="$2"; shift 2;;
 	-k | --keep) keep=true; shift;;
 	-l | --list) parse_input_list "$2"; shift 2;;
+	-r | --repeat) repeat="$2"; shift 2;;
 	--preview) preview=true; preview_command="$2"; shift 2;;
 	--audio-only) audio_only=true; shift;;
 	--video-only) video_only=true; shift;;
@@ -181,6 +183,12 @@ if [[ $preview = true && -z "$(command -v $preview_command)" ]]; then
 	exit
 fi
 
+# Check if repeat value makes sense (also throws error for non-integers)
+if (( repeat <= 0 )); then
+	echo "-r (--repeat) only accepts integers greater than zero."
+	exit
+fi
+
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 for link in "${link_list[@]}"
@@ -189,10 +197,10 @@ do
 	echo "Current link: $link"
 	filename="${link##*/}"
 	
-	# Create subshell to be able to skip files if necessary
-	(
 	download
-	if [[ $error_video = true || ($error_audio = true && $only_audio = true) ]]; then exit; fi
+	
+	# Skip coub if (audio) not available
+	if [[ $error_video = true || ($error_audio = true && $only_audio = true) ]]; then continue; fi
 
 	if [[ $audio_only = false ]]; then
 		echo "Fixing broken video stream..."
@@ -206,5 +214,4 @@ do
 	echo "Done!" 
 	
 	preview
-	)
 done
