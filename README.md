@@ -20,9 +20,10 @@ Options:
 
 ### Requirements
 
+* Bash >= 4.0
 * [youtube-dl](https://github.com/rg3/youtube-dl)
 * [FFmpeg](https://www.ffmpeg.org/)
-* Bash >= 4.0
+* [grep](https://www.gnu.org/software/grep/)
 
 ### Change defaults
 

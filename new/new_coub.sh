@@ -30,8 +30,9 @@ link_list=()
 # Help text
 usage() {
     echo -e "CoubDownloader is a simple download script for coub.com"
-    echo -e "Usage: coub.sh [OPTIONS] LINK [LINK]..."
-    echo -e "  or   coub.sh [OPTIONS] -l LIST [-l LIST]...\n"
+    echo -e "Usage: new_coub.sh [OPTIONS] LINK [LINK]..."
+    echo -e "  or   new_coub.sh [OPTIONS] -l LIST [-l LIST]..."
+    echo -e "  or   new_coub.sh [OPTIONS] -c CHANNEL [-c CHANNEL]...\n"
     
     echo -e "Options:"
     echo -e " -h, --help            show this help"
@@ -40,12 +41,40 @@ usage() {
     echo -e " -p, --path <path>     set output destination (default: $HOME/coub)"
     echo -e " -k, --keep            keep the individual video/audio parts"
     echo -e " -l, --list <file>     read coub links from a text file"
+    echo -e " -c, --channel <link>  download all coubs from a channel"
     echo -e " -r, repeat <n>        repeat video n times (default: until audio ends)"
     echo -e " --preview <command>   play finished coub via the given command"
     echo -e " --no-preview          explicitly disable coub preview" 
     echo -e " --audio-only          only download the audio"
     echo -e " --video-only          only download the video"
     echo -e ""
+}
+
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+get_channel_list() {
+    channel_id="${1##*/}"
+    
+    curl -s "https://coub.com/api/v2/timeline/channel/$channel_id" > temp.json
+    total_pages=$(jq -r .total_pages temp.json)
+    echo "Downloading channel info (${1}):"
+
+    channel_list=()
+    for (( i=1; i<=total_pages; i++ ))
+    do
+        curl -s "https://coub.com/api/v2/timeline/channel/${channel_id}?page=$i" > temp.json
+        channel_list+=($(jq -r .coubs[].permalink temp.json))
+        echo "$i out of ${total_pages}"
+    done
+
+    for id in ${channel_list[@]}
+    do
+        echo "https://coub.com/view/$id" >> "${channel_id}.txt"
+    done
+
+    parse_input_list "${channel_id}.txt"
+    rm temp.json "${channel_id}.txt"
+    echo "###"
 }
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -70,7 +99,6 @@ download() {
     error_video=false
     error_audio=false
     
-    echo "Downloading..."
     curl -s "https://coub.com/api/v2/coubs/$coub_id" > temp.json
 
     # jq's default output for non-existent entries is null
@@ -112,19 +140,15 @@ download() {
         echo "Error: Coub unavailable"
     elif [[ $error_audio = true && $audio_only = true ]]; then
         echo "Error: No audio present or coub unavailable"
-    else
-        echo "Downloaded: ${downloaded[@]}"
     fi
     
-    rm -v temp.json 2> /dev/null
+    rm temp.json 2> /dev/null
 }
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 # Combine video and audio
 merge() {
-    echo "Creating final video..."
-
     # Print .txt for ffmpeg's concat
     for (( i = 1; i <= repeat; i++ ))
     do 
@@ -136,13 +160,10 @@ merge() {
     ffmpeg -loglevel panic $prompt_answer -f concat -safe 0 \
         -i list.txt -i "${coub_id}.mp3" -c copy -shortest "${coub_id}.mkv"
     rm list.txt
-    
-    echo "Created: ${coub_id}.mkv"
-    
+        
     if [[ $keep = false ]]; then
         # Remove leftover files
-        echo "Cleaning up..."
-        rm -v "${coub_id}.mp4" "${coub_id}.mp3" 2> /dev/null
+        rm "${coub_id}.mp4" "${coub_id}.mp3" 2> /dev/null
     fi
 }
 
@@ -159,7 +180,6 @@ preview() {
     fi
     
     if [[ $preview = true && -e "$output" ]]; then
-        echo "Playing finished coub..."
         # Necessary workaround for mpv (and perhaps CLI music players)
         # No window + redirected stdout = keyboard shortcuts not responding
         script -c "$preview_command $output" /dev/null > /dev/null
@@ -180,6 +200,7 @@ do
     -p | --path) save_path="$2"; shift 2;;
     -k | --keep) keep=true; shift;;
     -l | --list) parse_input_list "$2"; shift 2;;
+    -c | --channel) get_channel_list "$2"; shift 2;;
     -r | --repeat) repeat="$2"; shift 2;;
     --preview) preview=true; preview_command="$2"; shift 2;;
     --no-preview) preview=false; shift;;
@@ -240,10 +261,13 @@ fi
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
+echo "Downloading coubs:"
+counter=0
+
 for link in "${link_list[@]}"
 do
-    echo "###"
-    echo "Current link: $link"
+    (( counter += 1 ))
+    echo "$counter out of ${#link_list[@]} (${link})"
     coub_id="${link##*/}"
     
     download
@@ -252,15 +276,12 @@ do
     if [[ $error_video = true || ($error_audio = true && $only_audio = true) ]]; then continue; fi
 
     if [[ $audio_only = false ]]; then
-        echo "Fixing broken video stream..."
         # Fix the broken video
         printf '\x00\x00' | dd of="${coub_id}.mp4" bs=1 count=2 conv=notrunc &> /dev/null
     fi
     
     # Merge video and audio
-    if [[ $video_only = false && $audio_only = false && $error_audio = false ]]; then merge; fi    
-    
-    echo "Done!" 
+    if [[ $video_only = false && $audio_only = false && $error_audio = false ]]; then merge; fi
     
     preview
 done

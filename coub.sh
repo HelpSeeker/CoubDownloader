@@ -8,7 +8,7 @@
 save_path="$HOME/coub"
 # preview=true for default preview
 # Change preview_command to whatever you use
-preview=false
+preview=true
 preview_command="mpv"
 # audio_only=true to permanently download ONLY audio
 # video_only=true to permanently download ONLY video
@@ -164,10 +164,24 @@ done
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 mkdir -p "$save_path"
-cd "$save_path" 2> /dev/null || \
-    { echo "Error: Can't change into destination directory."; exit; }
+if ! cd "$save_path" 2> /dev/null; then
+    echo "Error: Can't change into destination directory."
+    exit
+fi
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+# Check for requirements
+if ! ffmpeg -version &> /dev/null; then
+    echo "FFmpeg not found! Aborting..."
+    exit
+elif ! youtube-dl --version &> /dev/null; then
+    echo "youtube-dl not found! Aborting..."
+    exit
+elif ! grep --version &> /dev/null; then
+    echo "grep not found! Aborting..."
+    exit
+fi
 
 # Check for input links
 if [[ -z "${link_list[@]}" ]]; then
