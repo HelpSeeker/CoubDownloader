@@ -6,9 +6,13 @@
 
 # Change this to your preferred destination
 save_path="$HOME/coub"
+# recoubs=true to download reposts during channel downloads
+recoubs=true
+# only_recoubs=true to only download reposts during channel downloads
+only_recoubs=false
 # preview=true for default preview
 # Change preview_command to whatever you use
-preview=true
+preview=false
 preview_command="mpv"
 # audio_only=true to permanently download ONLY audio
 # video_only=true to permanently download ONLY video
@@ -30,17 +34,23 @@ link_list=()
 # Help text
 usage() {
     echo -e "CoubDownloader is a simple download script for coub.com"
-    echo -e "Usage: coub.sh [OPTIONS] LINK [LINK]..."
-    echo -e "  or   coub.sh [OPTIONS] -l LIST [-l LIST]...\n"
+    echo -e "Usage: new_coub.sh [OPTIONS] LINK [LINK]..."
+    echo -e "  or   new_coub.sh [OPTIONS] -l LIST [-l LIST]..."
+    echo -e "  or   new_coub.sh [OPTIONS] -c CHANNEL [-c CHANNEL]...\n"
     
     echo -e "Options:"
     echo -e " -h, --help            show this help"
     echo -e " -y, --yes             answer all prompts with yes"
+    echo -e " -n, --no              answer all prompts with no"
     echo -e " -s, --short           disable video looping"
     echo -e " -p, --path <path>     set output destination (default: $HOME/coub)"
     echo -e " -k, --keep            keep the individual video/audio parts"
     echo -e " -l, --list <file>     read coub links from a text file"
+    echo -e " -c, --channel <link>  download all coubs from a channel"
     echo -e " -r, repeat <n>        repeat video n times (default: until audio ends)"
+    echo -e " --recoubs             include recoubs during channel downloads (default)"
+    echo -e " --no-recoubs          exclude recoubs during channel downloads"
+    echo -e " --only-recoubs        only download recoubs during channel downloads"
     echo -e " --preview <command>   play finished coub via the given command"
     echo -e " --no-preview          explicitly disable coub preview" 
     echo -e " --audio-only          only download the audio"
@@ -50,8 +60,51 @@ usage() {
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
+# Get coub links from a channel
+get_channel_list() {
+    channel_id="${1##*/}"
+    
+    curl -s "https://coub.com/api/v2/timeline/channel/$channel_id" > temp.json
+    total_pages=$(jq -r .total_pages temp.json)
+    echo "Downloading channel info (${1}):"
+
+    for (( i=1; i<=total_pages; i++ ))
+    do
+        curl -s "https://coub.com/api/v2/timeline/channel/${channel_id}?page=$i" > temp.json
+        for (( j=0; j<=9; j++ ))
+        do
+            type=$(jq -r .coubs[${j}].type temp.json)
+            # Coub::Simple -> normal coub
+            # Coub::Recoub -> recoub
+            if [[ $type == "Coub::Recoub" ]]; then
+                if [[ $recoubs = true ]]; then
+                    id=$(jq -r .coubs[${j}].recoub_to.permalink temp.json)
+                else
+                    id="null"
+                fi
+            else
+                if [[ $only_recoubs = false ]]; then
+                    id=$(jq -r .coubs[${j}].permalink temp.json)
+                else
+                    id="null"
+                fi
+            fi
+            if [[ $id == "null" ]]; then continue; fi
+            echo "https://coub.com/view/$id" >> "${channel_id}.txt"
+        done
+        echo "$i out of ${total_pages}"
+    done
+
+    parse_input_list "${channel_id}.txt"
+    rm temp.json "${channel_id}.txt"
+    
+    echo "###"
+}
+
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
 # Parse file with coub links
-# $1 is the filename of the list
+# $1 is the coub_id of the list
 parse_input_list() {
     if [[ ! -e "$1" ]]; then
         echo "Invalid input list! '$1' doesn't exist. Aborting..."
@@ -70,49 +123,71 @@ download() {
     error_video=false
     error_audio=false
     
-    echo "Downloading..."
-    if [[ $audio_only = false ]]; then 
-        youtube-dl -o "${filename}.mp4" "$link" &> /dev/null && \
-            downloaded+=("${filename}.mp4") || error_video=true
+    curl -s "https://coub.com/api/v2/coubs/$coub_id" > temp.json
+
+    # jq's default output for non-existent entries is null
+    video="null"
+    audio="null"
+    for quality in {high,med}
+    do
+        if [[ $video == "null" ]]; then
+            video="$(jq -r .file_versions.html5.video.${quality}.url temp.json)"
+        fi
+        if [[ $audio == "null" ]]; then
+            audio="$(jq -r .file_versions.html5.audio.${quality}.url temp.json)"
+        fi
+    done
+    
+    if [[ $audio_only = false ]]; then
+        if [[ $video == "null" ]]; then
+            error_video=true
+        else
+            if ! wget -q "$video" -O "${coub_id}.mp4"; then
+                error_video=true
+            fi
+            downloaded+=("${coub_id}.mp4")
+        fi
     fi
-    if [[ $video_only = false ]]; then 
-        youtube-dl -f bestaudio -o "${filename}.mp3" "$link" &> /dev/null && \
-            downloaded+=("${filename}.mp3") || error_audio=true
+    
+    if [[ $video_only = false ]]; then
+        if [[ $audio == "null" ]]; then
+            error_audio=true
+        else
+            if ! wget -q "$audio" -O "${coub_id}.mp3"; then
+                error_audio=true
+            fi
+            downloaded+=("${coub_id}.mp3")
+        fi
     fi
     
     if [[ $error_video = true ]]; then 
         echo "Error: Coub unavailable"
     elif [[ $error_audio = true && $audio_only = true ]]; then
         echo "Error: No audio present or coub unavailable"
-    else
-        echo "Downloaded: ${downloaded[@]}"
     fi
+    
+    rm temp.json 2> /dev/null
 }
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 # Combine video and audio
 merge() {
-    echo "Creating final video..."
-
     # Print .txt for ffmpeg's concat
     for (( i = 1; i <= repeat; i++ ))
     do 
-        echo "file '${filename}.mp4'" >> list.txt
+        echo "file '${coub_id}.mp4'" >> list.txt
     done
     
     # Loop footage until shortest stream ends
     # Concatenated video (list.txt) counts as one long stream 
     ffmpeg -loglevel panic $prompt_answer -f concat -safe 0 \
-        -i list.txt -i "${filename}.mp3" -c copy -shortest "${filename}.mkv"
+        -i list.txt -i "${coub_id}.mp3" -c copy -shortest "${coub_id}.mkv"
     rm list.txt
-    
-    echo "Created: ${filename}.mkv"
-    
+        
     if [[ $keep = false ]]; then
         # Remove leftover files
-        echo "Cleaning up..."
-        rm -v "${filename}.mp4" "${filename}.mp3" 2> /dev/null
+        rm "${coub_id}.mp4" "${coub_id}.mp3" 2> /dev/null
     fi
 }
 
@@ -121,15 +196,14 @@ merge() {
 # Show preview
 preview() {
     if [[ $audio_only = true ]]; then 
-        output="${filename}.mp3"
+        output="${coub_id}.mp3"
     elif [[ $video_only = true || $error_audio = true ]]; then 
-        output="${filename}.mp4"
+        output="${coub_id}.mp4"
     else 
-        output="${filename}.mkv"
+        output="${coub_id}.mkv"
     fi
     
     if [[ $preview = true && -e "$output" ]]; then
-        echo "Playing finished coub..."
         # Necessary workaround for mpv (and perhaps CLI music players)
         # No window + redirected stdout = keyboard shortcuts not responding
         script -c "$preview_command $output" /dev/null > /dev/null
@@ -146,11 +220,16 @@ do
     case "$1" in
     -h | --help) usage; exit;;
     -y | --yes) prompt_answer="-y"; shift;;
+    -n | --no) prompt_answer="-n"; shift;;
     -s | --short) repeat=1; shift;;
     -p | --path) save_path="$2"; shift 2;;
     -k | --keep) keep=true; shift;;
     -l | --list) parse_input_list "$2"; shift 2;;
+    -c | --channel) get_channel_list "$2"; shift 2;;
     -r | --repeat) repeat="$2"; shift 2;;
+    --recoubs) recoubs=true; shift;;
+    --no-recoubs) recoubs=false; shift;;
+    --only-recoubs) only_recoubs=true; shift;;
     --preview) preview=true; preview_command="$2"; shift 2;;
     --no-preview) preview=false; shift;;
     --audio-only) audio_only=true; shift;;
@@ -172,11 +251,17 @@ fi
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 # Check for requirements
-if ! ffmpeg -version &> /dev/null; then
+if ! jq --version &> /dev/null; then
+    echo "jq not found! Aborting..."
+    exit
+elif ! ffmpeg -version &> /dev/null; then
     echo "FFmpeg not found! Aborting..."
     exit
-elif ! youtube-dl --version &> /dev/null; then
-    echo "youtube-dl not found! Aborting..."
+elif ! curl --version &> /dev/null; then
+    echo "curl not found! Aborting..."
+    exit
+elif ! wget --version &> /dev/null; then
+    echo "wget not found! Aborting..."
     exit
 elif ! grep --version &> /dev/null; then
     echo "grep not found! Aborting..."
@@ -202,13 +287,26 @@ if (( repeat <= 0 )); then
     exit
 fi
 
+# Check for flag compatibility
+# Some flags simply overwrite each other (e.g. --yes/--no)
+if [[ $audio_only = true && $video_only = true ]]; then
+    echo "--audio-only and --video-only are mutually exclusive!"
+    exit
+elif [[ $recoubs = false && $only_coubs = true ]]; then
+    echo "--no-recoubs and --only-recoubs are mutually exclusive!"
+    exit
+fi
+
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+echo "Downloading coubs:"
+counter=0
 
 for link in "${link_list[@]}"
 do
-    echo "###"
-    echo "Current link: $link"
-    filename="${link##*/}"
+    (( counter += 1 ))
+    echo "$counter out of ${#link_list[@]} (${link})"
+    coub_id="${link##*/}"
     
     download
     
@@ -216,15 +314,12 @@ do
     if [[ $error_video = true || ($error_audio = true && $only_audio = true) ]]; then continue; fi
 
     if [[ $audio_only = false ]]; then
-        echo "Fixing broken video stream..."
         # Fix the broken video
-        printf '\x00\x00' | dd of="${filename}.mp4" bs=1 count=2 conv=notrunc &> /dev/null
+        printf '\x00\x00' | dd of="${coub_id}.mp4" bs=1 count=2 conv=notrunc &> /dev/null
     fi
     
     # Merge video and audio
-    if [[ $video_only = false && $audio_only = false && $error_audio = false ]]; then merge; fi    
-    
-    echo "Done!" 
+    if [[ $video_only = false && $audio_only = false && $error_audio = false ]]; then merge; fi
     
     preview
 done
