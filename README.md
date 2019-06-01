@@ -10,20 +10,23 @@ Usage: coub.sh [OPTIONS] LINK [LINK]...
   or   coub.sh [OPTIONS] -l LIST [-l LIST]...
   or   coub.sh [OPTIONS] -c CHANNEL [-c CHANNEL]...
 
+Supported input:
+ LINK                  download specified coubs
+ -l, --list LIST       read coub links from a text file
+ -c, --channel CHANNEL download all coubs from a channel
+
 Options:
  -h, --help             show this help
  -y, --yes              answer all prompts with yes
  -n, --no               answer all prompts with no
  -s, --short            disable video looping
- -p, --path <path>      set output destination (default: $HOME/coub)
+ -p, --path PATH        set output destination (default: $HOME/coub)
  -k, --keep             keep the individual video/audio parts
- -l, --list <file>      read coub links from a text file
- -c, --channel <link>   download all coubs from a channel
- -r, --repeat <n>       repeat video n times (default: until audio ends)
+ -r, --repeat N         repeat video n times (default: until audio ends)
  --recoubs              include recoubs during channel downloads (default)
  --no-recoubs           exclude recoubs during channel downloads
  --only-recoubs         only download recoubs during channel downloads
- --preview <command>    play finished coub via the given command
+ --preview COMMAND      play finished coub via the given command
  --no-preview           explicitly disable coub preview
  --audio-only           only download the audio
  --video-only           only download the video
