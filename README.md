@@ -30,6 +30,9 @@ Options:
  --no-preview           explicitly disable coub preview
  --audio-only           only download the audio
  --video-only           only download the video
+ --limit-rate RATE     limit download rate (see wget's --limit-rate)
+ --limit-num LIMIT     limit max. number of downloaded coubs
+ --sleep TIME          pause the script for TIME seconds before each download
 ```
 
 ### Requirements
@@ -74,11 +77,11 @@ Since then the script was updated to utilize Coub's API. The following list show
 
 - [x] Download all coubs from a channel
 - [x] Download all recoubs from a channel  
-- [ ] Limit number of downloaded coubs  
-- [ ] Wait x seconds between downloads  
-- [ ] Limit download speed  
+- [x] Limit number of downloaded coubs  
+- [x] Wait x seconds between downloads  
+- [x] Limit download speed  
 - [ ] Download all coubs with a certain tag  
-- [ ] Check for the existence of a coub before downloading  
+- [x] Check for the existence of a coub before downloading  
 - [ ] Different verbosity levels
 - [ ] Keep track of already downloaded coubs
 
