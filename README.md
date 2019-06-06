@@ -9,9 +9,10 @@ CoubDownloader is a simple download script for coub.com
 Usage: coub.sh [OPTIONS] INPUT [INPUT]...
 
 Input:
- LINK                  download specified coubs
- -l, --list LIST       read coub links from a text file
- -c, --channel CHANNEL download all coubs from a channel
+ LINK                   download specified coubs
+ -l, --list LIST        read coub links from a text file
+ -c, --channel CHANNEL  download all coubs from a channel
+ -t, --tag TAG          download all coubs with the specified tag
 
 Options:
  -h, --help             show this help
@@ -86,11 +87,12 @@ This list documents the (planned) changes since switching from youtube-dl to Cou
 - [x] Limit number of downloaded coubs  
 - [x] Wait x seconds between downloads  
 - [x] Limit download speed  
-- [ ] Download all coubs with a certain tag  
+- [x] Download all coubs with a certain tag  
 - [x] Check for the existence of a coub before downloading  
-- [ ] Different verbosity levels
-- [ ] Keep track of already downloaded coubs
-- [ ] Download stories*
-- [x] Specify max. coub duration (FFmpeg syntax)
+- [x] Specify max. coub duration (FFmpeg syntax)  
+- [ ] Choose download order for channels and tags (newest, likes, views, popularity)
+- [ ] Different verbosity levels  
+- [ ] Keep track of already downloaded coubs  
+- [ ] Download stories*  
 
 *Story support will be more difficult to implement, as Coub's API doesn't provide any related endpoint. It will require conventional scraping, after JS execution with a headless browser.

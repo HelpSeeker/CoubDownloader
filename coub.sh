@@ -50,6 +50,7 @@ video_only=false
 input_links=()
 input_lists=()
 input_channels=()
+input_tags=()
 coub_list=()
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -65,6 +66,7 @@ usage() {
     echo " LINK                  download specified coubs"
     echo " -l, --list LIST       read coub links from a text file"
     echo " -c, --channel CHANNEL download all coubs from a channel"
+    echo " -t, --tag TAG         download all coubs with the specified tag"
     echo ""   
     echo "Options:"
     echo " -h, --help            show this help"
@@ -122,6 +124,7 @@ parse_options() {
         -k | --keep) keep=true; shift;;
         -l | --list) input_lists+=("$2"); shift 2;;
         -c | --channel) input_channels+=("$2"); shift 2;;
+        -t | --tag) input_tags+=("$2"); shift 2;;
         -r | --repeat) repeat="$2"; shift 2;;
         -d | --duration) duration="-t $2"; shift 2;;
         --recoubs) recoubs=true; shift;;
@@ -187,10 +190,17 @@ check_options() {
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 # Parse directly provided coub links
-# $1 is the full coub URL
-parse_input_link() {
-    if [[ -n $limit_num ]] && (( ${#coub_list[@]} >= limit_num )); then return; fi
-    coub_list+=("$1")
+parse_input_links() {
+    for link in "${input_links[@]}"
+    do
+        if [[ -n $limit_num ]] && (( ${#coub_list[@]} >= limit_num )); then return; fi
+        coub_list+=("$link")
+    done
+
+    if (( ${#input_links[@]} != 0 )); then
+        echo "Reading command line:"
+        echo "  ${#input_links[@]} link(s) found"
+    fi
 }
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -208,7 +218,7 @@ parse_input_list() {
     temp_list=()
     temp_list+=($(grep 'coub.com/view' "$1"))
 
-    for temp in ${temp_list[@]}
+    for temp in "${temp_list[@]}"
     do
         if [[ -n $limit_num ]] && (( ${#coub_list[@]} >= limit_num )); then return; fi
         coub_list+=("$temp")
@@ -219,19 +229,34 @@ parse_input_list() {
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-# Get coub links from a channel
-# $1 is the full channel URL
-parse_input_channel() {
-    channel_id="${1##*/}"
+# Parse various Coub timelines (channels, tags, etc.)
+# $1 specifies the type of $2
+# $2 is the channel URL, tag, etc.
+parse_input_timeline() {
+    case "$1" in
+    channel)
+        channel_id="${2##*/}"
+        api_call="https://coub.com/api/v2/timeline/channel/$channel_id"
+        ;;
+    tag)
+        tag_id="${2##*/}"
+        api_call="https://coub.com/api/v2/timeline/tag/$tag_id"
+        ;;
+    *)
+        echo "Error: Unknown input type in parse_input_timeline!"
+        exit
+        ;;
+    esac
     
-    curl -s "https://coub.com/api/v2/timeline/channel/$channel_id" > temp.json
+    curl -s "$api_call" > temp.json
     total_pages=$(jq -r .total_pages temp.json)
-    echo "Downloading channel info (${1}):"
+    
+    echo "Downloading $1 info (${2}):"
 
     for (( i=1; i<=total_pages; i++ ))
     do
         echo "  $i out of ${total_pages} pages"
-        curl -s "https://coub.com/api/v2/timeline/channel/${channel_id}?page=$i" > temp.json
+        curl -s "${api_call}?page=$i" > temp.json
         for (( j=0; j<=9; j++ ))
         do
             if [[ -n $limit_num ]] && (( ${#coub_list[@]} >= limit_num )); then 
@@ -239,24 +264,17 @@ parse_input_channel() {
                 return
             fi
             
-            type=$(jq -r .coubs[${j}].type temp.json)
+            coub_type=$(jq -r .coubs[${j}].type temp.json)
             # Coub::Simple -> normal coub
             # Coub::Recoub -> recoub
-            if [[ $type == "Coub::Recoub" ]]; then
-                if [[ $recoubs = true ]]; then
-                    id=$(jq -r .coubs[${j}].recoub_to.permalink temp.json)
-                else
-                    id="null"
-                fi
+            if [[ $coub_type == "Coub::Recoub" && $recoubs = true ]]; then
+                id=$(jq -r .coubs[${j}].recoub_to.permalink temp.json)
+            elif [[ $coub_type == "Coub::Simple" && $only_recoubs = false ]]; then
+                id=$(jq -r .coubs[${j}].permalink temp.json)
             else
-                if [[ $only_recoubs = false ]]; then
-                    id=$(jq -r .coubs[${j}].permalink temp.json)
-                else
-                    id="null"
-                fi
+                continue
             fi
             
-            if [[ $id == "null" ]]; then continue; fi
             coub_list+=("https://coub.com/view/$id")
         done
     done
@@ -267,13 +285,12 @@ parse_input_channel() {
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 parse_input() {
-    echo "Reading command line:"
-    for link in ${input_links[@]}; do parse_input_link "$link"; done
-    echo "  ${#input_links[@]} link(s) found"
-    for list in ${input_lists[@]}; do parse_input_list "$list"; done
-    for channel in ${input_channels[@]}; do parse_input_channel "$channel"; done
+    parse_input_links
+    for list in "${input_lists[@]}"; do parse_input_list "$list"; done
+    for channel in "${input_channels[@]}"; do parse_input_timeline "channel" "$channel"; done
+    for tag in "${input_tags[@]}"; do parse_input_timeline "tag" "$tag"; done
 
-    if [[ -z "${coub_list[@]}" ]]; then
+    if (( ${#coub_list[@]} == 0 )); then
         echo -e "No coub links specified!\n"
         usage
         exit
@@ -426,7 +443,7 @@ preview() {
 }
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-# Main script
+# Main Function
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 main() {
@@ -444,7 +461,7 @@ main() {
     
     echo -e "\n### Download Coubs ###\n"
     counter=0
-    for coub in ${coub_list[@]}
+    for coub in "${coub_list[@]}"
     do
         (( counter += 1 ))
         echo "  $counter out of ${#coub_list[@]} (${coub})"
@@ -477,5 +494,5 @@ main() {
     echo -e "\n### Finished ###\n"
 }
 
-# Execute main script
+# Execute main function
 main "$@"
