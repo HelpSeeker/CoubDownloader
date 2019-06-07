@@ -33,6 +33,8 @@ Options:
  --limit-rate RATE      limit download rate (see wget's --limit-rate)
  --limit-num LIMIT      limit max. number of downloaded coubs
  --sleep TIME           pause the script for TIME seconds before each download
+ --write-list FILE      write all parsed coub links to FILE
+ --use-archive FILE     use FILE to keep track of already downloaded coubs
 ```
 
 ### Requirements
@@ -89,10 +91,11 @@ This list documents the (planned) changes since switching from youtube-dl to Cou
 - [x] Limit download speed  
 - [x] Download all coubs with a certain tag  
 - [x] Check for the existence of a coub before downloading  
-- [x] Specify max. coub duration (FFmpeg syntax)  
+- [x] Specify max. coub duration (FFmpeg syntax) 
+- [x] Keep track of already downloaded coubs  
+- [x] Export parsed coub links (from channels or tags) to a file for later usage
 - [ ] Choose download order for channels and tags (newest, likes, views, popularity)
-- [ ] Different verbosity levels  
-- [ ] Keep track of already downloaded coubs  
+- [ ] Different verbosity levels   
 - [ ] Download stories*  
 
 *Story support will be more difficult to implement, as Coub's API doesn't provide any related endpoint. It will require conventional scraping, after JS execution with a headless browser.

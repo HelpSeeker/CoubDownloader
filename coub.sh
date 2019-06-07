@@ -46,6 +46,12 @@ video_only=false
 # Wait for X seconds before each download
 #sleep_dur=10
 
+# Write parsed links to the following file
+#out_file=coub_list.txt
+
+# Use the following file to document downloaded coubs
+#archive_file=coub_archive.txt
+
 # Don't touch these
 input_links=()
 input_lists=()
@@ -63,30 +69,32 @@ usage() {
     echo "Usage: coub.sh [OPTIONS] INPUT [INPUT]..."
     echo ""
     echo "Input:"
-    echo " LINK                  download specified coubs"
-    echo " -l, --list LIST       read coub links from a text file"
-    echo " -c, --channel CHANNEL download all coubs from a channel"
-    echo " -t, --tag TAG         download all coubs with the specified tag"
+    echo " LINK                   download specified coubs"
+    echo " -l, --list LIST        read coub links from a text file"
+    echo " -c, --channel CHANNEL  download all coubs from a channel"
+    echo " -t, --tag TAG          download all coubs with the specified tag"
     echo ""   
     echo "Options:"
-    echo " -h, --help            show this help"
-    echo " -y, --yes             answer all prompts with yes"
-    echo " -n, --no              answer all prompts with no"
-    echo " -s, --short           disable video looping"
-    echo " -p, --path PATH       set output destination (default: $HOME/coub)"
-    echo " -k, --keep            keep the individual video/audio parts"
-    echo " -r, --repeat N        repeat video N times (default: until audio ends)"
-    echo " -d, --duration TIME   specify max. coub duration (FFmpeg syntax)"
-    echo " --recoubs             include recoubs during channel downloads (default)"
-    echo " --no-recoubs          exclude recoubs during channel downloads"
-    echo " --only-recoubs        only download recoubs during channel downloads"
-    echo " --preview COMMAND     play finished coub via the given command"
-    echo " --no-preview          explicitly disable coub preview" 
-    echo " --audio-only          only download the audio"
-    echo " --video-only          only download the video"
-    echo " --limit-rate RATE     limit download rate (see wget's --limit-rate)"
-    echo " --limit-num LIMIT     limit max. number of downloaded coubs"
-    echo " --sleep TIME          pause the script for TIME seconds before each download"
+    echo " -h, --help             show this help"
+    echo " -y, --yes              answer all prompts with yes"
+    echo " -n, --no               answer all prompts with no"
+    echo " -s, --short            disable video looping"
+    echo " -p, --path PATH        set output destination (default: $HOME/coub)"
+    echo " -k, --keep             keep the individual video/audio parts"
+    echo " -r, --repeat N         repeat video N times (default: until audio ends)"
+    echo " -d, --duration TIME    specify max. coub duration (FFmpeg syntax)"
+    echo " --recoubs              include recoubs during channel downloads (default)"
+    echo " --no-recoubs           exclude recoubs during channel downloads"
+    echo " --only-recoubs         only download recoubs during channel downloads"
+    echo " --preview COMMAND      play finished coub via the given command"
+    echo " --no-preview           explicitly disable coub preview" 
+    echo " --audio-only           only download the audio"
+    echo " --video-only           only download the video"
+    echo " --limit-rate RATE      limit download rate (see wget's --limit-rate)"
+    echo " --limit-num LIMIT      limit max. number of downloaded coubs"
+    echo " --sleep TIME           pause the script for TIME seconds before each download"
+    echo " --write-list FILE      write all parsed coub links to FILE"
+    echo " --use-archive FILE     use FILE to keep track of already downloaded coubs"
 }
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -138,6 +146,10 @@ parse_options() {
         --limit-rate) limit_rate="--limit-rate=$2"; shift 2;;
         --limit-num) limit_num="$2"; shift 2;;
         --sleep) sleep_dur="$2"; shift 2;;
+        --write-list) out_file="$2"; shift 2;;
+        # readlink to get absolute path
+        # archive operations happen after changing dir to save_path
+        --use-archive) archive_file="$(readlink -f "$2")"; shift 2;;
         -*) echo -e "Unknown flag '$1'!\n"; usage; exit;;
         *coub.com/view/*) input_links+=("$1"); shift;;
         *) echo -e "$1 is neither an option nor a coub link!\n"; usage; exit;;
@@ -149,7 +161,7 @@ parse_options() {
 
 check_options() {
     # Check for preview command validity
-    if [[ $preview = true && -z "$(command -v $preview_command)" ]]; then
+    if [[ $preview == true && -z "$(command -v $preview_command)" ]]; then
         echo "'$preview_command' not valid as preview command! Aborting..."
         exit
     fi
@@ -178,10 +190,10 @@ check_options() {
 
     # Check for flag compatibility
     # Some flags simply overwrite each other (e.g. --yes/--no)
-    if [[ $audio_only = true && $video_only = true ]]; then
+    if [[ $audio_only == true && $video_only == true ]]; then
         echo "--audio-only and --video-only are mutually exclusive!"
         exit
-    elif [[ $recoubs = false && $only_recoubs = true ]]; then
+    elif [[ $recoubs == false && $only_recoubs == true ]]; then
         echo "--no-recoubs and --only-recoubs are mutually exclusive!"
         exit
     fi
@@ -253,11 +265,19 @@ parse_input_timeline() {
     
     echo "Downloading $1 info (${2}):"
 
-    for (( i=1; i<=total_pages; i++ ))
+    for (( i=1; i <= total_pages; i++ ))
     do
+        # tag timeline redirects pages >99 to page 1
+        # channel timelines work like intended
+        if [[ $1 == "tag" ]] && (( i > 99 )); then
+            echo "  Max. page limit reached!"
+            rm temp.json
+            return
+        fi
+        
         echo "  $i out of ${total_pages} pages"
         curl -s "${api_call}?page=$i" > temp.json
-        for (( j=0; j<=9; j++ ))
+        for (( j=0; j <= 9; j++ ))
         do
             if [[ -n $limit_num ]] && (( ${#coub_list[@]} >= limit_num )); then 
                 rm temp.json
@@ -267,9 +287,9 @@ parse_input_timeline() {
             coub_type=$(jq -r .coubs[${j}].type temp.json)
             # Coub::Simple -> normal coub
             # Coub::Recoub -> recoub
-            if [[ $coub_type == "Coub::Recoub" && $recoubs = true ]]; then
+            if [[ $coub_type == "Coub::Recoub" && $recoubs == true ]]; then
                 id=$(jq -r .coubs[${j}].recoub_to.permalink temp.json)
-            elif [[ $coub_type == "Coub::Simple" && $only_recoubs = false ]]; then
+            elif [[ $coub_type == "Coub::Simple" && $only_recoubs == false ]]; then
                 id=$(jq -r .coubs[${j}].permalink temp.json)
             else
                 continue
@@ -296,18 +316,19 @@ parse_input() {
         exit
     elif [[ -n $limit_num ]] && (( ${#coub_list[@]} >= limit_num )); then
         echo -e "\nDownload limit (${limit_num}) reached!"
-        return
     fi
     
+    # Write all parsed coub links to out_file
+    if [[ -n $out_file ]]; then printf "%s\n" "${coub_list[@]}" > "$out_file"; fi
 }
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 # Check coub existence
 existence() {
-    if [[ ( -e "${coub_id}.mkv" && $audio_only = false && $video_only = false ) || \
-          ( -e "${coub_id}.mp4" && $video_only = true ) || \
-          ( -e "${coub_id}.mp3" && $audio_only = true ) ]]; then
+    if [[ ( -e "${coub_id}.mkv" && $audio_only == false && $video_only == false ) || \
+          ( -e "${coub_id}.mp4" && $video_only == true ) || \
+          ( -e "${coub_id}.mp3" && $audio_only == true ) ]]; then
           
         return 0
     else
@@ -334,10 +355,10 @@ overwrite_prompt() {
 # Decide to overwrite coub
 # Prompt user if necessary
 overwrite() {
-    if [[ $prompt_answer = "-n" ]]; then
-        return 1
-    elif [[ $prompt_answer = "-y" ]]; then
+    if [[ $prompt_answer == "-y" ]]; then
         return 0
+    elif [[ $prompt_answer == "-n" ]]; then
+        return 1
     else
         if overwrite_prompt; then
             return 0
@@ -349,11 +370,35 @@ overwrite() {
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-# Download individual coub parts
-download() {
-    error_video=false
-    error_audio=false
+# Handles all actions regarding archive files
+# $1 is the to-be-performed action
+# $2 is the specific coub link
+use_archive() {
+    if [[ $only_audio == true ]]; then
+        extension="MP3"
+    elif [[ $only_video == true ]]; then
+        extension="MP4"
+    else
+        extension="MKV"
+    fi
     
+    case "$1" in
+    read)
+        if grep -qsw "$2 $extension" "$archive_file"; then 
+            return 0;
+        else
+            return 1;
+        fi
+        ;;
+    write) echo "$2 $extension" >> "$archive_file";;
+    *) echo "Error: Unknown action in use_archive!"; exit;;
+    esac
+}
+
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+# Download individual coub parts
+download() {    
     curl -s "https://coub.com/api/v2/coubs/$coub_id" > temp.json
 
     # jq's default output for non-existent entries is null
@@ -371,34 +416,18 @@ download() {
     done
     
     # Video download
-    if [[ $audio_only = false ]]; then
-        if [[ $video == "null" ]]; then
-            error_video=true
-        else
-            if ! wget $limit_rate -q "$video" -O "${coub_id}.mp4"; then
-                error_video=true
-            fi
-        fi
+    if [[ $audio_only == false ]] && \
+      ([[ $video == "null" ]] || ! wget $limit_rate -q "$video" -O "${coub_id}.mp4"); then
+        error_video=true
     fi
     
     # Audio download
-    if [[ $video_only = false ]]; then
-        if [[ $audio == "null" ]]; then
-            error_audio=true
-        else
-            if ! wget $limit_rate -q "$audio" -O "${coub_id}.mp3"; then
-                error_audio=true
-            fi
-        fi
+    if [[ $video_only == false ]] && \
+      ([[ $audio == "null" ]] || ! wget $limit_rate -q "$audio" -O "${coub_id}.mp3"); then
+        error_audio=true
     fi
     
-    if [[ $error_video = true ]]; then 
-        echo "Error: Coub unavailable"
-    elif [[ $error_audio = true && $audio_only = true ]]; then
-        echo "Error: No audio present or coub unavailable"
-    fi
-    
-    rm temp.json 2> /dev/null
+    rm temp.json
 }
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -406,18 +435,18 @@ download() {
 # Combine video and audio
 merge() {
     # Print .txt for ffmpeg's concat
-    for (( i = 1; i <= repeat; i++ ))
+    for (( i=1; i <= repeat; i++ ))
     do 
         echo "file '${coub_id}.mp4'" >> list.txt
     done
     
     # Loop footage until shortest stream ends
     # Concatenated video (list.txt) counts as one long stream 
-    ffmpeg -y -v quiet -f concat -safe 0 \
-        -i list.txt -i "${coub_id}.mp3" $duration -c copy -shortest "${coub_id}.mkv"
+    ffmpeg -y -v quiet -f concat -safe 0 -i list.txt \
+        -i "${coub_id}.mp3" $duration -c copy -shortest "${coub_id}.mkv"
     rm list.txt
         
-    if [[ $keep = false ]]; then
+    if [[ $keep == false ]]; then
         # Remove leftover files
         rm "${coub_id}.mp4" "${coub_id}.mp3" 2> /dev/null
     fi
@@ -427,15 +456,15 @@ merge() {
 
 # Show preview
 preview() {
-    if [[ $audio_only = true ]]; then 
+    if [[ $audio_only == true ]]; then 
         output="${coub_id}.mp3"
-    elif [[ $video_only = true || $error_audio = true ]]; then 
+    elif [[ $video_only == true || $error_audio == true ]]; then 
         output="${coub_id}.mp4"
     else 
         output="${coub_id}.mkv"
     fi
     
-    if [[ $preview = true && -e "$output" ]]; then
+    if [[ $preview == true && -e "$output" ]]; then
         # Necessary workaround for mpv (and perhaps CLI music players)
         # No window + redirected stdout = keyboard shortcuts not responding
         script -c "$preview_command $output" /dev/null > /dev/null
@@ -463,32 +492,45 @@ main() {
     counter=0
     for coub in "${coub_list[@]}"
     do
-        (( counter += 1 ))
+        (( counter+=1 ))
         echo "  $counter out of ${#coub_list[@]} (${coub})"
         coub_id="${coub##*/}"
+        error_video=false
+        error_audio=false
         
         # Pass existing files to avoid unnecessary downloads 
-        if existence && ! overwrite; then continue; fi
+        if ( [[ -n $archive_file ]] && use_archive "read" "$coub") ||
+           ( existence && ! overwrite); then
+           
+            echo "Already downloaded!"
+            continue
+        fi
         # Wait for sleep_dur seconds
         sleep $sleep_dur &> /dev/null
 
         download
         
-        # Skip coub if (audio) not available
-        if [[ $error_video = true || \
-             ($error_audio = true && $only_audio = true) ]]; then continue; fi
+        # Skip if the requested media couldn't be downloaded
+        if [[ $error_video == true ]]; then
+            echo "Error: Coub unavailable"
+            continue
+        elif [[ $error_audio == true && $only_audio == true ]]; then 
+            echo "Error: No audio present or coub unavailable"
+            continue
+        fi
 
-        if [[ $audio_only = false ]]; then
+        if [[ $audio_only == false ]]; then
             # Fix broken video stream
             printf '\x00\x00' | \
             dd of="${coub_id}.mp4" bs=1 count=2 conv=notrunc &> /dev/null
         fi
         
         # Merge video and audio
-        if [[ $video_only = false && \
-              $audio_only = false && \
-              $error_audio = false ]]; then merge; fi
+        if [[ $video_only == false && \
+              $audio_only == false && \
+              $error_audio == false ]]; then merge; fi
         
+        if [[ -n $archive_file ]]; then use_archive "write" "$coub"; fi
         preview
     done
     echo -e "\n### Finished ###\n"
