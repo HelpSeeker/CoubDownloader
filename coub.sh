@@ -374,23 +374,15 @@ overwrite() {
 # $1 is the to-be-performed action
 # $2 is the specific coub link
 use_archive() {
-    if [[ $only_audio == true ]]; then
-        extension="MP3"
-    elif [[ $only_video == true ]]; then
-        extension="MP4"
-    else
-        extension="MKV"
-    fi
-    
     case "$1" in
     read)
-        if grep -qsw "$2 $extension" "$archive_file"; then 
+        if grep -qsw "$2" "$archive_file"; then 
             return 0;
         else
             return 1;
         fi
         ;;
-    write) echo "$2 $extension" >> "$archive_file";;
+    write) echo "$2" >> "$archive_file";;
     *) echo "Error: Unknown action in use_archive!"; exit;;
     esac
 }
@@ -407,10 +399,12 @@ download() {
     # Loop through default qualities; use highest available
     for quality in {high,med}
     do
-        if [[ $video == "null" ]]; then
+        v_size=$(jq -r .file_versions.html5.video.${quality}.size temp.json)
+        a_size=$(jq -r .file_versions.html5.audio.${quality}.size temp.json)
+        if [[ $video == "null" && $v_size != "null" ]]; then
             video="$(jq -r .file_versions.html5.video.${quality}.url temp.json)"
         fi
-        if [[ $audio == "null" ]]; then
+        if [[ $audio == "null" && $a_size != "null" ]]; then
             audio="$(jq -r .file_versions.html5.audio.${quality}.url temp.json)"
         fi
     done
