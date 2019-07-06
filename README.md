@@ -84,7 +84,7 @@ Whole channels can be downloaded by providing a full URL or the name of the chan
 
 Tags can be scraped by providing the term or a full URL. Due to a bug (?) you can only download the first 99 pages (i.e. 990 coubs) listed. All pages afterwards will redirect to page 1.
 
-Please not for **channels** and **tags** that the URL mustn't include a special sort order (e.g. https://coub.com/tags/tag/likes) or other filters (e.g. https://coub.com/user/reposts). The last word in the URL needs to be the channel name or tag.
+Please note for **channels** and **tags** that the URL mustn't include a special sort order (e.g. https://coub.com/tags/tag/likes) or other filters (e.g. https://coub.com/user/reposts). The last word in the URL needs to be the channel name or tag.
 
 ## Changes to the new version
 
