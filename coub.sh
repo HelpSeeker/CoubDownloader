@@ -4,6 +4,10 @@
 # Default Settings
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
+# Change verbosity of the script
+# 0 for quiet, >= 1 for normal verbosity
+declare verbosity=1
+
 # Allowed values: yes, no, prompt
 declare prompt_answer="prompt"
 
@@ -37,12 +41,34 @@ declare -ri page_limit=99  # used for tags; must be <= 99
 declare -r json="temp.json"
 declare -r concat_list="list.txt"
 
+# Error codes
+# 1 -> missing required software
+# 2 -> invalid user-specified option
+# 3 -> misc. runtime error (missing function argument, unknown value in case, etc.)
+# 4 -> not all input coubs exist after execution (i.e. some downloads failed)
+declare -ri missing_dep=1
+declare -ri err_option=2
+declare -ri err_runtime=3
+declare -ri err_download=4
+
 # Don't touch these
 declare -a input_links input_lists input_channels input_tags
 declare -a coub_list
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # Functions
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+# Print to stderr
+function err() {
+    printf "$@\n" 1>&2
+}
+
+# Print to stdout based on verbosity level
+function msg() {
+    (( verbosity >= 1 )) && printf "$@\n"
+}
+
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 # Help text
@@ -60,6 +86,7 @@ Input:
 
 Common options:
   -h, --help             show this help
+  -q, --quiet            suppress all non-error/prompt messages
   -y, --yes              answer all prompts with yes
   -n, --no               answer all prompts with no
   -s, --short            disable video looping
@@ -95,17 +122,17 @@ EOF
 # check existence of required software
 function check_requirements() {
     if ! jq --version &> /dev/null; then
-        echo "Error: jq not found!"
-        exit
+        err "Error: jq not found!"
+        exit $missing_dep
     elif ! ffmpeg -version &> /dev/null; then
-        echo "Error: FFmpeg not found!"
-        exit
+        err "Error: FFmpeg not found!"
+        exit $missing_dep
     elif ! curl --version &> /dev/null; then
-        echo "Error: curl not found!"
-        exit
+        err "Error: curl not found!"
+        exit $missing_dep
     elif ! grep --version &> /dev/null; then
-        echo "Error: grep not found!"
-        exit
+        err "Error: grep not found!"
+        exit $missing_dep
     fi
 }
 
@@ -116,17 +143,19 @@ function parse_options() {
     do
         case "$1" in
         # Input
-        *coub.com/view/*) input_links+=("$1"); shift;;
+        # Strip trailing backslashes to avoid parsing issues and curl failure
+        *coub.com/view/*) input_links+=("${1%/}"); shift;;
         -l | --list)      if [[ -f "$2" ]]; then
                               input_lists+=("$(readlink -f "$2")")
                           else
-                              echo "'$2' is no valid list."
+                              err "'$2' is no valid list."
                           fi;
                           shift 2;;
-        -c | --channel)   input_channels+=("$2"); shift 2;;
-        -t | --tag)       input_tags+=("$2"); shift 2;;
+        -c | --channel)   input_channels+=("${2%/}"); shift 2;;
+        -t | --tag)       input_tags+=("${2%/}"); shift 2;;
         # Common options
-        -h | --help)      usage; exit;;
+        -h | --help)      usage; exit 0;;
+        -q | --quiet)     verbosity=0; shift;;
         -y | --yes)       prompt_answer="yes"; shift;;
         -n | --no)        prompt_answer="no"; shift;;
         -s | --short)     repeat=1; shift;;
@@ -153,8 +182,8 @@ function parse_options() {
         --write-list)     declare -gr out_file="$2"; shift 2;;
         --use-archive)    declare -gr archive_file="$(readlink -f "$2")"; shift 2;;
         # Unknown options
-        -*) echo "Unknown flag '$1'!"; usage; exit;;
-        *) echo "'$1' is neither an option nor a coub link!"; usage; exit;;
+        -*) err "Unknown flag '$1'!"; usage; exit $err_option;;
+        *) err "'$1' is not an option or a coub link!"; usage; exit $err_option;;
         esac
     done
 }
@@ -165,7 +194,7 @@ function parse_options() {
 # Shallow test as I don't want to include bc as requirement
 # $1: To be checked option
 function invalid_number() {
-    [[ -z $1 ]] && { err "Missing input option in check_number!"; exit; }
+    [[ -z $1 ]] && { err "Missing input option in invalid_number!"; exit $err_runtime; }
     local var=$1
 
     # check if var starts with a number
@@ -182,20 +211,20 @@ function check_options() {
     # General float value check
     # Integer checking done by the arithmetic evaluation during assignment
     if [[ -n $max_rate ]] && invalid_number $max_rate; then
-        echo "Invalid download limit ('$max_rate')!"
-        exit
+        err "Invalid download limit ('$max_rate')!"
+        exit $err_option
     elif [[ -n $sleep_dur ]] && invalid_number $sleep_dur; then
-        echo "Invalid sleep duration ('$sleep_dur')!"
-        exit
+        err "Invalid sleep duration ('$sleep_dur')!"
+        exit $err_option
     fi
 
     # Special integer checks
     if (( repeat <= 0 )); then
-        echo "-r/--repeat must be greater than 0!"
-        exit
+        err "-r/--repeat must be greater than 0!"
+        exit $err_option
     elif [[ -n $max_coubs ]] && (( max_coubs <= 0 )); then
-        echo "--limit-num must be greater than zero!"
-        exit
+        err "--limit-num must be greater than zero!"
+        exit $err_option
     fi
 
     # Check duration validity
@@ -203,25 +232,25 @@ function check_options() {
     # Reasonable fast even for >1h durations
     if (( ${#duration[@]} != 0 )) && \
        ! ffmpeg -v quiet -f lavfi -i anullsrc "${duration[@]}" -c copy -f null -; then
-        echo "Invalid duration! For the supported syntax see:"
-        echo "https://ffmpeg.org/ffmpeg-utils.html#time-duration-syntax"
-        exit
+        err "Invalid duration! For the supported syntax see:"
+        err "https://ffmpeg.org/ffmpeg-utils.html#time-duration-syntax"
+        exit $err_option
     fi
 
     # Check for preview command validity
     if [[ $preview == true ]] && ! command -v "$preview_command" > /dev/null; then
-        echo "Invalid preview command ('$preview_command')!"
-        exit
+        err "Invalid preview command ('$preview_command')!"
+        exit $err_option
     fi
 
     # Check for flag compatibility
     # Some flags simply overwrite each other (e.g. --yes/--no)
     if [[ $a_only == true && $v_only == true ]]; then
-        echo "--audio-only and --video-only are mutually exclusive!"
-        exit
+        err "--audio-only and --video-only are mutually exclusive!"
+        exit $err_option
     elif [[ $recoubs == false && $only_recoubs == true ]]; then
-        echo "--no-recoubs and --only-recoubs are mutually exclusive!"
-        exit
+        err "--no-recoubs and --only-recoubs are mutually exclusive!"
+        exit $err_option
     fi
 }
 
@@ -230,17 +259,17 @@ function check_options() {
 function resolve_paths() {
     mkdir -p "$save_path"
     if ! cd "$save_path" 2> /dev/null; then
-        echo "Error: Can't change into destination directory!"
-        exit
+        err "Error: Can't change into destination directory!"
+        exit $err_runtime
     fi
 
     # check if reserved filenames exist in output dir
     if [[ -e "$json" ]]; then
-        echo "Error: Reserved filename ('$json') exists in '$save_path'!"
-        exit
+        err "Error: Reserved filename ('$json') exists in '$save_path'!"
+        exit $err_runtime
     elif [[ -e "$concat_list" ]]; then
-        echo "Error: Reserved filename ('$concat_list') exists in '$save_path'!"
-        exit
+        err "Error: Reserved filename ('$concat_list') exists in '$save_path'!"
+        exit $err_runtime
     fi
 }
 
@@ -258,8 +287,8 @@ function parse_input_links() {
     done
 
     if (( ${#input_links[@]} != 0 )); then
-        echo "Reading command line:"
-        echo "  ${#input_links[@]} link(s) found"
+        msg "Reading command line:"
+        msg "  ${#input_links[@]} link(s) found"
     fi
 }
 
@@ -268,13 +297,13 @@ function parse_input_links() {
 # Parse file with coub links
 # $1 is path to the input list
 function parse_input_list() {
-    [[ -z "$1" ]] && { echo "Missing list path in parse_input_list!"; exit; }
+    [[ -z "$1" ]] && { err "Missing list path in parse_input_list!"; exit $err_runtime; }
     local file="$1"
 
     if [[ ! -e "$file" ]]; then
-        echo "Invalid input list! '$file' doesn't exist."
+        err "Invalid input list! '$file' doesn't exist."
     else
-        echo "Reading input list ($file):"
+        msg "Reading input list ($file):"
     fi
 
     # temporary array as additional step to easily check download limit
@@ -290,7 +319,7 @@ function parse_input_list() {
         coub_list+=("$temp")
     done
 
-    echo "  ${#temp_list[@]} link(s) found"
+    msg "  ${#temp_list[@]} link(s) found"
 }
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -299,8 +328,8 @@ function parse_input_list() {
 # $1 specifies the type of timeline
 # $2 is the channel URL, tag, etc.
 function parse_input_timeline() {
-    [[ -z "$1" ]] && { echo "Missing input type in parse_input_timeline!"; exit; }
-    [[ -z "$2" ]] && { echo "Missing input timeline in parse_input_timeline!"; exit; }
+    [[ -z "$1" ]] && { err "Missing input type in parse_input_timeline!"; exit $err_runtime; }
+    [[ -z "$2" ]] && { err "Missing input timeline in parse_input_timeline!"; exit $err_runtime; }
     local url_type="$1"
     local url="$2"
 
@@ -314,15 +343,15 @@ function parse_input_timeline() {
         local api_call="https://coub.com/api/v2/timeline/tag/$tag_id"
         ;;
     *)
-        echo "Error: Unknown input type in parse_input_timeline!"
-        exit
+        err "Error: Unknown input type in parse_input_timeline!"
+        exit $err_runtime
         ;;
     esac
 
     curl -s "$api_call" > "$json"
     local -i total_pages=$(jq -r .total_pages "$json")
 
-    echo "Downloading $url_type info ($url):"
+    msg "Downloading $url_type info ($url):"
 
     local -i page entry
     local coub_type coub_id
@@ -331,11 +360,11 @@ function parse_input_timeline() {
         # tag timeline redirects pages >99 to page 1
         # channel timelines work like intended
         if [[ $url_type == "tag" ]] && (( page > page_limit )); then
-            echo "  Max. page limit reached!"
+            msg "  Max. page limit reached!"
             return
         fi
 
-        echo "  $page out of $total_pages pages"
+        msg "  $page out of $total_pages pages"
         curl -s "$api_call?page=$page" > "$json"
         for (( entry=0; entry <= 9; entry++ ))
         do
@@ -370,14 +399,19 @@ function parse_input() {
     for tag in "${input_tags[@]}"; do parse_input_timeline "tag" "$tag"; done
 
     (( ${#coub_list[@]} == 0 )) && \
-        { echo "No coub links specified!"; usage; exit; }
+        { err "No coub links specified!"; clean; usage; exit $err_option; }
 
     if [[ -n $max_coubs ]] && (( ${#coub_list[@]} >= max_coubs )); then
-        printf "\nDownload limit ($max_coubs) reached!\n"
+        msg "\nDownload limit ($max_coubs) reached!"
     fi
 
     # Write all parsed coub links to out_file
-    [[ -n $out_file ]] && printf "%s\n" "${coub_list[@]}" > "$out_file"
+    if [[ -n $out_file ]]; then
+        printf "%s\n" "${coub_list[@]}" > "$out_file"
+        msg "\nParsed coubs written to '$out_file'!"
+        clean
+        exit 0
+    fi
 }
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -385,7 +419,7 @@ function parse_input() {
 # Check coub existence
 # $1: Coub id
 function existence() {
-    [[ -z "$1" ]] && { echo "Missing coub id in existence!"; exit; }
+    [[ -z "$1" ]] && { err "Missing coub id in existence!"; exit $err_runtime; }
     local id="$1"
 
     if [[ ( -e "$id.mkv" && $a_only == false && $v_only == false ) || \
@@ -414,7 +448,7 @@ function overwrite() {
                 no)  return 1;;
                 esac
             done;;
-    *)      echo "Error: Unknown prompt_answer in overwrite!"; exit;;
+    *)      err "Error: Unknown prompt_answer in overwrite!"; exit $err_runtime;;
     esac
 }
 
@@ -424,8 +458,8 @@ function overwrite() {
 # $1 is the to-be-performed action
 # $2 is the specific coub link
 function use_archive() {
-    [[ -z "$1" ]] && { echo "Missing action in use_archive!"; exit; }
-    [[ -z "$2" ]] && { echo "Missing link in use_archive!"; exit;  }
+    [[ -z "$1" ]] && { err "Missing action in use_archive!"; exit $err_runtime; }
+    [[ -z "$2" ]] && { err "Missing link in use_archive!"; exit $err_runtime;  }
     local action="$1"
     local link="$2"
 
@@ -438,7 +472,7 @@ function use_archive() {
         fi
         ;;
     write) echo "$link" >> "$archive_file";;
-    *) echo "Error: Unknown action in use_archive!"; exit;;
+    *) err "Error: Unknown action in use_archive!"; exit $err_runtime;;
     esac
 }
 
@@ -447,7 +481,7 @@ function use_archive() {
 # Download individual coub parts
 # $1: Coub id
 function download() {
-    [[ -z "$1" ]] && { echo "Missing coub id in download!"; exit; }
+    [[ -z "$1" ]] && { err "Missing coub id in download!"; exit $err_runtime; }
     local id="$1"
 
     curl -s "https://coub.com/api/v2/coubs/$id" > "$json"
@@ -489,7 +523,7 @@ function download() {
 # Combine video and audio
 # $1: Coub id
 function merge() {
-    [[ -z "$1" ]] && { echo "Missing coub id in merge!"; exit; }
+    [[ -z "$1" ]] && { err "Missing coub id in merge!"; exit $err_runtime; }
     local id="$1"
 
     # Print .txt for ffmpeg's concat
@@ -512,17 +546,16 @@ function merge() {
 
 # Show preview
 function preview() {
-    [[ -z "$1" ]] && { echo "Missing coub id in preview!"; exit; }
+    [[ -z "$1" ]] && { err "Missing coub id in preview!"; exit $err_runtime; }
     local id="$1"
-
-    [[ $preview == false ]] && return
 
     local output="$id.mkv"
     [[ $a_only == true ]] && output="$id.mp3"
     [[ $v_only == true || $a_error == true ]] && output="$id.mp4"
 
     # This check is likely superfluous
-    [[ ! -e "$output" ]] && { echo "Error: Missing output in preview!"; exit; }
+    [[ ! -e "$output" ]] && \
+        { err "Error: Missing output in preview!"; exit $err_runtime; }
 
     # Necessary workaround for mpv (and perhaps CLI music players)
     # No window + redirected stdout = keyboard shortcuts not responding
@@ -548,26 +581,27 @@ function main() {
 
     resolve_paths
 
-    printf "\n### Parse Input ###\n\n"
+    msg "\n### Parse Input ###\n"
     parse_input
 
     # Download coubs
-    printf "\n### Download Coubs ###\n\n"
-    local -i counter=0
+    msg "\n### Download Coubs ###\n"
+    local -i counter=0 downloads=0
     local coub
     for coub in "${coub_list[@]}"
     do
         local v_error=false a_error=false
         local coub_id="${coub##*/}"
 
-        (( counter+=1 ))
-        echo "  $counter out of ${#coub_list[@]} ($coub)"
+        (( counter++ ))
+        msg "  $counter out of ${#coub_list[@]} ($coub)"
 
         # Pass existing files to avoid unnecessary downloads
         if ( [[ -n $archive_file ]] && use_archive "read" "$coub") ||
            ( existence "$coub_id" && ! overwrite); then
-            echo "Already downloaded!"
+            msg "Already downloaded!"
             clean
+            (( downloads++ ))
             continue
         fi
 
@@ -577,9 +611,9 @@ function main() {
 
         # Skip if the requested media couldn't be downloaded
         [[ $v_error == true ]] && \
-            { echo "Error: Coub unavailable!"; clean; continue; }
+            { err "Error: Coub unavailable!"; clean; continue; }
         [[ $a_error == true && $a_only == true ]] && \
-            { echo "Error: Audio or coub unavailable!"; clean; continue; }
+            { err "Error: Audio or coub unavailable!"; clean; continue; }
 
         # Fix broken video stream
         [[ $a_only == false ]] && \
@@ -594,15 +628,22 @@ function main() {
         [[ -n $archive_file ]] && use_archive "write" "$coub"
 
         # Preview downloaded coub
-        preview "$coub_id"
+        [[ $preview == true ]] && preview "$coub_id"
 
         # Clean workspace
         clean
+
+        # Record successful download
+        (( downloads++ ))
     done
 
-    printf "\n### Finished ###\n\n"
+    msg "\n### Finished ###\n"
+
+    # Indicate failure, if not all input coubs exist after execution
+    (( downloads < counter )) && exit $err_download
 }
 
 # Execute main function
-(( $# == 0 )) && { usage; exit; }
+(( $# == 0 )) && { usage; exit 0; }
 main "$@"
+exit 0
