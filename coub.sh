@@ -37,7 +37,8 @@ declare a_only=false
 declare v_only=false
 
 # Advanced settings
-declare -ri page_limit=99  # used for tags; must be <= 99
+declare -ri page_limit=99           # used for tags; must be <= 99
+declare -ri entries_per_page=25     # allowed: 1-25
 declare -r json="temp.json"
 declare -r concat_list="list.txt"
 
@@ -180,10 +181,12 @@ function parse_options() {
         --audio-only)     a_only=true; shift;;
         --video-only)     v_only=true; shift;;
         --write-list)     declare -gr out_file="$2"; shift 2;;
-        --use-archive)    declare -gr archive_file="$(readlink -f "$2")"; shift 2;;
+        --use-archive)    declare -gr archive_file="$(readlink -f "$2")";
+                          shift 2;;
         # Unknown options
         -*) err "Unknown flag '$1'!"; usage; exit $err_option;;
-        *) err "'$1' is not an option or a coub link!"; usage; exit $err_option;;
+        *) err "'$1' is not an option or a coub link!"; usage;
+           exit $err_option;;
         esac
     done
 }
@@ -194,7 +197,8 @@ function parse_options() {
 # Shallow test as I don't want to include bc as requirement
 # $1: To be checked option
 function invalid_number() {
-    [[ -z $1 ]] && { err "Missing input option in invalid_number!"; exit $err_runtime; }
+    [[ -z $1 ]] && \
+        { err "Missing input option in invalid_number!"; exit $err_runtime; }
     local var=$1
 
     # check if var starts with a number
@@ -231,14 +235,16 @@ function check_options() {
     # Easiest way to just test it with ffmpeg
     # Reasonable fast even for >1h durations
     if (( ${#duration[@]} != 0 )) && \
-       ! ffmpeg -v quiet -f lavfi -i anullsrc "${duration[@]}" -c copy -f null -; then
+       ! ffmpeg -v quiet -f lavfi -i anullsrc \
+            "${duration[@]}" -c copy -f null -; then
         err "Invalid duration! For the supported syntax see:"
         err "https://ffmpeg.org/ffmpeg-utils.html#time-duration-syntax"
         exit $err_option
     fi
 
     # Check for preview command validity
-    if [[ $preview == true ]] && ! command -v "$preview_command" > /dev/null; then
+    if [[ $preview == true ]] && \
+        ! command -v "$preview_command" > /dev/null; then
         err "Invalid preview command ('$preview_command')!"
         exit $err_option
     fi
@@ -297,7 +303,8 @@ function parse_input_links() {
 # Parse file with coub links
 # $1 is path to the input list
 function parse_input_list() {
-    [[ -z "$1" ]] && { err "Missing list path in parse_input_list!"; exit $err_runtime; }
+    [[ -z "$1" ]] && \
+        { err "Missing list path in parse_input_list!"; exit $err_runtime; }
     local file="$1"
 
     if [[ ! -e "$file" ]]; then
@@ -328,8 +335,12 @@ function parse_input_list() {
 # $1 specifies the type of timeline
 # $2 is the channel URL, tag, etc.
 function parse_input_timeline() {
-    [[ -z "$1" ]] && { err "Missing input type in parse_input_timeline!"; exit $err_runtime; }
-    [[ -z "$2" ]] && { err "Missing input timeline in parse_input_timeline!"; exit $err_runtime; }
+    [[ -z "$1" ]] && \
+        { err "Missing input type in parse_input_timeline!"; \
+          exit $err_runtime; }
+    [[ -z "$2" ]] && \
+        { err "Missing input timeline in parse_input_timeline!"; \
+          exit $err_runtime; }
     local url_type="$1"
     local url="$2"
 
@@ -347,6 +358,7 @@ function parse_input_timeline() {
         exit $err_runtime
         ;;
     esac
+    api_call+="?per_page=$entries_per_page"
 
     curl -s "$api_call" > "$json"
     local -i total_pages=$(jq -r .total_pages "$json")
@@ -365,23 +377,31 @@ function parse_input_timeline() {
         fi
 
         msg "  $page out of $total_pages pages"
-        curl -s "$api_call?page=$page" > "$json"
-        for (( entry=0; entry <= 9; entry++ ))
+        curl -s "$api_call&page=$page" > "$json"
+        for (( entry=0; entry < entries_per_page; entry++ ))
         do
             if [[ -n $max_coubs ]] && (( ${#coub_list[@]} >= max_coubs )); then
                 return
             fi
 
-            coub_type=$(jq -r .coubs[$entry].type "$json")
-            # Coub::Simple -> normal coub
-            # Coub::Recoub -> recoub
-            if [[ $coub_type == "Coub::Recoub" && $recoubs == true ]]; then
-                coub_id=$(jq -r .coubs[$entry].recoub_to.permalink "$json")
-            elif [[ $coub_type == "Coub::Simple" && $only_recoubs == false ]]; then
-                coub_id=$(jq -r .coubs[$entry].permalink "$json")
-            else
-                continue
+            # Tag timelines should only list simple coubs
+            # Only one jq call per page necessary
+            if [[ $url_type == "tag" ]] && \
+               ! ( [[ -n $max_coubs ]] && \
+                   (( max_coubs < ${#coub_list[@]}+entries_per_page )) ); then
+                coub_list+=($(jq -r '.coubs[] | "https://coub.com/view/" + .permalink' "$json"))
+                break
             fi
+
+            # Channels list coubs and recoubs randomly
+            # Each coub must be checked
+            # Old approach: 2 jq calls per coub (type + link)
+            # New approach: 1 jq call (recoub), 2 jq calls (coub)
+            coub_id=$(jq -r .coubs[$entry].recoub_to.permalink "$json")
+            [[ coub_id != "null" && $recoubs == false ]] && continue
+            [[ coub_id == "null" && $only_recoubs == true ]] && continue
+            [[ coub_id == "null" ]] && \
+                coub_id=$(jq -r .coubs[$entry].permalink "$json")
 
             coub_list+=("https://coub.com/view/$coub_id")
         done
@@ -394,9 +414,12 @@ function parse_input() {
     local list channel tag
 
     parse_input_links
-    for list in "${input_lists[@]}"; do parse_input_list "$list"; done
-    for channel in "${input_channels[@]}"; do parse_input_timeline "channel" "$channel"; done
-    for tag in "${input_tags[@]}"; do parse_input_timeline "tag" "$tag"; done
+    for list in "${input_lists[@]}"; do \
+        parse_input_list "$list"; done
+    for channel in "${input_channels[@]}"; do \
+        parse_input_timeline "channel" "$channel"; done
+    for tag in "${input_tags[@]}"; do \
+        parse_input_timeline "tag" "$tag"; done
 
     (( ${#coub_list[@]} == 0 )) && \
         { err "No coub links specified!"; clean; usage; exit $err_option; }
@@ -419,7 +442,8 @@ function parse_input() {
 # Check coub existence
 # $1: Coub id
 function existence() {
-    [[ -z "$1" ]] && { err "Missing coub id in existence!"; exit $err_runtime; }
+    [[ -z "$1" ]] && \
+        { err "Missing coub id in existence!"; exit $err_runtime; }
     local id="$1"
 
     if [[ ( -e "$id.mkv" && $a_only == false && $v_only == false ) || \
@@ -448,7 +472,8 @@ function overwrite() {
                 no)  return 1;;
                 esac
             done;;
-    *)      err "Error: Unknown prompt_answer in overwrite!"; exit $err_runtime;;
+    *)      err "Error: Unknown prompt_answer in overwrite!";
+            exit $err_runtime;;
     esac
 }
 
@@ -458,8 +483,10 @@ function overwrite() {
 # $1 is the to-be-performed action
 # $2 is the specific coub link
 function use_archive() {
-    [[ -z "$1" ]] && { err "Missing action in use_archive!"; exit $err_runtime; }
-    [[ -z "$2" ]] && { err "Missing link in use_archive!"; exit $err_runtime;  }
+    [[ -z "$1" ]] && \
+        { err "Missing action in use_archive!"; exit $err_runtime; }
+    [[ -z "$2" ]] && \
+        { err "Missing link in use_archive!"; exit $err_runtime;  }
     local action="$1"
     local link="$2"
 
@@ -481,7 +508,8 @@ function use_archive() {
 # Download individual coub parts
 # $1: Coub id
 function download() {
-    [[ -z "$1" ]] && { err "Missing coub id in download!"; exit $err_runtime; }
+    [[ -z "$1" ]] && \
+        { err "Missing coub id in download!"; exit $err_runtime; }
     local id="$1"
 
     curl -s "https://coub.com/api/v2/coubs/$id" > "$json"
