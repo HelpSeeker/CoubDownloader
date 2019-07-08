@@ -30,6 +30,11 @@ Download options:
   --sleep TIME           pause the script for TIME seconds before each download
   --limit-rate RATE      limit download rate (see curl's --limit-rate)
   --limit-num LIMIT      limit max. number of downloaded coubs
+  --sort ORDER           specify download order for channels/tags
+                         Allowed values:
+                           newest (default)      likes_count
+                           oldest (tags only)    views_count
+                           newest_popular
 
 Channel options:
   --recoubs              include recoubs during channel downloads (default)
@@ -85,7 +90,19 @@ Whole channels can be downloaded by providing a full URL or the name of the chan
 
 Tags can be scraped by providing the term or a full URL. Due to a bug (?) in the Coub API you can only download the first 99 pages (i.e. 990 coubs) listed. All pages afterwards will redirect to page 1.
 
+***
+
 Please note for **channels** and **tags** that the URL mustn't include a special sort order (e.g. https://coub.com/tags/tag/likes) or other filters (e.g. https://coub.com/user/reposts). The last word in the URL needs to be the channel name or tag.
+
+***
+
+Input gets parsed in the following order:
+
+* Links  
+* Lists  
+* Channels  
+* Tags  
+
 
 ## Changes to the new version
 
@@ -102,7 +119,7 @@ This list documents the (planned) changes since switching from youtube-dl to Cou
 - [x] Keep track of already downloaded coubs  
 - [x] Export parsed coub links (from channels or tags) to a file for later usage
 - [x] Different verbosity levels   
-- [ ] Choose download order for channels and tags (newest, likes, views, popularity)
+- [x] Choose download order for channels and tags
 - [ ] Download stories*  
 
 *Story support will be more difficult to implement, as Coub's API doesn't provide any related endpoint. It will require conventional scraping, after JS execution with a headless browser.
