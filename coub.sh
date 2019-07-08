@@ -36,6 +36,9 @@ declare preview_command="mpv"
 declare a_only=false
 declare v_only=false
 
+# Default sort order
+declare sort_order="newest"
+
 # Advanced settings
 declare -ri page_limit=99           # used for tags; must be <= 99
 declare -ri entries_per_page=25     # allowed: 1-25
@@ -100,6 +103,11 @@ Download options:
   --sleep TIME           pause the script for TIME seconds before each download
   --limit-rate RATE      limit download rate (see curl's --limit-rate)
   --limit-num LIMIT      limit max. number of downloaded coubs
+  --sort ORDER           specify download order for channels/tags
+                         Allowed values:
+                           newest (default)      likes_count
+                           oldest (tags only)    views_count
+                           newest_popular
 
 Channel options:
   --recoubs              include recoubs during channel downloads (default)
@@ -170,6 +178,7 @@ function parse_options() {
                           declare -gra limit_rate=("--limit-rate" "$max_rate")
                           shift 2;;
         --limit-num)      declare -gri max_coubs="$2"; shift 2;;
+        --sort)           sort_order="$2"; shift 2;;
         # Channel options
         --recoubs)        recoubs=true; shift;;
         --no-recoubs)     recoubs=false; shift;;
@@ -258,6 +267,11 @@ function check_options() {
         err "--no-recoubs and --only-recoubs are mutually exclusive!"
         exit $err_option
     fi
+
+    case "$sort_order" in
+    newest | oldest | newest_popular | likes_count | views_count);;
+    *) err "Invalid sort order ('$sort_order')!"; exit $err_option;;
+    esac
 }
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -360,6 +374,15 @@ function parse_input_timeline() {
     esac
     api_call+="?per_page=$entries_per_page"
 
+    case "$sort_order" in
+    newest);;
+    oldest) [[ $url_type == "tag" ]] && api_call+="&order_by=oldest";;
+    newest_popular | \
+    likes_count | \
+    views_count) api_call+="&order_by=$sort_order";;
+    *) err "Wrong sort order in parse_input_timeline!"; exit $err_runtime;;
+    esac
+
     curl -s "$api_call" > "$json"
     local -i total_pages=$(jq -r .total_pages "$json")
 
@@ -398,9 +421,9 @@ function parse_input_timeline() {
             # Old approach: 2 jq calls per coub (type + link)
             # New approach: 1 jq call (recoub), 2 jq calls (coub)
             coub_id=$(jq -r .coubs[$entry].recoub_to.permalink "$json")
-            [[ coub_id != "null" && $recoubs == false ]] && continue
-            [[ coub_id == "null" && $only_recoubs == true ]] && continue
-            [[ coub_id == "null" ]] && \
+            [[ $coub_id != "null" && $recoubs == false ]] && continue
+            [[ $coub_id == "null" && $only_recoubs == true ]] && continue
+            [[ $coub_id == "null" ]] && \
                 coub_id=$(jq -r .coubs[$entry].permalink "$json")
 
             coub_list+=("https://coub.com/view/$coub_id")
