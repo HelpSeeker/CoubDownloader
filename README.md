@@ -62,7 +62,7 @@ Output:
       %channel%   - channel title
       %tags%      - all tags (seperated by '_')
 
-    Other strings will be interpretad literally.
+    Other strings will be interpreted literally.
     This option has no influence on the file extension.
 ```
 
