@@ -7,7 +7,7 @@ CoubDownloader is a simple script to download videos (called coubs) from [Coub](
 ```
 CoubDownloader is a simple download script for coub.com
 
-Usage: coub.sh [OPTIONS] INPUT [INPUT]...
+Usage: coub.sh [OPTIONS] INPUT [INPUT]... [-o FORMAT]
 
 Input:
   LINK                   download specified coubs
@@ -21,7 +21,7 @@ Common options:
   -y, --yes              answer all prompts with yes
   -n, --no               answer all prompts with no
   -s, --short            disable video looping
-  -p, --path PATH        set output destination (default: $HOME/coub)
+  -p, --path PATH        set output destination (default: '.')
   -k, --keep             keep the individual video/audio parts
   -r, --repeat N         repeat video N times (default: until audio ends)
   -d, --duration TIME    specify max. coub duration (FFmpeg syntax)
@@ -50,6 +50,20 @@ Misc. options:
   --video-only           only download video streams
   --write-list FILE      write all parsed coub links to FILE
   --use-archive FILE     use FILE to keep track of already downloaded coubs
+
+Output:
+  -o, --output FORMAT    save output with the specified name (default: %id%)
+
+    Special strings:
+      %id%        - coub ID (identifier in the URL)
+      %title%     - coub title
+      %creation%  - creation date/time
+      %category%  - coub category
+      %channel%   - channel title
+      %tags%      - all tags (seperated by '_')
+
+    Other strings will be interpretad literally.
+    This option has no influence on the file extension.
 ```
 
 ## Requirements
@@ -103,7 +117,6 @@ Input gets parsed in the following order:
 * Channels  
 * Tags  
 
-
 ## Changes to the new version
 
 This list documents the (planned) changes since switching from youtube-dl to Coub's API.  
@@ -120,6 +133,7 @@ This list documents the (planned) changes since switching from youtube-dl to Cou
 - [x] Export parsed coub links (from channels or tags) to a file for later usage
 - [x] Different verbosity levels   
 - [x] Choose download order for channels and tags
+- [x] Custom output formatting
 - [ ] Download stories*  
 
 *Story support will be more difficult to implement, as Coub's API doesn't provide any related endpoint. It will require conventional scraping, after JS execution with a headless browser.
