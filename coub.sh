@@ -12,7 +12,7 @@ declare verbosity=1
 declare prompt_answer="prompt"
 
 # Default download destination
-declare save_path="$HOME/coub"
+declare save_path="."
 
 # Keep individual video/audio streams
 declare keep=false
@@ -44,6 +44,7 @@ declare -ri page_limit=99           # used for tags; must be <= 99
 declare -ri entries_per_page=25     # allowed: 1-25
 declare -r json="temp.json"
 declare -r concat_list="list.txt"
+declare -r tag_separator="_"
 
 # Error codes
 # 1 -> missing required software
@@ -65,12 +66,12 @@ declare -a coub_list
 
 # Print to stderr
 function err() {
-    printf "$@\n" 1>&2
+    cat <<< "$@" 1>&2
 }
 
 # Print to stdout based on verbosity level
 function msg() {
-    (( verbosity >= 1 )) && printf "$@\n"
+    (( verbosity >= 1 )) && printf "$*\n"
 }
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -80,7 +81,7 @@ function usage() {
 cat << EOF
 CoubDownloader is a simple download script for coub.com
 
-Usage: ${0##*/} [OPTIONS] INPUT [INPUT]...
+Usage: ${0##*/} [OPTIONS] INPUT [INPUT]... [-o FORMAT]
 
 Input:
   LINK                   download specified coubs
@@ -94,7 +95,7 @@ Common options:
   -y, --yes              answer all prompts with yes
   -n, --no               answer all prompts with no
   -s, --short            disable video looping
-  -p, --path PATH        set output destination (default: $HOME/coub)
+  -p, --path PATH        set output destination (default: '$save_path')
   -k, --keep             keep the individual video/audio parts
   -r, --repeat N         repeat video N times (default: until audio ends)
   -d, --duration TIME    specify max. coub duration (FFmpeg syntax)
@@ -123,6 +124,20 @@ Misc. options:
   --video-only           only download video streams
   --write-list FILE      write all parsed coub links to FILE
   --use-archive FILE     use FILE to keep track of already downloaded coubs
+
+Output:
+  -o, --output FORMAT    save output with the specified name (default: %id%)
+
+    Special strings:
+      %id%        - coub ID (identifier in the URL)
+      %title%     - coub title
+      %creation%  - creation date/time
+      %category%  - coub category
+      %channel%   - channel title
+      %tags%      - all tags (seperated by '$tag_separator')
+
+    Other strings will be interpretad literally.
+    This option has no influence on the file extension.
 EOF
 }
 
@@ -192,6 +207,8 @@ function parse_options() {
         --write-list)     declare -gr out_file="$2"; shift 2;;
         --use-archive)    declare -gr archive_file="$(readlink -f "$2")";
                           shift 2;;
+        # Output
+        -o | --output)    declare -gr out_format="$2"; shift 2;;
         # Unknown options
         -*) err "Unknown flag '$1'!"; usage; exit $err_option;;
         *) err "'$1' is not an option or a coub link!"; usage;
@@ -207,7 +224,7 @@ function parse_options() {
 # $1: To be checked option
 function invalid_number() {
     [[ -z $1 ]] && \
-        { err "Missing input option in invalid_number!"; exit $err_runtime; }
+        { err "Missing input in invalid_number!"; clean; exit $err_runtime; }
     local var=$1
 
     # check if var starts with a number
@@ -280,16 +297,16 @@ function resolve_paths() {
     mkdir -p "$save_path"
     if ! cd "$save_path" 2> /dev/null; then
         err "Error: Can't change into destination directory!"
-        exit $err_runtime
+        clean; exit $err_runtime
     fi
 
     # check if reserved filenames exist in output dir
     if [[ -e "$json" ]]; then
         err "Error: Reserved filename ('$json') exists in '$save_path'!"
-        exit $err_runtime
+        clean; exit $err_runtime
     elif [[ -e "$concat_list" ]]; then
         err "Error: Reserved filename ('$concat_list') exists in '$save_path'!"
-        exit $err_runtime
+        clean; exit $err_runtime
     fi
 }
 
@@ -318,7 +335,8 @@ function parse_input_links() {
 # $1 is path to the input list
 function parse_input_list() {
     [[ -z "$1" ]] && \
-        { err "Missing list path in parse_input_list!"; exit $err_runtime; }
+        { err "Missing list path in parse_input_list!"; clean;
+          exit $err_runtime; }
     local file="$1"
 
     if [[ ! -e "$file" ]]; then
@@ -351,10 +369,10 @@ function parse_input_list() {
 function parse_input_timeline() {
     [[ -z "$1" ]] && \
         { err "Missing input type in parse_input_timeline!"; \
-          exit $err_runtime; }
+          clean; exit $err_runtime; }
     [[ -z "$2" ]] && \
         { err "Missing input timeline in parse_input_timeline!"; \
-          exit $err_runtime; }
+          clean; exit $err_runtime; }
     local url_type="$1"
     local url="$2"
 
@@ -369,7 +387,7 @@ function parse_input_timeline() {
         ;;
     *)
         err "Error: Unknown input type in parse_input_timeline!"
-        exit $err_runtime
+        clean; exit $err_runtime
         ;;
     esac
     api_call+="?per_page=$entries_per_page"
@@ -389,7 +407,7 @@ function parse_input_timeline() {
     msg "Downloading $url_type info ($url):"
 
     local -i page entry
-    local coub_type coub_id
+    local coub_id
     for (( page=1; page <= total_pages; page++ ))
     do
         # tag timeline redirects pages >99 to page 1
@@ -462,16 +480,67 @@ function parse_input() {
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-# Check coub existence
 # $1: Coub id
-function existence() {
+function get_out_name() {
     [[ -z "$1" ]] && \
-        { err "Missing coub id in existence!"; exit $err_runtime; }
+        { err "Missing coub id in get_out_name!"; clean; exit $err_runtime; }
     local id="$1"
 
-    if [[ ( -e "$id.mkv" && $a_only == false && $v_only == false ) || \
-          ( -e "$id.mp4" && $v_only == true ) || \
-          ( -e "$id.mp3" && $a_only == true ) ]]; then
+    [[ -z "$out_format" ]] && { echo "$id"; return; }
+
+    local out_name="$out_format"
+    local substitution
+    # Not strictly necessary, as you could assign substitution(array)
+    # to substitution(string), but I want to avoid type mixing
+    local -a tags=()
+    while true
+    do
+        case "$out_name" in
+        *%id%*)       out_name="${out_name//%id%/$id}";;
+        *%title%*)    substitution="$(jq -r .title "$json")"
+                      out_name="${out_name//%title%/$substitution}";;
+        *%creation%*) substitution="$(jq -r .created_at "$json")"
+                      out_name="${out_name//%creation%/$substitution}";;
+        *%channel%*)  substitution="$(jq -r .channel.title "$json")"
+                      out_name="${out_name//%channel%/$substitution}";;
+        *%tags%*)     tags=($(jq -r .tags[].title "$json"))
+                      (( ${#tags[@]} == 0 )) && \
+                        { out_name="${out_name//%tags%/}"; continue; }
+                      substitution="${tags[*]}"
+                      substitution="${substitution// /$tag_separator}"
+                      out_name="${out_name//%tags%/$substitution}";;
+        *%category%*) substitution="$(jq -r .categories[0].permalink "$json")"
+                      out_name="${out_name//%category%/$substitution}";;
+        *) break;;
+        esac
+    done
+
+    out_name="${out_name//\'/}"
+
+    # Using all tags as filename can quickly explode its size
+    # If it's too long, use the default name (id) instead
+    # Also handles otherwise invalid filenames
+    if ! touch "$out_name.mkv" 2> /dev/null; then
+        err "Error: Filename invalid or too long! Falling back to '$id'."
+        out_name="$id"
+    fi
+    rm "$out_name.mkv" 2> /dev/null
+
+    echo "$out_name"
+}
+
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+# Check coub existence
+# $1: Output name
+function existence() {
+    [[ -z "$1" ]] && \
+        { err "Missing output name in existence!"; clean; exit $err_runtime; }
+    local name="$1"
+
+    if [[ ( -e "$name.mkv" && $a_only == false && $v_only == false ) || \
+          ( -e "$name.mp4" && $v_only == true ) || \
+          ( -e "$name.mp3" && $a_only == true ) ]]; then
         return 0
     else
         return 1
@@ -496,7 +565,7 @@ function overwrite() {
                 esac
             done;;
     *)      err "Error: Unknown prompt_answer in overwrite!";
-            exit $err_runtime;;
+            clean; exit $err_runtime;;
     esac
 }
 
@@ -507,9 +576,9 @@ function overwrite() {
 # $2 is the specific coub link
 function use_archive() {
     [[ -z "$1" ]] && \
-        { err "Missing action in use_archive!"; exit $err_runtime; }
+        { err "Missing action in use_archive!"; clean; exit $err_runtime; }
     [[ -z "$2" ]] && \
-        { err "Missing link in use_archive!"; exit $err_runtime;  }
+        { err "Missing link in use_archive!"; clean; exit $err_runtime;  }
     local action="$1"
     local link="$2"
 
@@ -529,13 +598,12 @@ function use_archive() {
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 # Download individual coub parts
-# $1: Coub id
+# $1: json
+# $2: Output name
 function download() {
     [[ -z "$1" ]] && \
-        { err "Missing coub id in download!"; exit $err_runtime; }
-    local id="$1"
-
-    curl -s "https://coub.com/api/v2/coubs/$id" > "$json"
+        { err "Missing output name in download!"; clean; exit $err_runtime; }
+    local name="$1"
 
     # jq's default output for non-existent entries is null
     local video="null" audio="null"
@@ -557,14 +625,14 @@ function download() {
     # Video download
     if [[ $a_only == false ]] && \
        ( [[ $video == "null" ]] || \
-         ! curl -s "${limit_rate[@]}" "$video" -o "$id.mp4" ); then
+         ! curl -s "${limit_rate[@]}" "$video" -o "$name.mp4" ); then
         v_error=true
     fi
 
     # Audio download
     if [[ $v_only == false ]] && \
        ( [[ $audio == "null" ]] || \
-         ! curl -s "${limit_rate[@]}" "$audio" -o "$id.mp3" ); then
+         ! curl -s "${limit_rate[@]}" "$audio" -o "$name.mp3" ); then
         a_error=true
     fi
 }
@@ -572,45 +640,48 @@ function download() {
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 # Combine video and audio
-# $1: Coub id
+# $1: Output name
 function merge() {
-    [[ -z "$1" ]] && { err "Missing coub id in merge!"; exit $err_runtime; }
-    local id="$1"
+    [[ -z "$1" ]] && \
+        { err "Missing output name in merge!"; clean; exit $err_runtime; }
+    local name="$1"
 
     # Print .txt for ffmpeg's concat
     for (( i=1; i <= repeat; i++ ))
     do
-        echo "file '$id.mp4'" >> "$concat_list"
+        echo "file '$name.mp4'" >> "$concat_list"
     done
 
     # Loop footage until shortest stream ends
     # Concatenated video (via list) counts as one long stream
     ffmpeg -y -v error -f concat -safe 0 \
-            -i "$concat_list" -i "$id.mp3" "${duration[@]}" \
-            -c copy -shortest "$id.mkv"
+            -i "$concat_list" -i "$name.mp3" "${duration[@]}" \
+            -c copy -shortest "$name.mkv"
 
     # Removal not in clean, as it should only happen when merging was performed
-    [[ $keep == false ]] && rm "$id.mp4" "$id.mp3" 2> /dev/null
+    [[ $keep == false ]] && rm "$name.mp4" "$name.mp3" 2> /dev/null
 }
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 # Show preview
+# $1: Output name
 function preview() {
-    [[ -z "$1" ]] && { err "Missing coub id in preview!"; exit $err_runtime; }
-    local id="$1"
+    [[ -z "$1" ]] && \
+        { err "Missing output name in preview!"; clean; exit $err_runtime; }
+    local name="$1"
 
-    local output="$id.mkv"
-    [[ $a_only == true ]] && output="$id.mp3"
-    [[ $v_only == true || $a_error == true ]] && output="$id.mp4"
+    local file="$name.mkv"
+    [[ $a_only == true ]] && file="$name.mp3"
+    [[ $v_only == true || $a_error == true ]] && file="$name.mp4"
 
     # This check is likely superfluous
-    [[ ! -e "$output" ]] && \
-        { err "Error: Missing output in preview!"; exit $err_runtime; }
+    [[ ! -e "$file" ]] && \
+        { err "Error: Missing file in preview!"; clean; exit $err_runtime; }
 
     # Necessary workaround for mpv (and perhaps CLI music players)
     # No window + redirected stdout = keyboard shortcuts not responding
-    script -c "$preview_command $output" /dev/null > /dev/null
+    script -c "$preview_command '$file'" /dev/null > /dev/null
 }
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -641,15 +712,17 @@ function main() {
     local coub
     for coub in "${coub_list[@]}"
     do
-        local v_error=false a_error=false
-        local coub_id="${coub##*/}"
-
         (( counter++ ))
         msg "  $counter out of ${#coub_list[@]} ($coub)"
 
+        local v_error=false a_error=false
+        local coub_id="${coub##*/}"
+        curl -s "https://coub.com/api/v2/coubs/$coub_id" > "$json"
+        local output="$(get_out_name "$coub_id")"
+
         # Pass existing files to avoid unnecessary downloads
         if ( [[ -n $archive_file ]] && use_archive "read" "$coub") ||
-           ( existence "$coub_id" && ! overwrite); then
+           ( existence "$output" && ! overwrite); then
             msg "Already downloaded!"
             clean
             (( downloads++ ))
@@ -658,7 +731,7 @@ function main() {
 
         # Download video/audio streams
         [[ -n $sleep_dur ]] && sleep $sleep_dur
-        download "$coub_id"
+        download "$output"
 
         # Skip if the requested media couldn't be downloaded
         [[ $v_error == true ]] && \
@@ -669,17 +742,17 @@ function main() {
         # Fix broken video stream
         [[ $a_only == false ]] && \
             printf '\x00\x00' | \
-            dd of="$coub_id.mp4" bs=1 count=2 conv=notrunc &> /dev/null
+            dd of="$output.mp4" bs=1 count=2 conv=notrunc &> /dev/null
 
         # Merge video and audio
         [[ $v_only == false && $a_only == false && $a_error == false ]] && \
-            merge "$coub_id"
+            merge "$output"
 
         # Write downloaded coub to archive
         [[ -n $archive_file ]] && use_archive "write" "$coub"
 
         # Preview downloaded coub
-        [[ $preview == true ]] && preview "$coub_id"
+        [[ $preview == true ]] && preview "$output"
 
         # Clean workspace
         clean
