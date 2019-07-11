@@ -60,7 +60,7 @@ Output:
       %creation%  - creation date/time
       %category%  - coub category
       %channel%   - channel title
-      %tags%      - all tags (seperated by '_')
+      %tags%      - all tags (separated by '_')
 
     Other strings will be interpreted literally.
     This option has no influence on the file extension.
@@ -82,7 +82,7 @@ The simplest form of input is a direct link to a coub. Only strings that contain
 
 #### Lists
 
-A list is a simple text file containing one or more coub links. Links must be seperated by a white space, tab or new line. Like before only strings that contain `coub.com/view/` will get parsed as coub links.
+A list is a simple text file containing one or more coub links. Links must be separated by a white space, tab or new line. Like before only strings that contain `coub.com/view/` will get parsed as coub links.
 
 Example:
 
@@ -102,7 +102,7 @@ Whole channels can be downloaded by providing a full URL or the name of the chan
 
 #### Tags
 
-Tags can be scraped by providing the term or a full URL. Due to a bug (?) in the Coub API you can only download the first 99 pages (i.e. 990 coubs) listed. All pages afterwards will redirect to page 1.
+Tags can be scraped by providing the term or a full URL. Due to a bug (?) in the Coub API you can only download the first 99 pages (i.e. 2475 coubs) listed. All pages afterwards will redirect to page 1.
 
 ***
 
