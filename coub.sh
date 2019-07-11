@@ -444,7 +444,8 @@ function parse_input_timeline() {
             [[ $coub_id == "null" ]] && \
                 coub_id=$(jq -r .coubs[$entry].permalink "$json")
 
-            coub_list+=("https://coub.com/view/$coub_id")
+            [[ $coub_id != "null" ]] && \
+                coub_list+=("https://coub.com/view/$coub_id")
         done
     done
 }
@@ -690,6 +691,7 @@ function clean() {
     rm "$json" "$concat_list" 2> /dev/null
     unset v_error a_error
     unset coub_id
+    unset output
 }
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -717,12 +719,24 @@ function main() {
 
         local v_error=false a_error=false
         local coub_id="${coub##*/}"
+
+        # Pass existing files to avoid unnecessary downloads
+        # This check handles archive file search and default output formatting
+        # Avoids curl usage (slow!) just to skip files anyway
+        if ([[ -n $archive_file ]] && use_archive "read" "$coub") ||
+           ([[ -z $out_format ]] && existence "$coub_id" && ! overwrite); then
+            msg "Already downloaded!"
+            clean
+            (( downloads++ ))
+            continue
+        fi
+        
         curl -s "https://coub.com/api/v2/coubs/$coub_id" > "$json"
         local output="$(get_out_name "$coub_id")"
 
-        # Pass existing files to avoid unnecessary downloads
-        if ( [[ -n $archive_file ]] && use_archive "read" "$coub") ||
-           ( existence "$output" && ! overwrite); then
+        # Another check for custom output formatting
+        # Far slower to skip existing files (archive usage is recommended)
+        if [[ -n $out_format ]] && existence "$output" && ! overwrite; then
             msg "Already downloaded!"
             clean
             (( downloads++ ))
