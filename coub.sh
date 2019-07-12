@@ -297,16 +297,16 @@ function resolve_paths() {
     mkdir -p "$save_path"
     if ! cd "$save_path" 2> /dev/null; then
         err "Error: Can't change into destination directory!"
-        clean; exit $err_runtime
+        exit $err_runtime
     fi
 
     # check if reserved filenames exist in output dir
     if [[ -e "$json" ]]; then
         err "Error: Reserved filename ('$json') exists in '$save_path'!"
-        clean; exit $err_runtime
+        exit $err_runtime
     elif [[ -e "$concat_list" ]]; then
         err "Error: Reserved filename ('$concat_list') exists in '$save_path'!"
-        clean; exit $err_runtime
+        exit $err_runtime
     fi
 }
 
@@ -318,7 +318,7 @@ function parse_input_links() {
     for link in "${input_links[@]}"
     do
         if [[ -n $max_coubs ]] && (( ${#coub_list[@]} >= max_coubs )); then
-            return
+            break
         fi
         coub_list+=("$link")
     done
@@ -543,9 +543,9 @@ function existence() {
           ( -e "$name.mp4" && $v_only == true ) || \
           ( -e "$name.mp3" && $a_only == true ) ]]; then
         return 0
-    else
-        return 1
     fi
+
+    return 1
 }
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -730,7 +730,7 @@ function main() {
             (( downloads++ ))
             continue
         fi
-        
+
         curl -s "https://coub.com/api/v2/coubs/$coub_id" > "$json"
         local output="$(get_out_name "$coub_id")"
 
