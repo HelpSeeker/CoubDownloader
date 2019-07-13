@@ -134,9 +134,9 @@ Output:
       %creation%  - creation date/time
       %category%  - coub category
       %channel%   - channel title
-      %tags%      - all tags (seperated by '$tag_separator')
+      %tags%      - all tags (separated by '$tag_separator')
 
-    Other strings will be interpretad literally.
+    Other strings will be interpreted literally.
     This option has no influence on the file extension.
 EOF
 }
@@ -265,13 +265,6 @@ function check_options() {
             "${duration[@]}" -c copy -f null -; then
         err "Invalid duration! For the supported syntax see:"
         err "https://ffmpeg.org/ffmpeg-utils.html#time-duration-syntax"
-        exit $err_option
-    fi
-
-    # Check for preview command validity
-    if [[ $preview == true ]] && \
-        ! command -v "$preview_command" > /dev/null; then
-        err "Invalid preview command ('$preview_command')!"
         exit $err_option
     fi
 
@@ -579,20 +572,20 @@ function use_archive() {
     [[ -z "$1" ]] && \
         { err "Missing action in use_archive!"; clean; exit $err_runtime; }
     [[ -z "$2" ]] && \
-        { err "Missing link in use_archive!"; clean; exit $err_runtime;  }
+        { err "Missing coub id in use_archive!"; clean; exit $err_runtime;  }
     local action="$1"
-    local link="$2"
+    local id="$2"
 
     case "$action" in
     read)
-        if grep -qsw "$link" "$archive_file"; then
+        if grep -qsw "$id" "$archive_file"; then
             return 0;
         else
             return 1;
         fi
         ;;
-    write) echo "$link" >> "$archive_file";;
-    *) err "Error: Unknown action in use_archive!"; exit $err_runtime;;
+    write) echo "$id" >> "$archive_file";;
+    *) err "Error: Unknown action in use_archive!"; clean; exit $err_runtime;;
     esac
 }
 
@@ -660,14 +653,14 @@ function merge() {
             -c copy -shortest "$name.mkv"
 
     # Removal not in clean, as it should only happen when merging was performed
-    [[ $keep == false ]] && rm "$name.mp4" "$name.mp3" 2> /dev/null
+    [[ $keep == false ]] && rm "$name.mp4" "$name.mp3"
 }
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 # Show preview
 # $1: Output name
-function preview() {
+function show_preview() {
     [[ -z "$1" ]] && \
         { err "Missing output name in preview!"; clean; exit $err_runtime; }
     local name="$1"
@@ -678,7 +671,7 @@ function preview() {
 
     # This check is likely superfluous
     [[ ! -e "$file" ]] && \
-        { err "Error: Missing file in preview!"; clean; exit $err_runtime; }
+        { err "Error: Missing file in show_preview!"; return; }
 
     # Necessary workaround for mpv (and perhaps CLI music players)
     # No window + redirected stdout = keyboard shortcuts not responding
@@ -723,7 +716,7 @@ function main() {
         # Pass existing files to avoid unnecessary downloads
         # This check handles archive file search and default output formatting
         # Avoids curl usage (slow!) just to skip files anyway
-        if ([[ -n $archive_file ]] && use_archive "read" "$coub") ||
+        if ([[ -n $archive_file ]] && use_archive "read" "$coub_id") ||
            ([[ -z $out_format ]] && existence "$coub_id" && ! overwrite); then
             msg "Already downloaded!"
             clean
@@ -743,8 +736,11 @@ function main() {
             continue
         fi
 
+        # Sleep before each coub but the first one
+        if [[ -n $sleep_dur ]] && (( counter > 1 )); then
+            sleep $sleep_dur
+        fi
         # Download video/audio streams
-        [[ -n $sleep_dur ]] && sleep $sleep_dur
         download "$output"
 
         # Skip if the requested media couldn't be downloaded
@@ -763,10 +759,10 @@ function main() {
             merge "$output"
 
         # Write downloaded coub to archive
-        [[ -n $archive_file ]] && use_archive "write" "$coub"
+        [[ -n $archive_file ]] && use_archive "write" "$coub_id"
 
         # Preview downloaded coub
-        [[ $preview == true ]] && preview "$output"
+        [[ $preview == true ]] && show_preview "$output"
 
         # Clean workspace
         clean
