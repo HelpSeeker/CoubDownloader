@@ -66,7 +66,7 @@ Output:
     This option has no influence on the file extension.
 ```
 
-Please note that `coub.py` doesn't support all options yet. Refer to its help for a full list.
+Please note that `coub.py` doesn't support `--limit-rate` for now.
 
 ## Requirements
 

@@ -204,7 +204,7 @@ function parse_options() {
         # Misc options
         --audio-only)     a_only=true; shift;;
         --video-only)     v_only=true; shift;;
-        --write-list)     declare -gr out_file="$2"; shift 2;;
+        --write-list)     declare -gr out_file="$(readlink -f "$2")"; shift 2;;
         --use-archive)    declare -gr archive_file="$(readlink -f "$2")";
                           shift 2;;
         # Output
@@ -332,11 +332,7 @@ function parse_input_list() {
           exit $err_runtime; }
     local file="$1"
 
-    if [[ ! -e "$file" ]]; then
-        err "Invalid input list! '$file' doesn't exist."
-    else
-        msg "Reading input list ($file):"
-    fi
+    msg "Reading input list ($file):"
 
     # temporary array as additional step to easily check download limit
     local -a temp_list=()
@@ -346,7 +342,7 @@ function parse_input_list() {
     for temp in "${temp_list[@]}"
     do
         if [[ -n $max_coubs ]] && (( ${#coub_list[@]} >= max_coubs )); then
-            return
+            break
         fi
         coub_list+=("$temp")
     done
@@ -420,11 +416,12 @@ function parse_input_timeline() {
 
             # Tag timelines should only list simple coubs
             # Only one jq call per page necessary
-            if [[ $url_type == "tag" ]] && \
-               ! ( [[ -n $max_coubs ]] && \
-                   (( max_coubs < ${#coub_list[@]}+entries_per_page )) ); then
-                coub_list+=($(jq -r '.coubs[] | "https://coub.com/view/" + .permalink' "$json"))
-                break
+            if [[ $url_type == "tag" ]]; then
+                if [[ -z $max_coubs ]] || \
+                   (( max_coubs >= ${#coub_list[@]}+entries_per_page )); then
+                    coub_list+=($(jq -r '.coubs[] | "https://coub.com/view/" + .permalink' "$json"))
+                    break
+                fi
             fi
 
             # Channels list coubs and recoubs randomly
@@ -509,6 +506,7 @@ function get_out_name() {
         esac
     done
 
+    # Necessary to avoid ffmpeg failure
     out_name="${out_name//\'/}"
 
     # Using all tags as filename can quickly explode its size
