@@ -2,6 +2,18 @@
 
 CoubDownloader is a simple script to download videos (called coubs) from [Coub](https://coub.com).  
 
+## coub.sh vs. coub.py
+
+Both versions are standalone scripts. You can use either and get the same functionality (with the exception of `--limit-rate` only being available with coub.sh).
+
+So what version to use?
+
+The answer is: **coub.py**
+
+coub.py is supposed to work on all platforms, has less requirements and depending on the performed action*, it is faster than coub.sh.
+
+**Channel parsing profits the most, requiring 25-40% less time for ~1000-3000 parsed links. Tag parsing is mostly limited by Coub throttling the frequency of API calls after a while, so benefits are small compared to channel parsing (~7% less time for 2475 links). For the actual download of coubs the speed difference is negligible.* 
+
 ## Usage
 
 ```
