@@ -1,5 +1,8 @@
 #!/bin/bash
 
+# Catch user interrupt (Ctrl+C)
+trap keyboard_interrupt SIGINT
+
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # Default Settings
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -51,10 +54,12 @@ declare -r tag_separator="_"
 # 2 -> invalid user-specified option
 # 3 -> misc. runtime error (missing function argument, unknown value in case, etc.)
 # 4 -> not all input coubs exist after execution (i.e. some downloads failed)
+# 5 -> termination was requested mid-way by the user (i.e. Ctrl+C)
 declare -ri missing_dep=1
 declare -ri err_option=2
 declare -ri err_runtime=3
 declare -ri err_download=4
+declare -ri user_interrupt=5
 
 # Don't touch these
 declare -a input_links input_lists input_channels input_tags
@@ -66,7 +71,7 @@ declare -a coub_list
 
 # Print to stderr
 function err() {
-    cat <<< "$@" 1>&2
+    printf "$*\n" 1>&2
 }
 
 # Print to stdout based on verbosity level
@@ -210,9 +215,12 @@ function parse_options() {
         # Output
         -o | --output)    declare -gr out_format="$2"; shift 2;;
         # Unknown options
-        -*) err "Unknown flag '$1'!"; usage; exit $err_option;;
-        *) err "'$1' is not an option or a coub link!"; usage;
-           exit $err_option;;
+        -*) err "Unknown flag '$1'!"
+            err "Try '${0##*/} --help' for more information."
+            exit $err_option;;
+        *)  err "'$1' is neither an option nor a coub link!"
+            err "Try '${0##*/} --help' for more information."
+            exit $err_option;;
         esac
     done
 }
@@ -454,7 +462,7 @@ function parse_input() {
         parse_input_timeline "tag" "$tag"; done
 
     (( ${#coub_list[@]} == 0 )) && \
-        { err "No coub links specified!"; clean; usage; exit $err_option; }
+        { err "Error: No coub links specified!"; clean; exit $err_option; }
 
     if [[ -n $max_coubs ]] && (( ${#coub_list[@]} >= max_coubs )); then
         msg "\nDownload limit ($max_coubs) reached!"
@@ -686,6 +694,14 @@ function clean() {
 }
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+function keyboard_interrupt() {
+    err "User Interrupt!"
+    clean
+    exit $user_interrupt
+}
+
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # Main Function
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -723,7 +739,9 @@ function main() {
         fi
 
         curl -s "https://coub.com/api/v2/coubs/$coub_id" > "$json"
-        local output="$(get_out_name "$coub_id")"
+        local output
+        output="$(get_out_name "$coub_id")"
+        (( $? == err_runtime )) && exit $err_runtime
 
         # Another check for custom output formatting
         # Far slower to skip existing files (archive usage is recommended)

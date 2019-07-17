@@ -1,3 +1,5 @@
+#!/usr/bin/env python3
+
 import sys
 import os
 import time
@@ -59,17 +61,19 @@ tag_separator = "_"
 # 2 -> invalid user-specified option
 # 3 -> misc. runtime error (missing function argument, unknown value in case, etc.)
 # 4 -> not all input coubs exist after execution (i.e. some downloads failed)
+# 5 -> termination was requested mid-way by the user (i.e. Ctrl+C)
 missing_dep = 1
 err_option = 2
 err_runtime = 3
 err_download = 4
+user_interrupt = 5
 
 # Don't touch these
-input_links=[]
-input_lists=[]
-input_channels=[]
-input_tags=[]
-coub_list=[]
+input_links = []
+input_lists = []
+input_channels = []
+input_tags = []
+coub_list = []
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # Functions
@@ -79,7 +83,8 @@ def err(*args, **kwargs):
     print(*args, file=sys.stderr, **kwargs)
 
 def msg(*args, **kwargs):
-    if verbosity >= 1: print(*args, **kwargs)
+    if verbosity >= 1:
+        print(*args, **kwargs)
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -149,11 +154,13 @@ Output:
 
 def check_requirements():
     try:
-        subprocess.run(["ffmpeg"], stdout=subprocess.DEVNULL,
+        subprocess.run(["ffmpeg"], stdout=subprocess.DEVNULL, \
                                    stderr=subprocess.DEVNULL)
+    except KeyboardInterrupt:
+        raise
     except:
         err("Error: FFmpeg not found!")
-        exit(missing_dep)
+        sys.exit(missing_dep)
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -177,45 +184,45 @@ def parse_options():
         if fnmatch(option, "*coub.com/view/*"):
             input_links.append(option.strip("/"))
             position += 1
-        elif option == "-l" or option == "--list":
+        elif option in ("-l", "--list"):
             l = sys.argv[position+1]
             if os.path.exists(l):
                 input_lists.append(os.path.abspath(l))
             else:
-                err("'", l,"' is no valid list.", sep="")
+                err("'", l, "' is no valid list.", sep="")
             position += 2
-        elif option == "-c" or option == "--channel":
+        elif option in ("-c", "--channel"):
             input_channels.append(sys.argv[position+1].strip("/"))
             position += 2
-        elif option == "-t" or option == "--tag":
+        elif option in ("-t", "--tag"):
             input_tags.append(sys.argv[position+1].strip("/"))
             position += 2
         # Common options
-        elif option == "-h" or option == "--help":
+        elif option in ("-h", "--help"):
             usage()
-            exit()
-        elif option == "-q" or option == "--quiet":
+            sys.exit(0)
+        elif option in ("-q", "--quiet"):
             verbosity = 0
             position += 1
-        elif option == "-y" or option == "--yes":
+        elif option in ("-y", "--yes"):
             prompt_answer = "yes"
             position += 1
-        elif option == "-n" or option == "--no":
+        elif option in ("-n", "--no"):
             prompt_answer = "no"
             position += 1
-        elif option == "-s" or option == "--short":
+        elif option in ("-s", "--short"):
             repeat = 1
             position += 1
-        elif option == "-p" or option == "--path":
+        elif option in ("-p", "--path"):
             save_path = sys.argv[position+1]
             position += 2
-        elif option == "-k" or option == "--keep":
+        elif option in ("-k", "--keep"):
             keep = True
             position += 1
-        elif option == "-r" or option == "--repeat":
+        elif option in ("-r", "--repeat"):
             repeat = int(sys.argv[position+1])
             position += 2
-        elif option == "-d" or option == "--duration":
+        elif option in ("-d", "--duration"):
             global duration
             duration = sys.argv[position+1]
             position += 2
@@ -265,28 +272,30 @@ def parse_options():
             archive_file = os.path.abspath(sys.argv[position+1])
             position += 2
         # Output
-        elif option == "-o" or option == "--output":
+        elif option in ("-o", "--output"):
             global out_format
             out_format = sys.argv[position+1]
             position += 2
         elif fnmatch(option, "-*"):
-            msg("Unknown flag '", option, "'!", sep="")
-            usage()
-            exit(err_option)
+            err("Unknown flag '", option, "'!", sep="")
+            err("Try '", os.path.basename(sys.argv[0]), \
+                " --help' for more information.", sep="")
+            sys.exit(err_option)
         else:
-            msg("'", option, "' is not an option or a coub link!", sep="")
-            usage()
-            exit(err_option)
+            err("'", option, "' is neither an option nor a coub link!", sep="")
+            err("Try '", os.path.basename(sys.argv[0]), \
+                " --help' for more information.", sep="")
+            sys.exit(err_option)
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 def check_options():
     if repeat <= 0:
         err("-r/--repeat must be greater than 0!")
-        exit(err_option)
+        sys.exit(err_option)
     elif "max_coubs" in globals() and max_coubs <= 0:
         err("--limit-num must be greater than zero!")
-        exit(err_option)
+        sys.exit(err_option)
 
     if "duration" in globals():
         command = ["ffmpeg", "-v", "quiet",
@@ -295,26 +304,28 @@ def check_options():
                    "-f", "null", "-"]
         try:
             subprocess.check_call(command)
+        except KeyboardInterrupt:
+            raise
         except subprocess.CalledProcessError:
             err("Invalid duration! For the supported syntax see:")
             err("https://ffmpeg.org/ffmpeg-utils.html#time-duration-syntax")
-            exit(err_option)
+            sys.exit(err_option)
 
     if a_only and v_only:
         err("--audio-only and --video-only are mutually exclusive!")
-        exit(err_option)
+        sys.exit(err_option)
     elif not recoubs and only_recoubs:
         err("--no-recoubs and --only-recoubs are mutually exclusive!")
-        exit(err_option)
+        sys.exit(err_option)
 
     allowed_sort = ["newest",
                     "oldest",
                     "newest_popular",
                     "likes_count",
                     "views_count"]
-    if not sort_order in allowed_sort:
+    if sort_order not in allowed_sort:
         err("Invalid sort order ('", sort_order, "')!", sep="")
-        exit(err_option)
+        sys.exit(err_option)
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -324,9 +335,9 @@ def resolve_paths():
     os.chdir(save_path)
 
     if os.path.exists(concat_list):
-        err("Error: Reserved filename ('", concat_list, "') "
-              "exists in '", save_path, "'!", sep="")
-        exit(err_runtime)
+        err("Error: Reserved filename ('", concat_list, "') " \
+            "exists in '", save_path, "'!", sep="")
+        sys.exit(err_runtime)
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -336,14 +347,14 @@ def parse_input_links():
             break
         coub_list.append(link)
 
-    if len(input_links):
+    if input_links:
         msg("Reading command line:")
         msg("  ", len(input_links), " link(s) found", sep="")
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 def parse_input_list(in_list):
-    msg("Reading input list (", in_list,"):", sep="")
+    msg("Reading input list (", in_list, "):", sep="")
 
     with open(in_list, "r") as f:
         link_list = f.read()
@@ -359,7 +370,7 @@ def parse_input_list(in_list):
             break
         coub_list.append(link)
 
-    msg ("  ", len(link_list), " link(s) found", sep="")
+    msg("  ", len(link_list), " link(s) found", sep="")
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -373,7 +384,7 @@ def parse_input_timeline(url_type, url):
     else:
         err("Error: Unknown input type in parse_input_timeline!")
         clean()
-        exit(err_runtime)
+        sys.exit(err_runtime)
 
     api_call += "?per_page=" + str(entries_per_page)
 
@@ -408,13 +419,19 @@ def parse_input_timeline(url_type, url):
 
             try:
                 coub_id = page_json['coubs'][entry]['recoub_to']['permalink']
-                if not recoubs: continue
+                if not recoubs:
+                    continue
                 coub_list.append("https://coub.com/view/" + coub_id)
+            except KeyboardInterrupt:
+                raise
             except:
-                if only_recoubs: continue
+                if only_recoubs:
+                    continue
                 try:
                     coub_id = page_json['coubs'][entry]['permalink']
                     coub_list.append("https://coub.com/view/" + coub_id)
+                except KeyboardInterrupt:
+                    raise
                 except:
                     continue
 
@@ -430,21 +447,21 @@ def parse_input():
     for tag in input_tags:
         parse_input_timeline("tag", tag)
 
-    if len(coub_list) == 0:
-        err("No coub links specified!")
-        usage()
+    if not coub_list:
+        err("Error: No coub links specified!")
         clean()
-        exit(err_option)
+        sys.exit(err_option)
 
     if "max_coubs" in globals() and len(coub_list) >= max_coubs:
         msg("\nDownload limit (", max_coubs, ") reached!", sep="")
 
     if "out_file" in globals():
         with open(out_file, "w") as f:
-            for link in coub_list: print(link, file=f)
+            for link in coub_list:
+                print(link, file=f)
         msg("\nParsed coubs written to '", out_file, "'!", sep="")
         clean()
-        exit()
+        sys.exit(0)
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -472,6 +489,8 @@ def get_out_name(coub_json, coub_id):
         f = open(out_name, "w")
         f.close()
         os.remove(out_name)
+    except KeyboardInterrupt:
+        raise
     except:
         err("Error: Filename invalid or too long! ", end="")
         err("Falling back to '", coub_id, "'.", sep="")
@@ -482,9 +501,9 @@ def get_out_name(coub_json, coub_id):
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 def existence(name):
-    if ( os.path.exists(name + ".mkv") and not a_only and not v_only ) or \
-       ( os.path.exists(name + ".mp4") and v_only ) or \
-       ( os.path.exists(name + ".mp3") and a_only ):
+    if (os.path.exists(name + ".mkv") and not a_only and not v_only) or \
+       (os.path.exists(name + ".mp4") and v_only) or \
+       (os.path.exists(name + ".mp3") and a_only):
         return True
 
     return False
@@ -502,12 +521,14 @@ def overwrite():
         print("2) no")
         while True:
             answer = input("#? ")
-            if answer == "1": return True
-            if answer == "2": return False
+            if answer == "1":
+                return True
+            if answer == "2":
+                return False
     else:
         err("Unknown prompt_answer in overwrite!")
         clean()
-        exit(err_runtime)
+        sys.exit(err_runtime)
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -527,7 +548,7 @@ def use_archive(action, coub_id):
     else:
         err("Error: Unknown action in use_archive!")
         clean()
-        exit(err_runtime)
+        sys.exit(err_runtime)
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -537,13 +558,17 @@ def download(data, name):
     v_size = 0
     a_size = 0
 
-    for quality in ["high","med"]:
+    for quality in ["high", "med"]:
         try:
             v_size = data['file_versions']['html5']['video'][quality]['size']
+        except KeyboardInterrupt:
+            raise
         except:
             pass
         try:
             a_size = data['file_versions']['html5']['audio'][quality]['size']
+        except KeyboardInterrupt:
+            raise
         except:
             pass
         if not video and v_size > 0:
@@ -556,6 +581,8 @@ def download(data, name):
             urllib.request.urlretrieve(video, name + ".mp4")
             # Fix broken video stream
             # Done in downloads to avoid unncessary read() of whole file
+        except KeyboardInterrupt:
+            raise
         except:
             err("Error: Coub unavailable!")
             raise
@@ -563,6 +590,8 @@ def download(data, name):
     if not v_only:
         try:
             urllib.request.urlretrieve(audio, name + ".mp3")
+        except KeyboardInterrupt:
+            raise
         except:
             err("Error: Audio unavailable!")
             if a_only:
@@ -601,14 +630,18 @@ def show_preview(name):
         extension = ".mkv"
     else:
         extension = ".mp4"
-    if a_only: extension = ".mp3"
-    if v_only: extension = ".mp4"
+    if a_only:
+        extension = ".mp3"
+    if v_only:
+        extension = ".mp4"
 
     try:
         command = preview_command.split(" ")
         command.append(name + extension)
-        subprocess.run(command, stdout=subprocess.DEVNULL,
+        subprocess.run(command, stdout=subprocess.DEVNULL, \
                                 stderr=subprocess.DEVNULL)
+    except KeyboardInterrupt:
+        raise
     except:
         err("Error: Missing file in show_preview or invalid preview command!")
         raise
@@ -644,8 +677,8 @@ def main():
         # Pass existing files to avoid unnecessary downloads
         # This check handles archive file search and default output formatting
         # Avoids json request (slow!) just to skip files anyway
-        if ( "archive_file" in globals() and use_archive("read", coub_id) ) \
-           or ( existence(coub_id) and not overwrite() ):
+        if ("archive_file" in globals() and use_archive("read", coub_id)) \
+           or (existence(coub_id) and not overwrite()):
             msg("Already downloaded!")
             clean()
             continue
@@ -653,6 +686,8 @@ def main():
         api_call = "https://coub.com/api/v2/coubs/" + coub_id
         try:
             coub_json = urllib.request.urlopen(api_call).read()
+        except KeyboardInterrupt:
+            raise
         except:
             err("Error: Coub unavailable!")
             continue
@@ -674,6 +709,8 @@ def main():
         # Skip if the requested media couldn't be downloaded
         try:
             download(coub_json, out_name)
+        except KeyboardInterrupt:
+            raise
         except:
             continue
 
@@ -696,6 +733,8 @@ def main():
         if preview:
             try:
                 show_preview(out_name)
+            except KeyboardInterrupt:
+                raise
             except:
                 continue
 
@@ -708,9 +747,16 @@ def main():
     msg("\n### Finished ###\n")
 
     # Indicate failure, if not all input coubs exist after execution
-    if downloads < counter: exit(err_download)
+    if downloads < counter:
+        sys.exit(err_download)
 
 # Execute main function
-if len(sys.argv) == 1: usage(); exit()
-main()
-exit()
+if len(sys.argv) == 1:
+    usage()
+    sys.exit(0)
+try:
+    main()
+except KeyboardInterrupt:
+    err("User Interrupt!")
+    sys.exit(user_interrupt)
+sys.exit(0)
