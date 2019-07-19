@@ -73,6 +73,7 @@ input_links = []
 input_lists = []
 input_channels = []
 input_tags = []
+input_searches = []
 coub_list = []
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -99,6 +100,7 @@ Input:
   -l, --list LIST        read coub links from a text file
   -c, --channel CHANNEL  download all coubs from a channel
   -t, --tag TAG          download all coubs with the specified tag
+  -e, --search TERM      download all search results for the given term
 
 Common options:
   -h, --help             show this help
@@ -117,8 +119,8 @@ Download options:
   --sort ORDER           specify download order for channels/tags
                          Allowed values:
                            newest (default)      likes_count
-                           oldest (tags only)    views_count
-                           newest_popular
+                           newest_popular        views_count
+                           oldest (tags/search only)
 
 Channel options:
   --recoubs              include recoubs during channel downloads (default)
@@ -196,6 +198,9 @@ def parse_options():
             position += 2
         elif option in ("-t", "--tag"):
             input_tags.append(sys.argv[position+1].strip("/"))
+            position += 2
+        elif option in ("-e", "--search"):
+            input_searches.append(sys.argv[position+1].strip("/"))
             position += 2
         # Common options
         elif option in ("-h", "--help"):
@@ -378,17 +383,23 @@ def parse_input_timeline(url_type, url):
     if url_type == "channel":
         channel_id = url.split("/")[-1]
         api_call = "https://coub.com/api/v2/timeline/channel/" + channel_id
+        api_call += "?"
     elif url_type == "tag":
         tag_id = url.split("/")[-1]
         api_call = "https://coub.com/api/v2/timeline/tag/" + tag_id
+        api_call += "?"
+    elif url_type == "search":
+        search_term = url.split("=")[-1]
+        api_call = "https://coub.com/api/v2/search/coubs?q=" + search_term
+        api_call += "&"
     else:
         err("Error: Unknown input type in parse_input_timeline!")
         clean()
         sys.exit(err_runtime)
 
-    api_call += "?per_page=" + str(entries_per_page)
+    api_call += "per_page=" + str(entries_per_page)
 
-    if sort_order == "oldest" and url_type == "tag":
+    if sort_order == "oldest" and url_type in ("tag", "search"):
         api_call += "&order_by=oldest"
     # Don't do anything for newest (as it's the default)
     # check_options already got rid of invalid values
@@ -446,6 +457,8 @@ def parse_input():
         parse_input_timeline("channel", channel)
     for tag in input_tags:
         parse_input_timeline("tag", tag)
+    for search in input_searches:
+        parse_input_timeline("search", search)
 
     if not coub_list:
         err("Error: No coub links specified!")
@@ -475,11 +488,15 @@ def get_out_name(coub_json, coub_id):
     out_name = out_name.replace("%title%", coub_json['title'])
     out_name = out_name.replace("%creation%", coub_json['created_at'])
     out_name = out_name.replace("%channel%", coub_json['channel']['title'])
-    out_name = out_name.replace("%category%", coub_json['categories'][0]['permalink'])
+    # Coubs don't necessarily have a category
+    try:
+        out_name = out_name.replace("%category%", coub_json['categories'][0]['permalink'])
+    except:
+        out_name = out_name.replace("%category%", "")
 
     tags = ""
     for tag in coub_json['tags']:
-        tags += tag['title'].replace(" ", tag_separator) + tag_separator
+        tags += tag['title'] + tag_separator
     out_name = out_name.replace("%tags%", tags)
 
     # Necessary to avoid ffmpeg failure
@@ -593,8 +610,8 @@ def download(data, name):
         except KeyboardInterrupt:
             raise
         except:
-            err("Error: Audio unavailable!")
             if a_only:
+                err("Error: Audio or coub unavailable!")
                 raise
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~

@@ -62,7 +62,7 @@ declare -ri err_download=4
 declare -ri user_interrupt=5
 
 # Don't touch these
-declare -a input_links input_lists input_channels input_tags
+declare -a input_links input_lists input_channels input_tags input_searches
 declare -a coub_list
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -93,6 +93,7 @@ Input:
   -l, --list LIST        read coub links from a text file
   -c, --channel CHANNEL  download all coubs from a channel
   -t, --tag TAG          download all coubs with the specified tag
+  -e, --search TERM      download all search results for the given term
 
 Common options:
   -h, --help             show this help
@@ -112,8 +113,8 @@ Download options:
   --sort ORDER           specify download order for channels/tags
                          Allowed values:
                            newest (default)      likes_count
-                           oldest (tags only)    views_count
-                           newest_popular
+                           newest_popular        views_count
+                           oldest (tags/search only)
 
 Channel options:
   --recoubs              include recoubs during channel downloads (default)
@@ -150,19 +151,16 @@ EOF
 
 # check existence of required software
 function check_requirements() {
-    if ! jq --version &> /dev/null; then
-        err "Error: jq not found!"
-        exit $missing_dep
-    elif ! ffmpeg -version &> /dev/null; then
-        err "Error: FFmpeg not found!"
-        exit $missing_dep
-    elif ! curl --version &> /dev/null; then
-        err "Error: curl not found!"
-        exit $missing_dep
-    elif ! grep --version &> /dev/null; then
-        err "Error: grep not found!"
-        exit $missing_dep
-    fi
+    local -a dependencies=("jq" "ffmpeg" "curl" "grep")
+    local dep
+
+    for dep in "${dependencies[@]}"
+    do
+        if ! command -v "$dep" &> /dev/null; then
+            err "Error: $dep not found!"
+            exit $missing_dep
+        fi
+    done
 }
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -182,6 +180,7 @@ function parse_options() {
                           shift 2;;
         -c | --channel)   input_channels+=("${2%/}"); shift 2;;
         -t | --tag)       input_tags+=("${2%/}"); shift 2;;
+        -e | --search)    input_searches+=("${2%/}"); shift 2;;
         # Common options
         -h | --help)      usage; exit 0;;
         -q | --quiet)     verbosity=0; shift;;
@@ -377,21 +376,30 @@ function parse_input_timeline() {
     channel)
         local channel_id="${url##*/}"
         local api_call="https://coub.com/api/v2/timeline/channel/$channel_id"
+        api_call+="?"
         ;;
     tag)
         local tag_id="${url##*/}"
         local api_call="https://coub.com/api/v2/timeline/tag/$tag_id"
+        api_call+="?"
+        ;;
+    search)
+        local search_term="${url##*=}"
+        local api_call="https://coub.com/api/v2/search/coubs?q=$search_term"
+        api_call+="&"
         ;;
     *)
         err "Error: Unknown input type in parse_input_timeline!"
         clean; exit $err_runtime
         ;;
     esac
-    api_call+="?per_page=$entries_per_page"
+    api_call+="per_page=$entries_per_page"
 
     case "$sort_order" in
     newest);;
-    oldest) [[ $url_type == "tag" ]] && api_call+="&order_by=oldest";;
+    oldest) if [[ $url_type == "tag" || $url_type == "search" ]]; then
+                api_call+="&order_by=oldest"
+            fi;;
     newest_popular | \
     likes_count | \
     views_count) api_call+="&order_by=$sort_order";;
@@ -422,9 +430,9 @@ function parse_input_timeline() {
                 return
             fi
 
-            # Tag timelines should only list simple coubs
+            # Tag timelines / search queries should only list simple coubs
             # Only one jq call per page necessary
-            if [[ $url_type == "tag" ]]; then
+            if [[ $url_type == "tag" || $url_type == "search" ]]; then
                 if [[ -z $max_coubs ]] || \
                    (( max_coubs >= ${#coub_list[@]}+entries_per_page )); then
                     coub_list+=($(jq -r '.coubs[] | "https://coub.com/view/" + .permalink' "$json"))
@@ -460,6 +468,8 @@ function parse_input() {
         parse_input_timeline "channel" "$channel"; done
     for tag in "${input_tags[@]}"; do \
         parse_input_timeline "tag" "$tag"; done
+    for search in "${input_searches[@]}"; do \
+        parse_input_timeline "search" "$search"; done
 
     (( ${#coub_list[@]} == 0 )) && \
         { err "Error: No coub links specified!"; clean; exit $err_option; }
@@ -489,27 +499,41 @@ function get_out_name() {
 
     local out_name="$out_format"
     local substitution
-    # Not strictly necessary, as you could assign substitution(array)
-    # to substitution(string), but I want to avoid type mixing
+    local tag
     local -a tags=()
     while true
     do
         case "$out_name" in
-        *%id%*)       out_name="${out_name//%id%/$id}";;
+        *%id%*)       out_name="${out_name//%id%/$id}"
+                      ;;
         *%title%*)    substitution="$(jq -r .title "$json")"
-                      out_name="${out_name//%title%/$substitution}";;
+                      out_name="${out_name//%title%/$substitution}"
+                      ;;
         *%creation%*) substitution="$(jq -r .created_at "$json")"
-                      out_name="${out_name//%creation%/$substitution}";;
+                      out_name="${out_name//%creation%/$substitution}"
+                      ;;
         *%channel%*)  substitution="$(jq -r .channel.title "$json")"
-                      out_name="${out_name//%channel%/$substitution}";;
-        *%tags%*)     tags=($(jq -r .tags[].title "$json"))
-                      (( ${#tags[@]} == 0 )) && \
-                        { out_name="${out_name//%tags%/}"; continue; }
-                      substitution="${tags[*]}"
-                      substitution="${substitution// /$tag_separator}"
-                      out_name="${out_name//%tags%/$substitution}";;
+                      out_name="${out_name//%channel%/$substitution}"
+                      ;;
         *%category%*) substitution="$(jq -r .categories[0].permalink "$json")"
-                      out_name="${out_name//%category%/$substitution}";;
+                      # Coubs don't necessarily have a category
+                      [[ $substitution == "null" ]] && \
+                        { out_name="${out_name//%category%/}"; continue; }
+                      out_name="${out_name//%category%/$substitution}"
+                      ;;
+        *%tags%*)     # Necessary to only split at newlines
+                      IFS_BACKUP=$IFS
+                      IFS=$'\n'
+                      tags=($(jq -r .tags[].title "$json"))
+                      IFS=$IFS_BACKUP
+
+                      substitution=""
+                      for tag in "${tags[@]}"
+                      do
+                          substitution+="$tag$tag_separator"
+                      done
+                      out_name="${out_name//%tags%/$substitution}"
+                      ;;
         *) break;;
         esac
     done

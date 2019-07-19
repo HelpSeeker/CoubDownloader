@@ -26,6 +26,7 @@ Input:
   -l, --list LIST        read coub links from a text file
   -c, --channel CHANNEL  download all coubs from a channel
   -t, --tag TAG          download all coubs with the specified tag
+  -e, --search TERM      download all search results for the given term
 
 Common options:
   -h, --help             show this help
@@ -45,8 +46,8 @@ Download options:
   --sort ORDER           specify download order for channels/tags
                          Allowed values:
                            newest (default)      likes_count
-                           oldest (tags only)    views_count
-                           newest_popular
+                           newest_popular        views_count
+                           oldest (tags/search only)
 
 Channel options:
   --recoubs              include recoubs during channel downloads (default)
@@ -125,9 +126,13 @@ Whole channels can be downloaded by providing a full URL or the name of the chan
 
 Tags can be scraped by providing the term or a full URL. Due to a bug (?) in the Coub API you can only download the first 99 pages (i.e. 2475 coubs) listed. All pages afterwards will redirect to page 1.
 
+#### Searches
+
+Coubs from search queries can be downloaded by providing the search term or the corresponding search URL. Please note that searches can (in extreme cases) provide tens of thousands of coub links. The usage of `--limit-num` is advised. 
+
 ***
 
-Please note for **channels** and **tags** that the URL mustn't include a special sort order (e.g. https://coub.com/tags/tag/likes) or other filters (e.g. https://coub.com/user/reposts). The last word in the URL needs to be the channel name or tag.
+Please note for **channels**, **tags** and **searches** that the URL mustn't include a special sort order (e.g. https://coub.com/tags/tag/likes) or other filters (e.g. https://coub.com/user/reposts). The last word in the URL needs to be the channel name, tag or search term.
 
 ***
 
@@ -136,7 +141,8 @@ Input gets parsed in the following order:
 * Links  
 * Lists  
 * Channels  
-* Tags  
+* Tags
+* Searches  
 
 ## Changes to the new version
 
@@ -155,6 +161,7 @@ This list documents the (planned) changes since switching from youtube-dl to Cou
 - [x] Different verbosity levels   
 - [x] Choose download order for channels and tags
 - [x] Custom output formatting
+- [x] Download all coubs from a search query
 - [ ] Download stories*  
 
 *Story support will be more difficult to implement, as Coub's API doesn't provide any related endpoint. It will require conventional scraping, after JS execution with a headless browser.
