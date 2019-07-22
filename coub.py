@@ -726,7 +726,7 @@ def main():
         # This check handles archive file search and default output formatting
         # Avoids json request (slow!) just to skip files anyway
         if ("archive_file" in globals() and use_archive("read", coub_id)) or \
-           (out_format not in globals() and existence(coub_id) and not overwrite()):
+           ("out_format" not in globals() and existence(coub_id) and not overwrite()):
             msg("Already downloaded!")
             clean()
             continue
