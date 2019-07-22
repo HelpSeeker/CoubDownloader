@@ -32,6 +32,13 @@ keep = False
 # If longer than audio duration -> audio decides length
 repeat = 1000
 
+# What video/audio quality to download
+#  0 -> worst quality
+# -1 -> best quality
+# Everything else can lead to undefined behavior
+v_quality = -1
+a_quality = -1
+
 # Download reposts during channel downloads
 recoubs = True
 
@@ -122,6 +129,12 @@ Download options:
                            newest_popular        views_count
                            oldest (tags/search only)
 
+Format selection:
+  --bestvideo            Download best available video quality (default)
+  --worstvideo           Download worst available video quality
+  --bestaudio            Download best available audio quality (default)
+  --worstaudio           Download worst available audio quality
+
 Channel options:
   --recoubs              include recoubs during channel downloads (default)
   --no-recoubs           exclude recoubs during channel downloads
@@ -175,6 +188,7 @@ def parse_options():
     global keep
     global repeat
     global sort_order
+    global v_quality, a_quality
     global recoubs, only_recoubs
     global preview, preview_command
     global a_only, v_only
@@ -243,6 +257,19 @@ def parse_options():
         elif option == "--sort":
             sort_order = sys.argv[position+1]
             position += 2
+        # Format selection
+        elif option == "--bestvideo":
+            v_quality = -1
+            position += 1
+        elif option == "--worstvideo":
+            v_quality = 0
+            position += 1
+        elif option == "--bestaudio":
+            a_quality = -1
+            position += 1
+        elif option == "--worstaudio":
+            a_quality = 0
+            position += 1
         # Channel options
         elif option == "--recoubs":
             recoubs = True
@@ -499,8 +526,11 @@ def get_out_name(coub_json, coub_id):
         tags += tag['title'] + tag_separator
     out_name = out_name.replace("%tags%", tags)
 
-    # Necessary to avoid ffmpeg failure
+    # Strip/replace special characters that can lead to script failure (ffmpeg concat)
+    # ' common among coub titles
+    # Newlines can be occasionally found as well
     out_name = out_name.replace("'", "")
+    out_name = out_name.replace("\n", " ")
 
     try:
         f = open(out_name, "w")
@@ -570,12 +600,12 @@ def use_archive(action, coub_id):
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 def download(data, name):
-    video = ""
-    audio = ""
+    video = []
+    audio = []
     v_size = 0
     a_size = 0
 
-    for quality in ["high", "med"]:
+    for quality in ["low", "med", "high"]:
         try:
             v_size = data['file_versions']['html5']['video'][quality]['size']
         except KeyboardInterrupt:
@@ -588,14 +618,15 @@ def download(data, name):
             raise
         except:
             pass
-        if not video and v_size > 0:
-            video = data['file_versions']['html5']['video'][quality]['url']
-        if not audio and a_size > 0:
-            audio = data['file_versions']['html5']['audio'][quality]['url']
+
+        if v_size > 0:
+            video.append(data['file_versions']['html5']['video'][quality]['url'])
+        if a_size > 0:
+            audio.append(data['file_versions']['html5']['audio'][quality]['url'])
 
     if not a_only:
         try:
-            urllib.request.urlretrieve(video, name + ".mp4")
+            urllib.request.urlretrieve(video[v_quality], name + ".mp4")
             # Fix broken video stream
             # Done in downloads to avoid unncessary read() of whole file
         except KeyboardInterrupt:
@@ -606,7 +637,7 @@ def download(data, name):
 
     if not v_only:
         try:
-            urllib.request.urlretrieve(audio, name + ".mp3")
+            urllib.request.urlretrieve(audio[a_quality], name + ".mp3")
         except KeyboardInterrupt:
             raise
         except:
@@ -694,8 +725,8 @@ def main():
         # Pass existing files to avoid unnecessary downloads
         # This check handles archive file search and default output formatting
         # Avoids json request (slow!) just to skip files anyway
-        if ("archive_file" in globals() and use_archive("read", coub_id)) \
-           or (existence(coub_id) and not overwrite()):
+        if ("archive_file" in globals() and use_archive("read", coub_id)) or \
+           (out_format not in globals() and existence(coub_id) and not overwrite()):
             msg("Already downloaded!")
             clean()
             continue
@@ -775,5 +806,6 @@ try:
     main()
 except KeyboardInterrupt:
     err("User Interrupt!")
+    clean()
     sys.exit(user_interrupt)
 sys.exit(0)

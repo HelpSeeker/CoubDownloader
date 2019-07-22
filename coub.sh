@@ -24,6 +24,13 @@ declare keep=false
 # If longer than audio duration -> audio decides length
 declare -i repeat=1000
 
+# What video/audio quality to download
+#  0 -> worst quality
+# -1 -> best quality
+# Everything else can lead to undefined behavior
+declare -i v_quality=-1
+declare -i a_quality=-1
+
 # Download reposts during channel downloads
 declare recoubs=true
 
@@ -116,6 +123,12 @@ Download options:
                            newest_popular        views_count
                            oldest (tags/search only)
 
+Format selection:
+  --bestvideo            Download best available video quality (default)
+  --worstvideo           Download worst available video quality
+  --bestaudio            Download best available audio quality (default)
+  --worstaudio           Download worst available audio quality
+
 Channel options:
   --recoubs              include recoubs during channel downloads (default)
   --no-recoubs           exclude recoubs during channel downloads
@@ -198,6 +211,11 @@ function parse_options() {
                           shift 2;;
         --limit-num)      declare -gri max_coubs="$2"; shift 2;;
         --sort)           sort_order="$2"; shift 2;;
+        # Format selection
+        --bestvideo)      v_quality=-1; shift;;
+        --worstvideo)     v_quality=0;  shift;;
+        --bestaudio)      a_quality=-1; shift;;
+        --worstaudio)     a_quality=0;  shift;;
         # Channel options
         --recoubs)        recoubs=true; shift;;
         --no-recoubs)     recoubs=false; shift;;
@@ -538,8 +556,11 @@ function get_out_name() {
         esac
     done
 
-    # Necessary to avoid ffmpeg failure
-    out_name="${out_name//\'/}"
+    # Strip/replace special characters that can lead to script failure (ffmpeg concat)
+    # ' common among coub titles
+    # Newlines can be occasionally found as well
+    out_name="${out_name//[$'\'']}"
+    out_name="${out_name//[$'\n']/ }"
 
     # Using all tags as filename can quickly explode its size
     # If it's too long, use the default name (id) instead
@@ -630,33 +651,29 @@ function download() {
     local name="$1"
 
     # jq's default output for non-existent entries is null
-    local video="null" audio="null"
+    local -a video=() audio=()
     local -i v_size a_size
     local quality
     # Loop through default qualities; use highest available
-    for quality in {high,med}
+    for quality in {low,med,high}
     do
         v_size=$(jq -r .file_versions.html5.video.$quality.size "$json")
         a_size=$(jq -r .file_versions.html5.audio.$quality.size "$json")
-        if [[ $video == "null" ]] && (( v_size > 0 )); then
-            video="$(jq -r .file_versions.html5.video.$quality.url "$json")"
-        fi
-        if [[ $audio == "null" ]] && (( a_size > 0 )); then
-            audio="$(jq -r .file_versions.html5.audio.$quality.url "$json")"
-        fi
+        (( v_size > 0 )) && \
+            video+=("$(jq -r .file_versions.html5.video.$quality.url "$json")")
+        (( a_size > 0 )) && \
+            audio+=("$(jq -r .file_versions.html5.audio.$quality.url "$json")")
     done
 
     # Video download
     if [[ $a_only == false ]] && \
-       ( [[ $video == "null" ]] || \
-         ! curl -s "${limit_rate[@]}" "$video" -o "$name.mp4" ); then
+       ! curl -s "${limit_rate[@]}" "${video[$v_quality]}" -o "$name.mp4"; then
         v_error=true
     fi
 
     # Audio download
     if [[ $v_only == false ]] && \
-       ( [[ $audio == "null" ]] || \
-         ! curl -s "${limit_rate[@]}" "$audio" -o "$name.mp3" ); then
+       ! curl -s "${limit_rate[@]}" "${audio[$a_quality]}" -o "$name.mp3"; then
         a_error=true
     fi
 }

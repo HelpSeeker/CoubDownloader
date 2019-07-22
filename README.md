@@ -49,6 +49,12 @@ Download options:
                            newest_popular        views_count
                            oldest (tags/search only)
 
+Format selection:
+  --bestvideo            Download best available video quality (default)
+  --worstvideo           Download worst available video quality
+  --bestaudio            Download best available audio quality (default)
+  --worstaudio           Download worst available audio quality
+
 Channel options:
   --recoubs              include recoubs during channel downloads (default)
   --no-recoubs           exclude recoubs during channel downloads
@@ -85,7 +91,7 @@ Please note that `coub.py` doesn't support `--limit-rate` for now.
 
 #### coub.sh
 
-* Bash >= 4.0
+* Bash >= 4.3
 * [jq](https://stedolan.github.io/jq/)
 * [FFmpeg](https://www.ffmpeg.org/)
 * [curl](https://curl.haxx.se/)
@@ -162,6 +168,7 @@ This list documents the (planned) changes since switching from youtube-dl to Cou
 - [x] Choose download order for channels and tags
 - [x] Custom output formatting
 - [x] Download all coubs from a search query
+- [x] Choose what video/audio quality to download
 - [ ] Download stories*  
 
 *Story support will be more difficult to implement, as Coub's API doesn't provide any related endpoint. It will require conventional scraping, after JS execution with a headless browser.
