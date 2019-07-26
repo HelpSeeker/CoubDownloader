@@ -171,9 +171,7 @@ def check_requirements():
     try:
         subprocess.run(["ffmpeg"], stdout=subprocess.DEVNULL, \
                                    stderr=subprocess.DEVNULL)
-    except KeyboardInterrupt:
-        raise
-    except:
+    except FileNotFoundError:
         err("Error: FFmpeg not found!")
         sys.exit(missing_dep)
 
@@ -336,8 +334,6 @@ def check_options():
                    "-f", "null", "-"]
         try:
             subprocess.check_call(command)
-        except KeyboardInterrupt:
-            raise
         except subprocess.CalledProcessError:
             err("Invalid duration! For the supported syntax see:")
             err("https://ffmpeg.org/ffmpeg-utils.html#time-duration-syntax")
@@ -460,17 +456,13 @@ def parse_input_timeline(url_type, url):
                 if not recoubs:
                     continue
                 coub_list.append("https://coub.com/view/" + coub_id)
-            except KeyboardInterrupt:
-                raise
-            except:
+            except TypeError:
                 if only_recoubs:
                     continue
                 try:
                     coub_id = page_json['coubs'][entry]['permalink']
                     coub_list.append("https://coub.com/view/" + coub_id)
-                except KeyboardInterrupt:
-                    raise
-                except:
+                except TypeError:
                     continue
 
 
@@ -536,9 +528,7 @@ def get_out_name(coub_json, coub_id):
         f = open(out_name, "w")
         f.close()
         os.remove(out_name)
-    except KeyboardInterrupt:
-        raise
-    except:
+    except OSError:
         err("Error: Filename invalid or too long! ", end="")
         err("Falling back to '", coub_id, "'.", sep="")
         out_name = coub_id
@@ -608,16 +598,12 @@ def download(data, name):
     for quality in ["low", "med", "high"]:
         try:
             v_size = data['file_versions']['html5']['video'][quality]['size']
-        except KeyboardInterrupt:
-            raise
-        except:
-            pass
+        except KeyError:
+            v_size = 0
         try:
             a_size = data['file_versions']['html5']['audio'][quality]['size']
-        except KeyboardInterrupt:
-            raise
-        except:
-            pass
+        except KeyError:
+            a_size = 0
 
         if v_size > 0:
             video.append(data['file_versions']['html5']['video'][quality]['url'])
@@ -627,20 +613,14 @@ def download(data, name):
     if not a_only:
         try:
             urllib.request.urlretrieve(video[v_quality], name + ".mp4")
-            # Fix broken video stream
-            # Done in downloads to avoid unncessary read() of whole file
-        except KeyboardInterrupt:
-            raise
-        except:
+        except urllib.error.HTTPError:
             err("Error: Coub unavailable!")
             raise
 
     if not v_only:
         try:
             urllib.request.urlretrieve(audio[a_quality], name + ".mp3")
-        except KeyboardInterrupt:
-            raise
-        except:
+        except urllib.error.HTTPError:
             if a_only:
                 err("Error: Audio or coub unavailable!")
                 raise
@@ -686,12 +666,10 @@ def show_preview(name):
     try:
         command = preview_command.split(" ")
         command.append(name + extension)
-        subprocess.run(command, stdout=subprocess.DEVNULL, \
-                                stderr=subprocess.DEVNULL)
-    except KeyboardInterrupt:
-        raise
-    except:
-        err("Error: Missing file in show_preview or invalid preview command!")
+        subprocess.check_call(command, stdout=subprocess.DEVNULL, \
+                                       stderr=subprocess.DEVNULL)
+    except subprocess.CalledProcessError:
+        err("Error: Missing file, invalid command or user interrupt in show_preview!")
         raise
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -734,9 +712,7 @@ def main():
         api_call = "https://coub.com/api/v2/coubs/" + coub_id
         try:
             coub_json = urllib.request.urlopen(api_call).read()
-        except KeyboardInterrupt:
-            raise
-        except:
+        except urllib.error.HTTPError:
             err("Error: Coub unavailable!")
             continue
         coub_json = json.loads(coub_json)
@@ -757,9 +733,7 @@ def main():
         # Skip if the requested media couldn't be downloaded
         try:
             download(coub_json, out_name)
-        except KeyboardInterrupt:
-            raise
-        except:
+        except urllib.error.HTTPError:
             continue
 
         # Fix broken video stream
@@ -781,10 +755,8 @@ def main():
         if preview:
             try:
                 show_preview(out_name)
-            except KeyboardInterrupt:
-                raise
-            except:
-                continue
+            except subprocess.CalledProcessError:
+                pass
 
         # Clean workspace
         clean()
