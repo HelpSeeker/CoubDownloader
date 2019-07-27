@@ -191,131 +191,131 @@ def parse_options():
     global preview, preview_command
     global a_only, v_only
 
+    with_argument = ["-l", "--list",
+                     "-c", "--channel",
+                     "-t", "--tag",
+                     "-e", "--search",
+                     "-p", "--path",
+                     "-r", "--repeat",
+                     "-d", "--duration",
+                     "--sleep",
+                     "--limit-num",
+                     "--sort",
+                     "--preview",
+                     "--write-list",
+                     "--use-archive",
+                     "-o", "--output"]
+
     position = 1
     while position < len(sys.argv):
         option = sys.argv[position]
-        # Input
-        if fnmatch(option, "*coub.com/view/*"):
-            input_links.append(option.strip("/"))
-            position += 1
-        elif option in ("-l", "--list"):
-            l = sys.argv[position+1]
-            if os.path.exists(l):
-                input_lists.append(os.path.abspath(l))
+        if option in with_argument:
+            try:
+                argument = sys.argv[position+1]
+            except IndexError:
+                err("Missing value for ", option, "!", sep="")
+                sys.exit(err_option)
+
+        try:
+            # Input
+            if fnmatch(option, "*coub.com/view/*"):
+                input_links.append(option.strip("/"))
+            elif option in ("-l", "--list"):
+                if os.path.exists(argument):
+                    input_lists.append(os.path.abspath(argument))
+                else:
+                    err("'", argument, "' is no valid list.", sep="")
+            elif option in ("-c", "--channel"):
+                input_channels.append(argument.strip("/"))
+            elif option in ("-t", "--tag"):
+                input_tags.append(argument.strip("/"))
+            elif option in ("-e", "--search"):
+                input_searches.append(argument.strip("/"))
+            # Common options
+            elif option in ("-h", "--help"):
+                usage()
+                sys.exit(0)
+            elif option in ("-q", "--quiet"):
+                verbosity = 0
+            elif option in ("-y", "--yes"):
+                prompt_answer = "yes"
+            elif option in ("-n", "--no"):
+                prompt_answer = "no"
+            elif option in ("-s", "--short"):
+                repeat = 1
+            elif option in ("-p", "--path"):
+                save_path = argument
+            elif option in ("-k", "--keep"):
+                keep = True
+            elif option in ("-r", "--repeat"):
+                repeat = int(argument)
+            elif option in ("-d", "--duration"):
+                global duration
+                duration = argument
+            # Download options
+            elif option == "--sleep":
+                global sleep_dur
+                sleep_dur = float(argument)
+            elif option == "--limit-num":
+                global max_coubs
+                max_coubs = int(argument)
+            elif option == "--sort":
+                sort_order = argument
+            # Format selection
+            elif option == "--bestvideo":
+                v_quality = -1
+            elif option == "--worstvideo":
+                v_quality = 0
+            elif option == "--bestaudio":
+                a_quality = -1
+            elif option == "--worstaudio":
+                a_quality = 0
+            # Channel options
+            elif option == "--recoubs":
+                recoubs = True
+            elif option == "--no-recoubs":
+                recoubs = False
+            elif option == "--only-recoubs":
+                only_recoubs = True
+            # Preview options
+            elif option == "--preview":
+                preview = True
+                preview_command = argument
+            elif option == "--no-preview":
+                preview = False
+            # Misc options
+            elif option == "--audio-only":
+                a_only = True
+            elif option == "--video-only":
+                v_only = True
+            elif option == "--write-list":
+                global out_file
+                out_file = os.path.abspath(argument)
+            elif option == "--use-archive":
+                global archive_file
+                archive_file = os.path.abspath(argument)
+            # Output
+            elif option in ("-o", "--output"):
+                global out_format
+                out_format = argument
+            elif fnmatch(option, "-*"):
+                err("Unknown flag '", option, "'!", sep="")
+                err("Try '", os.path.basename(sys.argv[0]), \
+                    " --help' for more information.", sep="")
+                sys.exit(err_option)
             else:
-                err("'", l, "' is no valid list.", sep="")
-            position += 2
-        elif option in ("-c", "--channel"):
-            input_channels.append(sys.argv[position+1].strip("/"))
-            position += 2
-        elif option in ("-t", "--tag"):
-            input_tags.append(sys.argv[position+1].strip("/"))
-            position += 2
-        elif option in ("-e", "--search"):
-            input_searches.append(sys.argv[position+1].strip("/"))
-            position += 2
-        # Common options
-        elif option in ("-h", "--help"):
-            usage()
-            sys.exit(0)
-        elif option in ("-q", "--quiet"):
-            verbosity = 0
-            position += 1
-        elif option in ("-y", "--yes"):
-            prompt_answer = "yes"
-            position += 1
-        elif option in ("-n", "--no"):
-            prompt_answer = "no"
-            position += 1
-        elif option in ("-s", "--short"):
-            repeat = 1
-            position += 1
-        elif option in ("-p", "--path"):
-            save_path = sys.argv[position+1]
-            position += 2
-        elif option in ("-k", "--keep"):
-            keep = True
-            position += 1
-        elif option in ("-r", "--repeat"):
-            repeat = int(sys.argv[position+1])
-            position += 2
-        elif option in ("-d", "--duration"):
-            global duration
-            duration = sys.argv[position+1]
-            position += 2
-        # Download options
-        elif option == "--sleep":
-            global sleep_dur
-            sleep_dur = float(sys.argv[position+1])
-            position += 2
-        elif option == "--limit-num":
-            global max_coubs
-            max_coubs = int(sys.argv[position+1])
-            position += 2
-        elif option == "--sort":
-            sort_order = sys.argv[position+1]
-            position += 2
-        # Format selection
-        elif option == "--bestvideo":
-            v_quality = -1
-            position += 1
-        elif option == "--worstvideo":
-            v_quality = 0
-            position += 1
-        elif option == "--bestaudio":
-            a_quality = -1
-            position += 1
-        elif option == "--worstaudio":
-            a_quality = 0
-            position += 1
-        # Channel options
-        elif option == "--recoubs":
-            recoubs = True
-            position += 1
-        elif option == "--no-recoubs":
-            recoubs = False
-            position += 1
-        elif option == "--only-recoubs":
-            only_recoubs = True
-            position += 1
-        # Preview options
-        elif option == "--preview":
-            preview = True
-            preview_command = sys.argv[position+1]
-            position += 2
-        elif option == "--no-preview":
-            preview = False
-            position += 1
-        # Misc options
-        elif option == "--audio-only":
-            a_only = True
-            position += 1
-        elif option == "--video-only":
-            v_only = True
-            position += 1
-        elif option == "--write-list":
-            global out_file
-            out_file = os.path.abspath(sys.argv[position+1])
-            position += 2
-        elif option == "--use-archive":
-            global archive_file
-            archive_file = os.path.abspath(sys.argv[position+1])
-            position += 2
-        # Output
-        elif option in ("-o", "--output"):
-            global out_format
-            out_format = sys.argv[position+1]
-            position += 2
-        elif fnmatch(option, "-*"):
-            err("Unknown flag '", option, "'!", sep="")
-            err("Try '", os.path.basename(sys.argv[0]), \
-                " --help' for more information.", sep="")
+                err("'", option, "' is neither an option nor a coub link!", sep="")
+                err("Try '", os.path.basename(sys.argv[0]), \
+                    " --help' for more information.", sep="")
+                sys.exit(err_option)
+        except ValueError:
+            err("Invalid ", option, " ('", argument, "')!", sep="")
             sys.exit(err_option)
+
+        if option in with_argument:
+            position += 2
         else:
-            err("'", option, "' is neither an option nor a coub link!", sep="")
-            err("Try '", os.path.basename(sys.argv[0]), \
-                " --help' for more information.", sep="")
-            sys.exit(err_option)
+            position += 1
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
