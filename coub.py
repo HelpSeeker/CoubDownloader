@@ -435,10 +435,12 @@ def parse_input_timeline(url_type, url):
         api_call += "?"
     elif url_type == "tag":
         tag_id = url.split("/")[-1]
+        tag_id = urllib.parse.quote(tag_id)
         api_call = "https://coub.com/api/v2/timeline/tag/" + tag_id
         api_call += "?"
     elif url_type == "search":
         search_term = url.split("=")[-1]
+        search_term = urllib.parse.quote(tag_id)
         api_call = "https://coub.com/api/v2/search/coubs?q=" + search_term
         api_call += "&"
     else:
@@ -483,13 +485,13 @@ def parse_input_timeline(url_type, url):
                 if not options.recoubs:
                     continue
                 coub_list.append("https://coub.com/view/" + coub_id)
-            except TypeError:
+            except (TypeError, KeyError, IndexError):
                 if options.only_recoubs:
                     continue
                 try:
                     coub_id = page_json['coubs'][entry]['permalink']
                     coub_list.append("https://coub.com/view/" + coub_id)
-                except TypeError:
+                except (TypeError, KeyError, IndexError):
                     continue
 
 
