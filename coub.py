@@ -662,14 +662,14 @@ def download(data, name):
     if not options.a_only:
         try:
             urllib.request.urlretrieve(video[options.v_quality], name + ".mp4")
-        except urllib.error.HTTPError:
+        except (IndexError, urllib.error.HTTPError):
             err("Error: Coub unavailable!")
             raise
 
     if not options.v_only:
         try:
             urllib.request.urlretrieve(audio[options.a_quality], name + ".mp3")
-        except urllib.error.HTTPError:
+        except (IndexError, urllib.error.HTTPError):
             if options.a_only:
                 err("Error: Audio or coub unavailable!")
                 raise
