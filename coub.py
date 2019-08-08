@@ -654,9 +654,11 @@ def download(data, name):
         except KeyError:
             a_size = 0
 
-        if v_size > 0:
+        # v_size/a_size can be 0 OR None in case of a missing stream
+        # None is the exception and an irregularity in the Coub API
+        if v_size:
             video.append(data['file_versions']['html5']['video'][quality]['url'])
-        if a_size > 0:
+        if a_size:
             audio.append(data['file_versions']['html5']['audio'][quality]['url'])
 
     if not options.a_only:
