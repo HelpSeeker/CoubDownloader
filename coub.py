@@ -797,7 +797,7 @@ def main():
         # Skip if the requested media couldn't be downloaded
         try:
             download(coub_json, out_name)
-        except urllib.error.HTTPError:
+        except (IndexError, urllib.error.HTTPError):
             continue
 
         # Fix broken video stream
