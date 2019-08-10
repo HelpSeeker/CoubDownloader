@@ -440,7 +440,7 @@ def parse_input_timeline(url_type, url):
         api_call += "?"
     elif url_type == "search":
         search_term = url.split("=")[-1]
-        search_term = urllib.parse.quote(tag_id)
+        search_term = urllib.parse.quote(search_term)
         api_call = "https://coub.com/api/v2/search/coubs?q=" + search_term
         api_call += "&"
     else:
