@@ -655,7 +655,7 @@ function download() {
     local -i v_size a_size
     local quality
     # Loop through default qualities; use highest available
-    for quality in {low,med,high}
+    for quality in {low,med,high,higher}
     do
         v_size=$(jq -r .file_versions.html5.video.$quality.size "$json")
         a_size=$(jq -r .file_versions.html5.audio.$quality.size "$json")

@@ -644,7 +644,7 @@ def download(data, name):
     v_size = 0
     a_size = 0
 
-    for quality in ["low", "med", "high"]:
+    for quality in ["low", "med", "high", "higher"]:
         try:
             v_size = data['file_versions']['html5']['video'][quality]['size']
         except KeyError:
