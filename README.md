@@ -4,7 +4,7 @@ CoubDownloader is a simple script to download videos (called coubs) from [Coub](
 
 ## coub.sh vs. coub.py
 
-Both versions are standalone scripts. You can use either and get the same functionality (with the exception of `--limit-rate` only being available with coub.sh).
+Both versions are standalone scripts. You can use either and get the same functionality (with the exception of `--limit-rate` being exclusive to coub.sh and `--mobile` being exclusive to coub.py).
 
 So what version to use?
 
@@ -54,6 +54,7 @@ Format selection:
   --worstvideo           Download worst available video quality
   --bestaudio            Download best available audio quality (default)
   --worstaudio           Download worst available audio quality
+  --mobile               Download mobile video quality (no watermark, 360p)
 
 Channel options:
   --recoubs              include recoubs during channel downloads (default)
@@ -85,7 +86,10 @@ Output:
     This option has no influence on the file extension.
 ```
 
-Please note that `coub.py` doesn't support `--limit-rate` for now.
+Please note that
+
+* `coub.py` doesn't support `--limit-rate`
+* `coub.sh` doesn't support `--mobile`
 
 ## Requirements
 
@@ -169,6 +173,7 @@ This list documents the (planned) changes since switching from youtube-dl to Cou
 - [x] Custom output formatting
 - [x] Download all coubs from a search query
 - [x] Choose what video/audio quality to download
+- [x] Download videos for mobile devices to avoid watermarks
 - [ ] Download stories*  
 
 *Story support will be more difficult to implement, as Coub's API doesn't provide any related endpoint. It will require conventional scraping, after JS execution with a headless browser.

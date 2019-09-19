@@ -6,6 +6,7 @@ import time
 import json
 import urllib.request
 import subprocess
+import base64
 from fnmatch import fnmatch
 
 # TODO
@@ -69,6 +70,10 @@ class Options_Assembler:
         # Everything else can lead to undefined behavior
         self.v_quality = -1
         self.a_quality = -1
+
+        # Download video streams for mobile devices
+        # No watermark, but exclusively 360p
+        self.mobile = False
 
         # Download reposts during channel downloads
         self.recoubs = True
@@ -182,6 +187,8 @@ class Options_Assembler:
                     self.a_quality = -1
                 elif option == "--worstaudio":
                     self.a_quality = 0
+                elif option == "--mobile":
+                    self.mobile = True
                 # Channel options
                 elif option == "--recoubs":
                     self.recoubs = True
@@ -321,6 +328,7 @@ Format selection:
   --worstvideo           Download worst available video quality
   --bestaudio            Download best available audio quality (default)
   --worstaudio           Download worst available audio quality
+  --mobile               Download mobile video quality (no watermark, 360p)
 
 Channel options:
   --recoubs              include recoubs during channel downloads (default)
@@ -636,6 +644,21 @@ def use_archive(action, coub_id):
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
+def parse_mobile_url(base64_url):
+    enc_list = list(base64_url)
+    dec_list = []
+
+    for c in enc_list:
+        if c == c.lower():
+            dec_list.append(c.upper())
+        else:
+            dec_list.append(c.lower())
+
+    mobile_url = base64.b64decode(''.join(dec_list)).decode()
+    return mobile_url
+
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
 def download(data, name):
     """Download individual video/audio streams of a coub"""
 
@@ -660,6 +683,11 @@ def download(data, name):
             video.append(data['file_versions']['html5']['video'][quality]['url'])
         if a_size:
             audio.append(data['file_versions']['html5']['audio'][quality]['url'])
+
+    if options.mobile:
+        gifv_api = data['file_versions']['mobile']['gifv']
+        gifv_url = parse_mobile_url(gifv_api)
+        video = [gifv_url]
 
     if not options.a_only:
         try:
