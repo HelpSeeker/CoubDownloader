@@ -2,6 +2,17 @@
 
 CoubDownloader is a simple script to download videos (called coubs) from [Coub](https://coub.com).  
 
+## TO-DO
+
+Coub started to massively overhaul their database and API. Of course those changes aren't documented (why would you document API changes anyway?), so it will take a while to weed through all the changes. A few things I need to change are already clear though:
+
+- [ ] Remove video repair (all videos are now stored in a non-broken state)
+- [ ] Remove mobile option (they now come with a watermark as well) or make it replace med quality html5 downloads
+- [ ] Use high mobile audio, instead of med html5 audio (both CBR 128Kbps, but mobile comes in AAC instead of MP3)
+- [ ] Add shared option (video+audio already combined and audio always the right length)
+
+I also need to find out if they already overhauled all videos. Otherwise I need to keep the old approach for compatibility, until they're finished.
+
 ## coub.sh vs. coub.py
 
 Both versions are standalone scripts. You can use either and get the same functionality (with the exception of `--limit-rate` being exclusive to coub.sh and `--mobile` being exclusive to coub.py).
