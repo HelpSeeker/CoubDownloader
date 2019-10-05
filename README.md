@@ -2,24 +2,32 @@
 
 CoubDownloader is a simple script to download videos (called coubs) from [Coub](https://coub.com).  
 
-## coub.sh vs. coub.py
+## coub.py vs. coub_v2.py
 
-Both versions are standalone scripts. You can use either and get the same functionality (with the exception of `--limit-rate` being exclusive to coub.sh and `--mobile` being exclusive to coub.py).
+*coub.py* and *coub_v2.py* are both standalone scripts with almost the same functionality.
 
-So what version to use?
+The main difference is that *coub.py* was developed with Coub's old database in mind (before they introduced watermarks), while *coub_v2.py* adapts to the new changes.
 
-The answer is: **coub.py**
+For now *coub.py* is safer to use. It still repairs videos (Coub stored all html5 streams in a broken state in the past) and allows to download coubs without a watermark (`--mobile`) if the old mobile version is still present (unfortunately it's already quite rare).
 
-coub.py is supposed to work on all platforms, has less requirements and depending on the performed action*, it is faster than coub.sh.
+Eventually *coub_v2.py* will replace *coub.py*.
 
-**Channel parsing profits the most, requiring 25-40% less time for ~1000-3000 parsed links. Tag parsing is mostly limited by Coub throttling the frequency of API calls after a while, so benefits are small compared to channel parsing (~7% less time for 2475 links). For the actual download of coubs the speed difference is negligible.* 
+In the meantime, if you use *coub_v2.py* and run into errors like
+
+```
+[mov,mp4,m4a,3gp,3g2,mj2 @ 0x563bd7dcf740] moov atom not found
+[concat @ 0x563bd7d883c0] Impossible to open 'abcdef.mp4'
+list.txt: Invalid data found when processing input
+```
+
+then please switch to *coub.py* for these problematic coubs, which still use the old html5 video streams.
 
 ## Usage
 
 ```
 CoubDownloader is a simple download script for coub.com
 
-Usage: coub.sh [OPTIONS] INPUT [INPUT]... [-o FORMAT]
+Usage: coub.py [OPTIONS] INPUT [INPUT]... [-o FORMAT]
 
 Input:
   LINK                   download specified coubs
@@ -41,7 +49,6 @@ Common options:
 
 Download options:
   --sleep TIME           pause the script for TIME seconds before each download
-  --limit-rate RATE      limit download rate (see curl's --limit-rate)
   --limit-num LIMIT      limit max. number of downloaded coubs
   --sort ORDER           specify download order for channels/tags
                          Allowed values:
@@ -86,22 +93,7 @@ Output:
     This option has no influence on the file extension.
 ```
 
-Please note that
-
-* `coub.py` doesn't support `--limit-rate`
-* `coub.sh` doesn't support `--mobile`
-
 ## Requirements
-
-#### coub.sh
-
-* Bash >= 4.3
-* [jq](https://stedolan.github.io/jq/)
-* [FFmpeg](https://www.ffmpeg.org/)
-* [curl](https://curl.haxx.se/)
-* [grep](https://www.gnu.org/software/grep/)
-
-#### coub.py
 
 * Python >= 3.6
 * [FFmpeg](https://www.ffmpeg.org/)
