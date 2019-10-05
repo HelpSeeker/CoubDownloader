@@ -9,9 +9,6 @@ import subprocess
 import base64
 from fnmatch import fnmatch
 
-# TODO
-# -) --limit-rate
-
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # Global Variables
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -645,8 +642,17 @@ def use_archive(action, coub_id):
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 def parse_mobile_url(base64_url):
+    """Decrypt and decode the URL of mobile video streams"""
     enc_list = list(base64_url)
     dec_list = []
+
+    # The following steps are derived from Coub's own JS code
+    # flipped = _.reduce(str, function(res, c) {
+    #   var lower;
+    #   lower = c.toLowerCase();
+    #   return res + (c === lower ? c.toUpperCase() : lower);
+    # }, "");
+    # return window.atob(flipped);
 
     for c in enc_list:
         if c == c.lower():
@@ -685,9 +691,13 @@ def download(data, name):
             audio.append(data['file_versions']['html5']['audio'][quality]['url'])
 
     if options.mobile:
-        gifv_api = data['file_versions']['mobile']['gifv']
-        gifv_url = parse_mobile_url(gifv_api)
-        video = [gifv_url]
+        try:
+            gifv_api = data['file_versions']['mobile']['gifv']
+            gifv_url = parse_mobile_url(gifv_api)
+            video = [gifv_url]
+        except KeyError:
+            err("New API response detected!")
+            err("Falling back to html5 streams...")
 
     if not options.a_only:
         try:
