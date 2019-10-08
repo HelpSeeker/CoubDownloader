@@ -48,6 +48,13 @@ class Options:
     v_quality = -1
     a_quality = -1
 
+    # How much to prefer AAC audio
+    # 0 -> never download AAC audio
+    # 1 -> rank it between low and high quality MP3
+    # 2 -> prefer AAC, use MP3 fallback
+    # 3 -> either AAC or no audio
+    aac = 1
+
     # Download reposts during channel downloads
     recoubs = True
 
@@ -299,6 +306,8 @@ Format selection:
   --worstvideo           Download worst available video quality
   --bestaudio            Download best available audio quality (default)
   --worstaudio           Download worst available audio quality
+  --aac                  Prefer AAC over higher quality MP3 audio
+  --aac-strict           Only download AAC audio (never MP3)
 
 Channel options:
   --recoubs              include recoubs during channel downloads (default)
@@ -432,6 +441,10 @@ def parse_commandline():
                 opts.a_quality = -1
             elif opt in ("--worstaudio",):
                 opts.a_quality = 0
+            elif opt in ("--aac",):
+                opts.aac = 2
+            elif opt in ("--aac-strict",):
+                opts.aac = 3
             # Channel options
             elif opt in ("--recoubs",):
                 opts.recoubs = True
@@ -573,11 +586,18 @@ def get_name(req_json, c_id):
 def exists(name):
     """Check if a coub with given name already exists"""
 
-    if (os.path.exists(name + ".mkv") \
-            and not opts.a_only and not opts.v_only) or \
-       (os.path.exists(name + ".mp4") and opts.v_only) or \
-       (os.path.exists(name + ".mp3") and opts.a_only):
-        return True
+    if opts.v_only:
+        full_name = [name + ".mp4"]
+    elif opts.a_only:
+        # exists() gets possibly called before the API request
+        # to be safe check for both possible audio extensions
+        full_name = [name + ".mp3", name + ".m4a"]
+    else:
+        full_name = [name + ".mkv"]
+
+    for f in full_name:
+        if os.path.exists(f):
+            return True
 
     return False
 
@@ -637,8 +657,8 @@ def use_archive(action, c_id):
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-def download(data, name):
-    """Download individual video/audio streams of a coub"""
+def stream_lists(data):
+    """Collect available video/audio streams of a coub"""
 
     # A few words (or maybe more) regarding Coub's streams:
     #
@@ -700,25 +720,43 @@ def download(data, name):
         if version['size']:
             video.append(version['url'])
 
-    for aq in ["med", "high"]:
+    if opts.aac >= 2:
+        a_combo = [("html5","med"), ("html5", "high"), ("mobile", 0)]
+    else:
+        a_combo = [("html5","med"), ("mobile", 0), ("html5", "high")]
+
+    for form, aq in a_combo:
         try:
-            version = data['file_versions']['html5']['audio'][aq]
+            version = data['file_versions'][form]['audio'][aq]
         except KeyError:
             continue
 
-        if version['size']:
-            audio.append(version['url'])
+        if form == "mobile":
+            # Mobile audio doesn't list size
+            # So just pray that the file behind the link exists
+            if opts.aac:
+                audio.append(version)
+        else:
+            if version['size'] and opts.aac < 3:
+                audio.append(version['url'])
+
+    return (video, audio)
+
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+def download(v_link, a_link, a_ext, name):
+    """Download individual coub streams"""
 
     if not opts.a_only:
         try:
-            urlretrieve(video[opts.v_quality], name + ".mp4")
+            urlretrieve(v_link, name + ".mp4")
         except (IndexError, urllib.error.HTTPError):
             err("Error: Coub unavailable!")
             raise
 
     if not opts.v_only:
         try:
-            urlretrieve(audio[opts.a_quality], name + ".mp3")
+            urlretrieve(a_link, name + "." + a_ext)
         except (IndexError, urllib.error.HTTPError):
             if opts.a_only:
                 err("Error: Audio or coub unavailable!")
@@ -726,7 +764,7 @@ def download(data, name):
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-def merge(name):
+def merge(a_ext, name):
     """Merge video/audio stream with ffmpeg and loop video"""
 
     # Print .txt for ffmpeg's concat
@@ -738,7 +776,7 @@ def merge(name):
     # Concatenated video (via list) counts as one long stream
     command = ["ffmpeg", "-y", "-v", "error",
                "-f", "concat", "-safe", "0",
-               "-i", opts.concat_list, "-i", name + ".mp3"]
+               "-i", opts.concat_list, "-i", name + "." + a_ext]
 
     if hasattr(opts, "dur"):
         command.extend(["-t", opts.dur])
@@ -749,11 +787,11 @@ def merge(name):
 
     if not opts.keep:
         os.remove(name + ".mp4")
-        os.remove(name + ".mp3")
+        os.remove(name + "." + a_ext)
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-def show_preview(name):
+def show_preview(a_ext, name):
     """Play finished coub with the given command"""
 
     # For normal downloads .mkv, unless error downloading audio
@@ -762,7 +800,7 @@ def show_preview(name):
     else:
         ext = ".mp4"
     if opts.a_only:
-        ext = ".mp3"
+        ext = "." + a_ext
     if opts.v_only:
         ext = ".mp4"
 
@@ -828,6 +866,12 @@ def main():
 
         name = get_name(req_json, c_id)
 
+        v_list, a_list = stream_lists(req_json)
+        v_link = v_list[opts.v_quality]
+        a_link = a_list[opts.a_quality]
+        # Audio can be MP3 (.mp3) or AAC (.m4a)
+        a_ext = a_link.split(".")[-1]
+
         # Another check for custom output formatting
         # Far slower to skip existing files (archive usage is recommended)
         if hasattr(opts, "out_format") and exists(name) and not overwrite():
@@ -838,16 +882,17 @@ def main():
 
         if hasattr(opts, "sleep_dur") and count > 1:
             time.sleep(opts.sleep_dur)
+
         # Download video/audio streams
         # Skip if the requested media couldn't be downloaded
         try:
-            download(req_json, name)
+            download(v_link, a_link, a_ext, name)
         except (IndexError, urllib.error.HTTPError):
             continue
 
         # Merge video and audio
-        if not opts.v_only and not opts.a_only and os.path.exists(name + ".mp3"):
-            merge(name)
+        if not opts.v_only and not opts.a_only and os.path.exists(name + "." + a_ext):
+            merge(a_ext, name)
 
         # Write downloaded coub to archive
         if hasattr(opts, "archive_file"):
@@ -856,7 +901,7 @@ def main():
         # Preview downloaded coub
         if opts.preview:
             try:
-                show_preview(name)
+                show_preview(a_ext, name)
             except subprocess.CalledProcessError:
                 pass
 

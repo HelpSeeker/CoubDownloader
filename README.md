@@ -27,7 +27,7 @@ then please switch to *coub.py* for these problematic coubs, which still use the
 ```
 CoubDownloader is a simple download script for coub.com
 
-Usage: coub.py [OPTIONS] INPUT [INPUT]... [-o FORMAT]
+Usage: coub_v2.py [OPTIONS] INPUT [INPUT]... [-o FORMAT]
 
 Input:
   LINK                   download specified coubs
@@ -61,7 +61,8 @@ Format selection:
   --worstvideo           Download worst available video quality
   --bestaudio            Download best available audio quality (default)
   --worstaudio           Download worst available audio quality
-  --mobile               Download mobile video quality (no watermark, 360p)
+  --aac                  Prefer AAC over higher quality MP3 audio
+  --aac-strict           Only download AAC audio (never MP3)
 
 Channel options:
   --recoubs              include recoubs during channel downloads (default)
@@ -146,14 +147,54 @@ Input gets parsed in the following order:
 * Tags
 * Searches
 
+## AAC audio
+
+I'd like to quickly address how *coub_v2.py* handles AAC audio, because it might be a bit confusing.
+
+The script gathers potential audio streams and chooses the final link based on `--best-/worstaudio`.
+
+The audio streams are by default ranked in the following order:
+
+* MP3@160Kbps VBR
+* AAC@128Kbps CBR
+* MP3@128Kbps CBR
+
+So it's pretty uncommon to get AAC audio. Only if the high quality MP3 audio stream isn't present, will the script switch to AAC. However, some users might prefer AAC audio, which is why I added the `--aac` and `--aac-strict` options.
+
+With `--aac` the ranking will simply change to:
+
+* AAC@128Kbps CBR
+* MP3@160Kbps VBR
+* MP3@128Kbps CBR
+
+It basically tells the script to rank AAC higher than anything else. On the other hand `--aac-strict` reduces the ranking to:
+
+* AAC@128Kbps CBR
+
+Either an AAC stream is present or the audio will be entirely missing. This ensures AAC audio under any circumstances. Another way to look at it is that `--aac` tries to download AAC with MP3 as fallback, while `--aac-strict` gets rid of the fallback.
+
+To make matters even more complicated, some users might not want AAC audio at all. This is hopefully only a small demographic (after all AAC support is thorough and it does compress a lot better than MP3), but the script is still able to cater to this group. There's no extra command line option, but look for the following lines inside the script and change `aac` to 0.
+
+```
+    # How much to prefer AAC audio
+    # 0 -> never download AAC audio
+    # 1 -> rank it between low and high quality MP3
+    # 2 -> prefer AAC, use MP3 fallback
+    # 3 -> either AAC or no audio
+    aac = 1
+```
+
+Now AAC audio will be completely ignored and the script only serves MP3 audio (like the old version).
+
 ## Changes since Coub's database upgrade (watermark & co)
 
 Coub started to massively overhaul their database and API. Of course those changes aren't documented (why would you document API changes anyway?), so it will take a while to weed through all the changes. A few things I need to change are already clear though:
 
 - [x] Remove video repair (most videos are already stored in a non-broken state and the rest will soon follow)
 - [x] Remove mobile option (they now come with a watermark and are the exact same as html5 med) 
-- [ ] Use AAC mobile audio, instead of html5 audio med (MP3), which both come at 128Kbps CBR
-- [ ] Add shared option (video+audio already combined and audio always the right length)
+- [x] Add AAC mobile audio as another possible audio version (ranked between low and high quality MP3 audio)
+- [x] Add options to prefer AAC or only download AAC audio
+- [ ] Add shared option (video+audio already combined)
 
 ~~I also need to find out if they already overhauled all videos. Otherwise I need to keep the old approach for compatibility, until they're finished.~~ 
 
