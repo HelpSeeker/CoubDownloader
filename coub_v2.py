@@ -55,6 +55,9 @@ class Options:
     # 3 -> either AAC or no audio
     aac = 1
 
+    # Use shared video+audio instead of merging separate streams
+    share = False
+
     # Download reposts during channel downloads
     recoubs = True
 
@@ -308,6 +311,7 @@ Format selection:
   --worstaudio           Download worst available audio quality
   --aac                  Prefer AAC over higher quality MP3 audio
   --aac-strict           Only download AAC audio (never MP3)
+  --share                Download 'share' video (shorter and includes audio)
 
 Channel options:
   --recoubs              include recoubs during channel downloads (default)
@@ -445,6 +449,8 @@ def parse_commandline():
                 opts.aac = 2
             elif opt in ("--aac-strict",):
                 opts.aac = 3
+            elif opt in ("--share",):
+                opts.share = True
             # Channel options
             elif opt in ("--recoubs",):
                 opts.recoubs = True
@@ -514,6 +520,9 @@ def check_options():
         sys.exit(err_stat['opt'])
     elif not opts.recoubs and opts.only_recoubs:
         err("--no-recoubs and --only-recoubs are mutually exclusive!")
+        sys.exit(err_stat['opt'])
+    elif opts.share and (opts.v_only or opts.a_only):
+        err("--share and --video-/audio-only are mutually exclusive!")
         sys.exit(err_stat['opt'])
 
     allowed_sort = ["newest",
@@ -675,7 +684,7 @@ def stream_lists(data):
     #            1      (MP3@128Kbps CBR)
     #
     # 'share' has 1 quality (audio+video)
-    #     video+audio: default (~360p + AAC@128Kbps CBR)
+    #     video+audio: default (~720p, sometimes ~360p + AAC@128Kbps CBR)
     #
     # -) all videos come with a watermark
     # -) html5 video/audio and mobile audio may come in less available qualities
@@ -685,8 +694,7 @@ def stream_lists(data):
     # -) often only mobile audio 0 is available as MP3 (no mobile audio 1)
     # -) share video has the same quality as mobile video
     # -) share audio is always AAC, even if mobile audio is only available as MP3
-    # -) share audio can be shorter than other audio versions
-    # -) I encountered one share video that came in a larger resolution (720p)
+    # -) share audio is often shorter than other audio versions
     # -) videos come as MP4, MP3 audio as MP3 and AAC audio as M4A.
     #
     # All the aforementioned information regards the new Coub storage system (after the watermark introduction).
@@ -708,6 +716,17 @@ def stream_lists(data):
 
     video = []
     audio = []
+
+    if opts.share:
+        try:
+            version = data['file_versions']['share']['default']
+            # Non-existence should result in None
+            # Unfortunately there are exceptions to this rule (e.g. '{}')
+            if not version or version in ("{}",):
+                raise KeyError
+        except KeyError:
+            return ([], [])
+        return ([version], [])
 
     for vq in ["med", "high", "higher"]:
         try:
@@ -754,7 +773,7 @@ def download(v_link, a_link, a_ext, name):
             err("Error: Coub unavailable!")
             raise
 
-    if not opts.v_only:
+    if not opts.v_only and a_link:
         try:
             urlretrieve(a_link, name + "." + a_ext)
         except (IndexError, urllib.error.HTTPError):
@@ -866,11 +885,23 @@ def main():
 
         name = get_name(req_json, c_id)
 
+        # Get link list and assign final download URL
         v_list, a_list = stream_lists(req_json)
-        v_link = v_list[opts.v_quality]
-        a_link = a_list[opts.a_quality]
-        # Audio can be MP3 (.mp3) or AAC (.m4a)
-        a_ext = a_link.split(".")[-1]
+        try:
+            v_link = v_list[opts.v_quality]
+        except IndexError:
+            err("Error: Coub unavailable!")
+            continue
+        try:
+            a_link = a_list[opts.a_quality]
+            # Audio can be MP3 (.mp3) or AAC (.m4a)
+            a_ext = a_link.split(".")[-1]
+        except IndexError:
+            if opts.a_only:
+                err("Error: Audio or coub unavailable!")
+                continue
+            a_link = None
+            a_ext = None
 
         # Another check for custom output formatting
         # Far slower to skip existing files (archive usage is recommended)
@@ -891,7 +922,7 @@ def main():
             continue
 
         # Merge video and audio
-        if not opts.v_only and not opts.a_only and os.path.exists(name + "." + a_ext):
+        if not opts.v_only and not opts.a_only and a_link:
             merge(a_ext, name)
 
         # Write downloaded coub to archive

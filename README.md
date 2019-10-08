@@ -63,6 +63,7 @@ Format selection:
   --worstaudio           Download worst available audio quality
   --aac                  Prefer AAC over higher quality MP3 audio
   --aac-strict           Only download AAC audio (never MP3)
+  --share                Download 'share' video (shorter and includes audio)
 
 Channel options:
   --recoubs              include recoubs during channel downloads (default)
@@ -147,7 +148,9 @@ Input gets parsed in the following order:
 * Tags
 * Searches
 
-## AAC audio
+## Misc. information
+
+### AAC audio
 
 I'd like to quickly address how *coub_v2.py* handles AAC audio, because it might be a bit confusing.
 
@@ -186,6 +189,29 @@ To make matters even more complicated, some users might not want AAC audio at al
 
 Now AAC audio will be completely ignored and the script only serves MP3 audio (like the old version).
 
+### 'share' videos
+
+Another special new option is `--share`. Coub now offers a video version primarily targeted at people, who want to share coubs. These videos already contain both video (~720p, sometimes ~360p) and audio (AAC@128Kbps CBR) and don't require further muxing. Videos downloaded with `--share` come as MP4.
+
+***
+
+**WARNING:** There's a danger of overwriting *share* videos with video-only streams, as they both come as MP4.
+
+***
+
+The downside is that the audio is often considerably shorter than the other available audio streams. Sometimes that's beneficial, as Coub tends to loop the audio for short tracks (e.g. 2x 25 sec. audio). Often you just lose a lot of audio duration though (e.g. 3 min. song gets reduced to 20 sec.).
+
+Also because of the special property of the *share* version, there are some pitfalls to look out for. Many options become useless, when used together with `--share`
+
+* `--short`
+* `--keep`
+* `--repeat`
+* `--duration`
+* all other format selection options
+* `--audio-only` and `--video-only` (throws error)
+
+There's no fallback for *share* videos. If the *share* version is not yet available, then the script will count the coub as unavailable.
+
 ## Changes since Coub's database upgrade (watermark & co)
 
 Coub started to massively overhaul their database and API. Of course those changes aren't documented (why would you document API changes anyway?), so it will take a while to weed through all the changes. A few things I need to change are already clear though:
@@ -194,7 +220,7 @@ Coub started to massively overhaul their database and API. Of course those chang
 - [x] Remove mobile option (they now come with a watermark and are the exact same as html5 med) 
 - [x] Add AAC mobile audio as another possible audio version (ranked between low and high quality MP3 audio)
 - [x] Add options to prefer AAC or only download AAC audio
-- [ ] Add shared option (video+audio already combined)
+- [x] Add shared option (video+audio already combined)
 
 ~~I also need to find out if they already overhauled all videos. Otherwise I need to keep the old approach for compatibility, until they're finished.~~ 
 
