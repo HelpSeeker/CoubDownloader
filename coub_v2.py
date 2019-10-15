@@ -655,33 +655,27 @@ def overwrite():
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-def use_archive(action, c_id):
-    """
-    Handles all actions regarding archive usage
+def read_archive(c_id):
+    """Check archive file for coub ID"""
 
-    Supported actions:
-    -) read
-    -) write
-    """
-
-    if action == "read":
-        if not os.path.exists(opts.archive_file):
-            return False
-
-        with open(opts.archive_file, "r") as f:
-            content = f.readlines()
-        for l in content:
-            if l == c_id + "\n":
-                return True
-
+    if not os.path.exists(opts.archive_file):
         return False
-    elif action == "write":
-        with open(opts.archive_file, "a") as f:
-            print(c_id, file=f)
-    else:
-        err("Error: Unknown action in use_archive!")
-        clean()
-        sys.exit(err_stat['run'])
+
+    with open(opts.archive_file, "r") as f:
+        content = f.readlines()
+    for l in content:
+        if l == c_id + "\n":
+            return True
+
+    return False
+
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+def write_archive(c_id):
+    """Output coub ID to archive file"""
+
+    with open(opts.archive_file, "a") as f:
+        print(c_id, file=f)
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -887,7 +881,7 @@ def main():
         # Pass existing files to avoid unnecessary downloads
         # This check handles archive file search and default output formatting
         # Avoids json request (slow!) just to skip files anyway
-        if (opts.archive_file and use_archive("read", c_id)) or \
+        if (opts.archive_file and read_archive(c_id)) or \
            (not opts.out_format and exists(c_id) and not overwrite()):
             msg("Already downloaded!")
             clean()
@@ -945,7 +939,7 @@ def main():
 
         # Write downloaded coub to archive
         if opts.archive_file:
-            use_archive("write", c_id)
+            write_archive(c_id)
 
         # Preview downloaded coub
         if opts.preview:
