@@ -5,17 +5,27 @@ import os
 import time
 import json
 import subprocess
-import urllib.error
 from fnmatch import fnmatch
+
+import urllib.error
 from urllib.request import urlopen, urlretrieve
 from urllib.parse import quote as urlquote
 
-
 # TODO
 # -) implement --limit-rate
-# -) add option to download shared video+audio
-# -) add option to download mobile AAC audio (once it's common)
 # -) look out for new API changes
+
+# Error codes
+# 1 -> missing required software
+# 2 -> invalid user-specified option
+# 3 -> misc. runtime error (missing function argument, unknown value in case, etc.)
+# 4 -> not all input coubs exist after execution (i.e. some downloads failed)
+# 5 -> termination was requested mid-way by the user (i.e. Ctrl+C)
+err_stat = {'dep': 1,
+            'opt': 2,
+            'run': 3,
+            'down': 4,
+            'int': 5}
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # Classes
@@ -40,6 +50,18 @@ class Options:
     # How often to loop the video
     # If longer than audio duration -> audio decides length
     repeat = 1000
+
+    # Max. coub duration (FFmpeg syntax)
+    dur = None
+
+    # Pause between downloads (in sec)
+    sleep_dur = None
+
+    # Limit how many coubs can be downloaded during one script invocation
+    max_coubs = None
+
+    # Default sort order
+    sort = "newest"
 
     # What video/audio quality to download
     #  0 -> worst quality
@@ -73,8 +95,26 @@ class Options:
     a_only = False
     v_only = False
 
-    # Default sort order
-    sort = "newest"
+    # Output parsed coubs to file instead of downloading
+    # DO NOT TOUCH!
+    out_file = None
+
+    # Use an archive file to keep track of downloaded coubs
+    archive_file = None
+
+    # Output name formatting (default: %id%)
+    # Supports the following special keywords:
+    #   %id%        - coub ID (identifier in the URL)
+    #   %title%     - coub title
+    #   %creation%  - creation date/time
+    #   %category%  - coub category
+    #   %channel%   - channel title
+    #   %tags%      - all tags (separated by tag_sep, see below)
+    # All other strings are interpreted literally.
+    #
+    # Setting a custom value severely increases skip duration for existing coubs
+    # Usage of an archive file is recommended in such an instance
+    out_format = None
 
     # Advanced settings
     page_limit = 99           # used for tags; must be <= 99
@@ -96,7 +136,7 @@ class CoubInputData:
         """Parse direct input links from the command line"""
 
         for link in self.links:
-            if hasattr(opts, "max_coubs") and len(self.parsed) >= opts.max_coubs:
+            if opts.max_coubs and len(self.parsed) >= opts.max_coubs:
                 break
             self.parsed.append(link)
 
@@ -122,7 +162,7 @@ class CoubInputData:
             content = content.splitlines()
 
             for link in content:
-                if hasattr(opts, "max_coubs") and len(self.parsed) >= opts.max_coubs:
+                if opts.max_coubs and len(self.parsed) >= opts.max_coubs:
                     break
                 self.parsed.append(link)
 
@@ -187,7 +227,7 @@ class CoubInputData:
             req_json = json.loads(req_json)
 
             for c in range(opts.coubs_per_page):
-                if hasattr(opts, "max_coubs") and len(self.parsed) >= opts.max_coubs:
+                if opts.max_coubs and len(self.parsed) >= opts.max_coubs:
                     return
 
                 try:
@@ -224,35 +264,16 @@ class CoubInputData:
             clean()
             sys.exit(err_stat['opt'])
 
-        if hasattr(opts, "max_coubs") and len(self.parsed) >= opts.max_coubs:
+        if opts.max_coubs and len(self.parsed) >= opts.max_coubs:
             msg("\nDownload limit (", opts.max_coubs, ") reached!", sep="")
 
-        if hasattr(opts, "out_file"):
+        if opts.out_file:
             with open(opts.out_file, "w") as f:
                 for link in self.parsed:
                     print(link, file=f)
             msg("\nParsed coubs written to '", opts.out_file, "'!", sep="")
             clean()
             sys.exit(0)
-
-# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-# Global Variables
-# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-# Error codes
-# 1 -> missing required software
-# 2 -> invalid user-specified option
-# 3 -> misc. runtime error (missing function argument, unknown value in case, etc.)
-# 4 -> not all input coubs exist after execution (i.e. some downloads failed)
-# 5 -> termination was requested mid-way by the user (i.e. Ctrl+C)
-err_stat = {'dep': 1,
-            'opt': 2,
-            'run': 3,
-            'down': 4,
-            'int': 5}
-
-opts = Options()
-coubs = CoubInputData()
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # Functions
@@ -272,8 +293,7 @@ def msg(*args, **kwargs):
 def usage():
     """Print help text"""
 
-    print(
-f"""CoubDownloader is a simple download script for coub.com
+    print(f"""CoubDownloader is a simple download script for coub.com
 
 Usage: {os.path.basename(sys.argv[0])} [OPTIONS] INPUT [INPUT]...
 
@@ -340,12 +360,11 @@ Output:
       %tags%      - all tags (separated by '{opts.tag_sep}')
 
     Other strings will be interpreted literally.
-    This option has no influence on the file extension."""
-    )
+    This option has no influence on the file extension.""")
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-def check_requirements():
+def check_prereq():
     """check existence of required software"""
 
     try:
@@ -357,11 +376,11 @@ def check_requirements():
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-def parse_commandline():
+def parse_cli():
     """Parse command line"""
     global opts, coubs
 
-    if not len(sys.argv[1:]):
+    if not sys.argv[1:]:
         usage()
         sys.exit(0)
 
@@ -499,11 +518,11 @@ def check_options():
     if opts.repeat <= 0:
         err("-r/--repeat must be greater than 0!")
         sys.exit(err_stat['opt'])
-    elif hasattr(opts, "max_coubs") and opts.max_coubs <= 0:
+    elif opts.max_coubs and opts.max_coubs <= 0:
         err("--limit-num must be greater than zero!")
         sys.exit(err_stat['opt'])
 
-    if hasattr(opts, "dur"):
+    if opts.dur:
         command = ["ffmpeg", "-v", "quiet",
                    "-f", "lavfi", "-i", "anullsrc",
                    "-t", opts.dur, "-c", "copy",
@@ -553,7 +572,7 @@ def resolve_paths():
 def get_name(req_json, c_id):
     """Decide filename for output file"""
 
-    if not hasattr(opts, "out_format"):
+    if not opts.out_format:
         return c_id
 
     name = opts.out_format
@@ -740,9 +759,9 @@ def stream_lists(data):
             video.append(version['url'])
 
     if opts.aac >= 2:
-        a_combo = [("html5","med"), ("html5", "high"), ("mobile", 0)]
+        a_combo = [("html5", "med"), ("html5", "high"), ("mobile", 0)]
     else:
-        a_combo = [("html5","med"), ("mobile", 0), ("html5", "high")]
+        a_combo = [("html5", "med"), ("mobile", 0), ("html5", "high")]
 
     for form, aq in a_combo:
         try:
@@ -797,7 +816,7 @@ def merge(a_ext, name):
                "-f", "concat", "-safe", "0",
                "-i", opts.concat_list, "-i", name + "." + a_ext]
 
-    if hasattr(opts, "dur"):
+    if opts.dur:
         command.extend(["-t", opts.dur])
 
     command.extend(["-c", "copy", "-shortest", name + ".mkv"])
@@ -848,8 +867,8 @@ def clean():
 def main():
     """Main function body"""
 
-    check_requirements()
-    parse_commandline()
+    check_prereq()
+    parse_cli()
     check_options()
     resolve_paths()
 
@@ -868,9 +887,8 @@ def main():
         # Pass existing files to avoid unnecessary downloads
         # This check handles archive file search and default output formatting
         # Avoids json request (slow!) just to skip files anyway
-        if (hasattr(opts, "archive_file") and use_archive("read", c_id)) or \
-           (not hasattr(opts, "out_format") \
-                and exists(c_id) and not overwrite()):
+        if (opts.archive_file and use_archive("read", c_id)) or \
+           (not opts.out_format and exists(c_id) and not overwrite()):
             msg("Already downloaded!")
             clean()
             continue
@@ -905,13 +923,13 @@ def main():
 
         # Another check for custom output formatting
         # Far slower to skip existing files (archive usage is recommended)
-        if hasattr(opts, "out_format") and exists(name) and not overwrite():
+        if opts.out_format and exists(name) and not overwrite():
             msg("Already downloaded!")
             clean()
             done += 1
             continue
 
-        if hasattr(opts, "sleep_dur") and count > 1:
+        if opts.sleep_dur and count > 1:
             time.sleep(opts.sleep_dur)
 
         # Download video/audio streams
@@ -926,7 +944,7 @@ def main():
             merge(a_ext, name)
 
         # Write downloaded coub to archive
-        if hasattr(opts, "archive_file"):
+        if opts.archive_file:
             use_archive("write", c_id)
 
         # Preview downloaded coub
@@ -950,6 +968,9 @@ def main():
 
 # Execute main function
 if __name__ == '__main__':
+    opts = Options()
+    coubs = CoubInputData()
+
     try:
         main()
     except KeyboardInterrupt:
