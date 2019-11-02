@@ -32,9 +32,10 @@ Usage: coub_v2.py [OPTIONS] INPUT [INPUT]... [-o FORMAT]
 Input:
   LINK                   download specified coubs
   -l, --list LIST        read coub links from a text file
-  -c, --channel CHANNEL  download all coubs from a channel
-  -t, --tag TAG          download all coubs with the specified tag
-  -e, --search TERM      download all search results for the given term
+  -c, --channel CHANNEL  download coubs from a channel
+  -t, --tag TAG          download coubs with the specified tag
+  -e, --search TERM      download search results for the given term
+  --hot                  download coubs from the 'Hot' section
 
 Common options:
   -h, --help             show this help
@@ -131,6 +132,10 @@ Tags can be scraped by providing the term or a full URL. Due to a bug (?) in the
 
 Coubs from search queries can be downloaded by providing the search term or the corresponding search URL. Please note that searches can (in extreme cases) provide tens of thousands of coub links. The usage of `--limit-num` is advised. 
 
+#### Hot section
+
+The currently most popular/trending coubs can be found in the [hot section](https://coub.com/hot). Similar to tags, you can only download the first 99 pages (i.e. 2475 coubs) listed. All pages afterwards will redirect to page 1.
+
 ***
 
 Please note for **channels**, **tags** and **searches** that the URL mustn't include a special sort order (e.g. https://coub.com/tags/tag/likes) or other filters (e.g. https://coub.com/user/reposts). The last word in the URL needs to be the channel name, tag or search term.
@@ -144,6 +149,7 @@ Input gets parsed in the following order:
 * Channels  
 * Tags
 * Searches
+* Hot section
 
 ## Misc. information
 
@@ -218,6 +224,7 @@ Coub started to massively overhaul their database and API. Of course those chang
 - [x] Add AAC mobile audio as another possible audio version (ranked between low and high quality MP3 audio)
 - [x] Add options to prefer AAC or only download AAC audio
 - [x] Add shared option (video+audio already combined)
+- [x] Download coubs from the hot section
 
 ~~I also need to find out if they already overhauled all videos. Otherwise I need to keep the old approach for compatibility, until they're finished.~~ 
 
