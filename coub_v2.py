@@ -129,9 +129,41 @@ class CoubInputData:
     channels = []
     tags = []
     searches = []
+    categories = []
     hot = False
 
     parsed = []
+
+    def check_category(self, cat):
+        """Make sure only valid categories get accepted"""
+
+        allowed_cat = [
+            "animals-pets",
+            "anime",
+            "art",
+            "cars",
+            "cartoons",
+            "celebrity",
+            "dance",
+            "fashion",
+            "gaming",
+            "mashup",
+            "movies",
+            "music",
+            "nature-travel",
+            "news",
+            "nsfw",
+            "science-technology",
+            "sports",
+            # Special categories
+            "newest",
+            "random",
+            "coub_of_the_day"
+        ]
+
+        cat = cat.split("/")[-1]
+
+        return bool(cat in allowed_cat)
 
     def parse_links(self):
         """Parse direct input links from the command line"""
@@ -195,6 +227,10 @@ class CoubInputData:
             search = urlquote(search)
             req = "https://coub.com/api/v2/search/coubs?q=" + search
             req += "&"
+        elif url_type == "category":
+            cat = url.split("/")[-1]
+            req = "https://coub.com/api/v2/timeline/explore/" + cat
+            req += "?"
         elif url_type == "hot":
             req = "https://coub.com/api/v2/timeline/hot"
             req += "?"
@@ -219,9 +255,9 @@ class CoubInputData:
         msg("Downloading ", url_type, " info (", url, "):", sep="")
 
         for p in range(1, pages+1):
-            # tag and hot section timeline redirects pages >99 to page 1
+            # tag/hot section/category timeline redirects pages >99 to page 1
             # other timelines work like intended
-            if url_type in ("tag", "hot") and p > 99:
+            if url_type in ("tag", "hot", "category") and p > 99:
                 msg("  Max. page limit reached!")
                 return
 
@@ -261,6 +297,8 @@ class CoubInputData:
             self.parse_timeline("tag", t)
         for s in self.searches:
             self.parse_timeline("search", s)
+        for c in self.categories:
+            self.parse_timeline("category", c)
         if self.hot:
             self.parse_timeline("hot", "https://coub.com/hot")
 
@@ -309,6 +347,8 @@ Input:
   -t, --tag TAG          download coubs with the specified tag
   -e, --search TERM      download search results for the given term
   --hot                  download coubs from the 'Hot' section
+  --category CATEGORY    download coubs from a certain category
+                         '--category help' for all supported values
 
 Common options:
   -h, --help             show this help
@@ -325,7 +365,7 @@ Download options:
   --sleep TIME           pause the script for TIME seconds before each download
   --limit-num LIMIT      limit max. number of downloaded coubs
   --sort ORDER           specify download order for channels, tags, etc.
-                         '--sort help' for a complete list of supported values
+                         '--sort help' for all supported values
 
 Format selection:
   --bestvideo            Download best available video quality (default)
@@ -381,7 +421,38 @@ Searches:
 Hot section:
   likes_count, views_count, newest_popular, oldest
 Categories:
-  newest, random, coub_of_the_day""")
+  likes_count, views_count, newest_popular""")
+
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+def usage_category():
+    """Print supported values for --category"""
+
+    print("""Supported categories:
+
+Communities:
+  animals-pets
+  anime
+  art
+  cars
+  cartoons
+  celebrity
+  dance
+  fashion
+  gaming
+  mashup
+  movies
+  music
+  nature-travel
+  news
+  nsfw
+  science-technology
+  sports
+
+Special categories:
+  newest
+  random
+  coub_of_the_day""")
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -409,6 +480,7 @@ def parse_cli():
                 "-c", "--channel",
                 "-t", "--tag",
                 "-e", "--search",
+                "--category",
                 "-p", "--path",
                 "-r", "--repeat",
                 "-d", "--duration",
@@ -451,6 +523,14 @@ def parse_cli():
                 coubs.searches.append(arg.strip("/"))
             elif opt in ("--hot",):
                 coubs.hot = True
+            elif opt in ("--category",):
+                if arg == "help":
+                    usage_category()
+                    sys.exit(0)
+                elif coubs.check_category(arg.strip("/")):
+                    coubs.categories.append(arg.strip("/"))
+                else:
+                    err(f"'{arg}' is not a valid category.")
             # Common options
             elif opt in ("-h", "--help"):
                 usage()
@@ -578,9 +658,7 @@ def check_options():
         "views_count",
         "newest_popular",
         "oldest",
-        "newest",
-        "random",
-        "coub_of_the_day"
+        "newest"
     ]
     if opts.sort and opts.sort not in allowed_sort:
         err("Invalid sort order ('", opts.sort, "')!", sep="", end="\n\n")
