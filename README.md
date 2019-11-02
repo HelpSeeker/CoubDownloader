@@ -36,6 +36,8 @@ Input:
   -t, --tag TAG          download coubs with the specified tag
   -e, --search TERM      download search results for the given term
   --hot                  download coubs from the 'Hot' section
+  --category CATEGORY    download coubs from a certain category
+                         '--category help' for all supported values
 
 Common options:
   -h, --help             show this help
@@ -52,7 +54,7 @@ Download options:
   --sleep TIME           pause the script for TIME seconds before each download
   --limit-num LIMIT      limit max. number of downloaded coubs
   --sort ORDER           specify download order for channels/tags
-                         '--sort help' for a complete list of supported values
+                         '--sort help' for all supported values
 
 Format selection:
   --bestvideo            Download best available video quality (default)
@@ -136,9 +138,13 @@ Coubs from search queries can be downloaded by providing the search term or the 
 
 The currently most popular/trending coubs can be found in the [hot section](https://coub.com/hot). Similar to tags, you can only download the first 99 pages (i.e. 2475 coubs) listed. All pages afterwards will redirect to page 1.
 
+#### Categories
+
+There are currently 20 supported categories. 17 communities and 3 special categories (newest, random and coub_of_the_day). Categories limit the max. number of pages just like tags and the hot section. So once again max. 2475 coubs per category.
+
 ***
 
-Please note for **channels**, **tags** and **searches** that the URL mustn't include a special sort order (e.g. https://coub.com/tags/tag/likes) or other filters (e.g. https://coub.com/user/reposts). The last word in the URL needs to be the channel name, tag or search term.
+Please note that URLs mustn't include a special sort order (e.g. https://coub.com/tags/tag/likes) or other filters (e.g. https://coub.com/user/reposts). The last word in a URL needs to be the channel name, tag, search term, etc.
 
 ***
 
@@ -149,6 +155,7 @@ Input gets parsed in the following order:
 * Channels  
 * Tags
 * Searches
+* Categories
 * Hot section
 
 ## Misc. information
@@ -225,6 +232,7 @@ Coub started to massively overhaul their database and API. Of course those chang
 - [x] Add options to prefer AAC or only download AAC audio
 - [x] Add shared option (video+audio already combined)
 - [x] Download coubs from the hot section
+- [x] Download coubs from categories
 
 ~~I also need to find out if they already overhauled all videos. Otherwise I need to keep the old approach for compatibility, until they're finished.~~ 
 
