@@ -117,7 +117,6 @@ class Options:
     out_format = None
 
     # Advanced settings
-    page_limit = 99           # used for tags; must be <= 99
     coubs_per_page = 25       # allowed: 1-25
     concat_list = "list.txt"
     tag_sep = "_"
@@ -130,6 +129,8 @@ class CoubInputData:
     channels = []
     tags = []
     searches = []
+    hot = False
+
     parsed = []
 
     def parse_links(self):
@@ -194,6 +195,9 @@ class CoubInputData:
             search = urlquote(search)
             req = "https://coub.com/api/v2/search/coubs?q=" + search
             req += "&"
+        elif url_type == "hot":
+            req = "https://coub.com/api/v2/timeline/hot"
+            req += "?"
         else:
             err("Error: Unknown input type in parse_timeline!")
             clean()
@@ -215,9 +219,9 @@ class CoubInputData:
         msg("Downloading ", url_type, " info (", url, "):", sep="")
 
         for p in range(1, pages+1):
-            # tag timeline redirects pages >99 to page 1
-            # channel timelines work like intended
-            if url_type == "tag" and p > opts.page_limit:
+            # tag and hot section timeline redirects pages >99 to page 1
+            # other timelines work like intended
+            if url_type in ("tag", "hot") and p > 99:
                 msg("  Max. page limit reached!")
                 return
 
@@ -257,6 +261,8 @@ class CoubInputData:
             self.parse_timeline("tag", t)
         for s in self.searches:
             self.parse_timeline("search", s)
+        if self.hot:
+            self.parse_timeline("hot", "https://coub.com/hot")
 
         if not self.parsed:
             err("Error: No coub links specified!")
@@ -299,9 +305,10 @@ Usage: {os.path.basename(sys.argv[0])} [OPTIONS] INPUT [INPUT]...
 Input:
   LINK                   download specified coubs
   -l, --list LIST        read coub links from a text file
-  -c, --channel CHANNEL  download all coubs from a channel
-  -t, --tag TAG          download all coubs with the specified tag
-  -e, --search TERM      download all search results for the given term
+  -c, --channel CHANNEL  download coubs from a channel
+  -t, --tag TAG          download coubs with the specified tag
+  -e, --search TERM      download search results for the given term
+  --hot                  download coubs from the 'Hot' section
 
 Common options:
   -h, --help             show this help
@@ -442,6 +449,8 @@ def parse_cli():
                 coubs.tags.append(arg.strip("/"))
             elif opt in ("-e", "--search"):
                 coubs.searches.append(arg.strip("/"))
+            elif opt in ("--hot",):
+                coubs.hot = True
             # Common options
             elif opt in ("-h", "--help"):
                 usage()
