@@ -61,7 +61,7 @@ class Options:
     max_coubs = None
 
     # Default sort order
-    sort = "newest"
+    sort = None
 
     # What video/audio quality to download
     #  0 -> worst quality
@@ -201,11 +201,10 @@ class CoubInputData:
 
         req += "per_page=" + str(opts.coubs_per_page)
 
-        if opts.sort == "oldest" and url_type in ("tag", "search"):
-            req += "&order_by=oldest"
-        # Don't do anything for newest (as it's the default)
-        # check_options already got rid of invalid values
-        elif opts.sort != "newest":
+        # Add sort order
+        # Different timeline types support different values
+        # Invalid values get ignored though, so no need for further checks
+        if opts.sort:
             req += "&order_by=" + opts.sort
 
         req_json = urlopen(req).read()
@@ -318,11 +317,8 @@ Common options:
 Download options:
   --sleep TIME           pause the script for TIME seconds before each download
   --limit-num LIMIT      limit max. number of downloaded coubs
-  --sort ORDER           specify download order for channels/tags
-                         Allowed values:
-                           newest (default)      likes_count
-                           newest_popular        views_count
-                           oldest (tags/search only)
+  --sort ORDER           specify download order for channels, tags, etc.
+                         '--sort help' for a complete list of supported values
 
 Format selection:
   --bestvideo            Download best available video quality (default)
@@ -361,6 +357,24 @@ Output:
 
     Other strings will be interpreted literally.
     This option has no influence on the file extension.""")
+
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+def usage_sort():
+    """Print supported values for --sort"""
+
+    print("""Supported sort values:
+
+Channels:
+  likes_count, views_count, newest_popular
+Tags:
+  likes_count, views_count, newest_popular, oldest
+Searches:
+  likes_count, views_count, newest_popular, oldest, newest
+Hot section:
+  likes_count, views_count, newest_popular, oldest
+Categories:
+  newest, random, coub_of_the_day""")
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -454,7 +468,11 @@ def parse_cli():
             elif opt in ("--limit-num",):
                 opts.max_coubs = int(arg)
             elif opt in ("--sort",):
-                opts.sort = arg
+                if arg == "help":
+                    usage_sort()
+                    sys.exit(0)
+                else:
+                    opts.sort = arg
             # Format selection
             elif opt in ("--bestvideo",):
                 opts.v_quality = -1
@@ -544,13 +562,20 @@ def check_options():
         err("--share and --video-/audio-only are mutually exclusive!")
         sys.exit(err_stat['opt'])
 
-    allowed_sort = ["newest",
-                    "oldest",
-                    "newest_popular",
-                    "likes_count",
-                    "views_count"]
-    if opts.sort not in allowed_sort:
-        err("Invalid sort order ('", opts.sort, "')!", sep="")
+    # Not really necessary to check as invalid values get ignored anyway
+    # But it also catches typos, so keep it for now
+    allowed_sort = [
+        "likes_count",
+        "views_count",
+        "newest_popular",
+        "oldest",
+        "newest",
+        "random",
+        "coub_of_the_day"
+    ]
+    if opts.sort and opts.sort not in allowed_sort:
+        err("Invalid sort order ('", opts.sort, "')!", sep="", end="\n\n")
+        usage_sort()
         sys.exit(err_stat['opt'])
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~

@@ -51,10 +51,7 @@ Download options:
   --sleep TIME           pause the script for TIME seconds before each download
   --limit-num LIMIT      limit max. number of downloaded coubs
   --sort ORDER           specify download order for channels/tags
-                         Allowed values:
-                           newest (default)      likes_count
-                           newest_popular        views_count
-                           oldest (tags/search only)
+                         '--sort help' for a complete list of supported values
 
 Format selection:
   --bestvideo            Download best available video quality (default)
