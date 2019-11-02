@@ -21,11 +21,13 @@ from urllib.parse import quote as urlquote
 # 3 -> misc. runtime error (missing function argument, unknown value in case, etc.)
 # 4 -> not all input coubs exist after execution (i.e. some downloads failed)
 # 5 -> termination was requested mid-way by the user (i.e. Ctrl+C)
-err_stat = {'dep': 1,
-            'opt': 2,
-            'run': 3,
-            'down': 4,
-            'int': 5}
+err_stat = {
+    'dep': 1,
+    'opt': 2,
+    'run': 3,
+    'down': 4,
+    'int': 5
+}
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # Classes
@@ -175,7 +177,7 @@ class CoubInputData:
 
         if self.links:
             msg("Reading command line:")
-            msg("  ", len(self.links), " link(s) found", sep="")
+            msg(f"  {len(self.links)} link(s) found")
 
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -183,7 +185,7 @@ class CoubInputData:
         """Parse coub links from input lists"""
 
         for l in self.lists:
-            msg("Reading input list (", l, "):", sep="")
+            msg(f"Reading input list ({l}):")
 
             with open(l, "r") as f:
                 content = f.read()
@@ -199,7 +201,7 @@ class CoubInputData:
                     break
                 self.parsed.append(link)
 
-            msg("  ", len(content), " link(s) found", sep="")
+            msg(f"  {len(content)} link(s) found")
 
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -252,7 +254,7 @@ class CoubInputData:
 
         pages = req_json['total_pages']
 
-        msg("Downloading ", url_type, " info (", url, "):", sep="")
+        msg(f"Downloading {url_type} info ({url}):")
 
         for p in range(1, pages+1):
             # tag/hot section/category timeline redirects pages >99 to page 1
@@ -261,7 +263,7 @@ class CoubInputData:
                 msg("  Max. page limit reached!")
                 return
 
-            msg("  ", p, " out of ", pages, " pages", sep="")
+            msg(f"  {p} out of {pages} pages")
             req_json = urlopen(req + "&page=" + str(p)).read()
             req_json = json.loads(req_json)
 
@@ -308,13 +310,13 @@ class CoubInputData:
             sys.exit(err_stat['opt'])
 
         if opts.max_coubs and len(self.parsed) >= opts.max_coubs:
-            msg("\nDownload limit (", opts.max_coubs, ") reached!", sep="")
+            msg(f"\nDownload limit ({opts.max_coubs}) reached!")
 
         if opts.out_file:
             with open(opts.out_file, "w") as f:
                 for link in self.parsed:
                     print(link, file=f)
-            msg("\nParsed coubs written to '", opts.out_file, "'!", sep="")
+            msg(f"\nParsed coubs written to '{opts.out_file}'!")
             clean()
             sys.exit(0)
 
@@ -499,7 +501,7 @@ def parse_cli():
             try:
                 arg = sys.argv[pos+1]
             except IndexError:
-                err("Missing value for ", opt, "!", sep="")
+                err(f"Missing value for '{opt}'!")
                 sys.exit(err_stat['opt'])
 
             pos += 2
@@ -514,7 +516,7 @@ def parse_cli():
                 if os.path.exists(arg):
                     coubs.lists.append(os.path.abspath(arg))
                 else:
-                    err("'", arg, "' is no valid list.", sep="")
+                    err(f"'{arg}' is not a valid list!")
             elif opt in ("-c", "--channel"):
                 coubs.channels.append(arg.strip("/"))
             elif opt in ("-t", "--tag"):
@@ -530,7 +532,7 @@ def parse_cli():
                 elif coubs.check_category(arg.strip("/")):
                     coubs.categories.append(arg.strip("/"))
                 else:
-                    err(f"'{arg}' is not a valid category.")
+                    err(f"'{arg}' is not a valid category!")
             # Common options
             elif opt in ("-h", "--help"):
                 usage()
@@ -604,17 +606,15 @@ def parse_cli():
                 opts.out_format = arg
             # Unknown options
             elif fnmatch(opt, "-*"):
-                err("Unknown flag '", opt, "'!", sep="")
-                err("Try '", os.path.basename(sys.argv[0]), \
-                    " --help' for more information.", sep="")
+                err(f"Unknown flag '{opt}'!")
+                err(f"Try '{os.path.basename(sys.argv[0])} --help' for more information.")
                 sys.exit(err_stat['opt'])
             else:
-                err("'", opt, "' is neither an opt nor a coub link!", sep="")
-                err("Try '", os.path.basename(sys.argv[0]), \
-                    " --help' for more information.", sep="")
+                err(f"'{opt}' is neither an option nor a coub link!")
+                err(f"Try '{os.path.basename(sys.argv[0])} --help' for more information.")
                 sys.exit(err_stat['opt'])
         except ValueError:
-            err("Invalid ", opt, " ('", arg, "')!", sep="")
+            err(f"Invalid {opt} ('{arg}')!")
             sys.exit(err_stat['opt'])
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -661,7 +661,7 @@ def check_options():
         "newest"
     ]
     if opts.sort and opts.sort not in allowed_sort:
-        err("Invalid sort order ('", opts.sort, "')!", sep="", end="\n\n")
+        err(f"Invalid sort order ('{opts.sort}')!\n")
         usage_sort()
         sys.exit(err_stat['opt'])
 
@@ -675,8 +675,7 @@ def resolve_paths():
     os.chdir(opts.path)
 
     if os.path.exists(opts.concat_list):
-        err("Error: Reserved filename ('", opts.concat_list, "') " \
-            "exists in '", opts.path, "'!", sep="")
+        err(f"Error: Reserved filename ('{opts.concat_list}') exists in '{opts.path}'!")
         sys.exit(err_stat['run'])
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -715,8 +714,7 @@ def get_name(req_json, c_id):
         f.close()
         os.remove(name)
     except OSError:
-        err("Error: Filename invalid or too long! ", end="")
-        err("Falling back to '", c_id, "'.", sep="")
+        err(f"Error: Filename invalid or too long! Falling back to '{c_id}'")
         name = c_id
 
     return name
@@ -986,7 +984,7 @@ def main():
     done = 0
     for c in coubs.parsed:
         count += 1
-        msg("  ", count, " out of ", len(coubs.parsed), " (", c, ")", sep="")
+        msg(f"  {count} out of {len(coubs.parsed)} ({c})")
 
         c_id = c.split("/")[-1]
 
