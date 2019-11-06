@@ -288,6 +288,24 @@ class CoubInputData:
 
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
+    def find_dupes(self):
+        """Find and remove duplicates from the parsed list"""
+        dupes = 0
+
+        self.parsed.sort()
+        last = self.parsed[-1]
+
+        for i in range(len(self.parsed)-2, -1, -1):
+            if last == self.parsed[i]:
+                dupes += 1
+                del self.parsed[i]
+            else:
+                last = self.parsed[i]
+
+        return dupes
+
+    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
     def parse_input(self):
         """Parse coub links from all available sources"""
 
@@ -312,8 +330,13 @@ class CoubInputData:
         if opts.max_coubs and len(self.parsed) >= opts.max_coubs:
             msg(f"\nDownload limit ({opts.max_coubs}) reached!")
 
+        msg("\nResults:")
+        msg(f"  {len(self.parsed)} input link(s)")
+        msg(f"  {self.find_dupes()} duplicates")
+        msg(f"  {len(self.parsed)} output link(s)")
+        
         if opts.out_file:
-            with open(opts.out_file, "w") as f:
+            with open(opts.out_file, "a") as f:
                 for link in self.parsed:
                     print(link, file=f)
             msg(f"\nParsed coubs written to '{opts.out_file}'!")
