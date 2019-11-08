@@ -72,6 +72,13 @@ class Options:
     v_quality = -1
     a_quality = -1
 
+    # Limits for the list of video streams
+    #   max: limits what counts as best stream
+    #   min: limits what counts as worst stream
+    # Supported values: med (~640px width), high (~1280px width), higher (~1600px width)
+    v_max = 'higher'
+    v_min = 'med'
+
     # How much to prefer AAC audio
     # 0 -> never download AAC audio
     # 1 -> rank it between low and high quality MP3
@@ -334,7 +341,7 @@ class CoubInputData:
         msg(f"  {len(self.parsed)} input link(s)")
         msg(f"  {self.find_dupes()} duplicates")
         msg(f"  {len(self.parsed)} output link(s)")
-        
+
         if opts.out_file:
             with open(opts.out_file, "a") as f:
                 for link in self.parsed:
@@ -395,6 +402,10 @@ Download options:
 Format selection:
   --bestvideo            Download best available video quality (default)
   --worstvideo           Download worst available video quality
+  --max-video FORMAT     Set limit for the best video format (default: '{opts.v_max}')
+                         Supported values: med, high, higher
+  --min-video FORMAT     Set limit for the worst video format (default: '{opts.v_min}')
+                         Supported values: see '--max-video'
   --bestaudio            Download best available audio quality (default)
   --worstaudio           Download worst available audio quality
   --aac                  Prefer AAC over higher quality MP3 audio
@@ -501,21 +512,25 @@ def parse_cli():
         usage()
         sys.exit(0)
 
-    with_arg = ["-l", "--list",
-                "-c", "--channel",
-                "-t", "--tag",
-                "-e", "--search",
-                "--category",
-                "-p", "--path",
-                "-r", "--repeat",
-                "-d", "--duration",
-                "--sleep",
-                "--limit-num",
-                "--sort",
-                "--preview",
-                "--write-list",
-                "--use-archive",
-                "-o", "--output"]
+    with_arg = [
+        "-l", "--list",
+        "-c", "--channel",
+        "-t", "--tag",
+        "-e", "--search",
+        "--category",
+        "-p", "--path",
+        "-r", "--repeat",
+        "-d", "--duration",
+        "--sleep",
+        "--limit-num",
+        "--sort",
+        "--max-video",
+        "--min-video",
+        "--preview",
+        "--write-list",
+        "--use-archive",
+        "-o", "--output"
+    ]
 
     pos = 1
     while pos < len(sys.argv):
@@ -592,6 +607,10 @@ def parse_cli():
                 opts.v_quality = -1
             elif opt in ("--worstvideo",):
                 opts.v_quality = 0
+            elif opt in ("--max-video",):
+                opts.v_max = arg
+            elif opt in ("--min-video",):
+                opts.v_min = arg
             elif opt in ("--bestaudio",):
                 opts.a_quality = -1
             elif opt in ("--worstaudio",):
@@ -672,6 +691,21 @@ def check_options():
         sys.exit(err_stat['opt'])
     elif opts.share and (opts.v_only or opts.a_only):
         err("--share and --video-/audio-only are mutually exclusive!")
+        sys.exit(err_stat['opt'])
+
+    v_formats = {
+        'med': 0,
+        'high': 1,
+        'higher': 2
+    }
+    if opts.v_max not in v_formats:
+        err(f"Invalid value for --max-video ('{opts.v_max}')!")
+        sys.exit(err_stat['opt'])
+    elif opts.v_min not in v_formats:
+        err(f"Invalid value for --min-video ('{opts.v_min}')!")
+        sys.exit(err_stat['opt'])
+    elif v_formats[opts.v_min] > v_formats[opts.v_max]:
+        err("Quality of --min-quality greater than --max-quality!")
         sys.exit(err_stat['opt'])
 
     # Not really necessary to check as invalid values get ignored anyway
@@ -863,6 +897,7 @@ def stream_lists(data):
     video = []
     audio = []
 
+    # Special treatment for shared video
     if opts.share:
         try:
             version = data['file_versions']['share']['default']
@@ -874,17 +909,29 @@ def stream_lists(data):
             return ([], [])
         return ([version], [])
 
-    for vq in ["med", "high", "higher"]:
-        try:
-            version = data['file_versions']['html5']['video'][vq]
-        except KeyError:
-            continue
+    # Video stream parsing
+    v_formats = {
+        'med': 0,
+        'high': 1,
+        'higher': 2
+    }
 
-        # v_size/a_size can be 0 OR None in case of a missing stream
-        # None is the exception and an irregularity in the Coub API
-        if version['size']:
-            video.append(version['url'])
+    v_max = v_formats[opts.v_max]
+    v_min = v_formats[opts.v_min]
 
+    for vq in v_formats:
+        if v_min <= v_formats[vq] <= v_max:
+            try:
+                version = data['file_versions']['html5']['video'][vq]
+            except KeyError:
+                continue
+
+            # v_size/a_size can be 0 OR None in case of a missing stream
+            # None is the exception and an irregularity in the Coub API
+            if version['size']:
+                video.append(version['url'])
+
+    # Audio streams parsing
     if opts.aac >= 2:
         a_combo = [("html5", "med"), ("html5", "high"), ("mobile", 0)]
     else:
