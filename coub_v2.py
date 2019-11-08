@@ -388,9 +388,9 @@ Common options:
   -y, --yes              answer all prompts with yes
   -n, --no               answer all prompts with no
   -s, --short            disable video looping
-  -p, --path PATH        set output destination (default: '{opts.path}')
+  -p, --path PATH        set output destination (def: '{opts.path}')
   -k, --keep             keep the individual video/audio parts
-  -r, --repeat N         repeat video N times (default: until audio ends)
+  -r, --repeat N         repeat video N times (def: until audio ends)
   -d, --duration TIME    specify max. coub duration (FFmpeg syntax)
 
 Download options:
@@ -400,20 +400,20 @@ Download options:
                          '--sort help' for all supported values
 
 Format selection:
-  --bestvideo            Download best available video quality (default)
+  --bestvideo            Download best available video quality (def)
   --worstvideo           Download worst available video quality
-  --max-video FORMAT     Set limit for the best video format (default: '{opts.v_max}')
+  --max-video FORMAT     Set limit for the best video format (def: '{opts.v_max}')
                          Supported values: med, high, higher
-  --min-video FORMAT     Set limit for the worst video format (default: '{opts.v_min}')
+  --min-video FORMAT     Set limit for the worst video format (def: '{opts.v_min}')
                          Supported values: see '--max-video'
-  --bestaudio            Download best available audio quality (default)
+  --bestaudio            Download best available audio quality (def)
   --worstaudio           Download worst available audio quality
   --aac                  Prefer AAC over higher quality MP3 audio
   --aac-strict           Only download AAC audio (never MP3)
   --share                Download 'share' video (shorter and includes audio)
 
 Channel options:
-  --recoubs              include recoubs during channel downloads (default)
+  --recoubs              include recoubs during channel downloads (def)
   --no-recoubs           exclude recoubs during channel downloads
   --only-recoubs         only download recoubs during channel downloads
 
@@ -428,7 +428,7 @@ Misc. options:
   --use-archive FILE     use FILE to keep track of already downloaded coubs
 
 Output:
-  -o, --output FORMAT    save output with the specified name (default: %id%)
+  -o, --output FORMAT    save output with the specified name (def: %id%)
 
     Special strings:
       %id%        - coub ID (identifier in the URL)
