@@ -15,7 +15,7 @@ CoubDownloader is a simple script to download videos (called coubs) from [Coub](
 3.6. [Hot section](https://github.com/HelpSeeker/CoubDownloader#hot-section)  
 3.7. [Categories](https://github.com/HelpSeeker/CoubDownloader#categories)  
 4. [Misc. information](https://github.com/HelpSeeker/CoubDownloader#misc-information)  
-4.1. [Remux errors](https://github.com/HelpSeeker/CoubDownloader#remux-errors)  
+4.1. [Remux errors](https://github.com/HelpSeeker/CoubDownloader#remux-errors-ffmpeg)  
 4.2. [Video resolution vs. quality](https://github.com/HelpSeeker/CoubDownloader#video-resolution-vs-quality)  
 4.3. [AAC audio](https://github.com/HelpSeeker/CoubDownloader#aac-audio)  
 4.4. ['share' videos](https://github.com/HelpSeeker/CoubDownloader#share-videos)  
