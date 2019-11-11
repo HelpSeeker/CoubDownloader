@@ -1,33 +1,33 @@
 # CoubDownloader
 
-CoubDownloader is a simple script to download videos (called coubs) from [Coub](https://coub.com).  
+CoubDownloader is a simple script to download videos (called coubs) from [Coub](https://coub.com).
 
-## coub.py vs. coub_v2.py
+## Contents
 
-*coub.py* and *coub_v2.py* are both standalone scripts with almost the same functionality.
-
-The main difference is that *coub.py* was developed with Coub's old database in mind (before they introduced watermarks), while *coub_v2.py* adapts to the new changes.
-
-For now *coub.py* is safer to use. It still repairs videos (Coub stored all html5 streams in a broken state in the past) and allows to download coubs without a watermark (`--mobile`) if the old mobile version is still present (unfortunately it's already quite rare).
-
-Eventually *coub_v2.py* will replace *coub.py*.
-
-In the meantime, if you use *coub_v2.py* and run into errors like
-
-```
-[mov,mp4,m4a,3gp,3g2,mj2 @ 0x563bd7dcf740] moov atom not found
-[concat @ 0x563bd7d883c0] Impossible to open 'abcdef.mp4'
-list.txt: Invalid data found when processing input
-```
-
-then please switch to *coub.py* for these problematic coubs, which still use the old html5 video streams.
+1. [Usage](https://github.com/HelpSeeker/CoubDownloader#usage)  
+2. [Requirements](https://github.com/HelpSeeker/CoubDownloader#requirements)  
+3. [Input](https://github.com/HelpSeeker/CoubDownloader#input)  
+3.1. [Links](https://github.com/HelpSeeker/CoubDownloader#links)  
+3.2. [Lists](https://github.com/HelpSeeker/CoubDownloader#lists)  
+3.3. [Channels](https://github.com/HelpSeeker/CoubDownloader#channels)  
+3.4. [Tags](https://github.com/HelpSeeker/CoubDownloader#tags)  
+3.5. [Searches](https://github.com/HelpSeeker/CoubDownloader#searches)  
+3.6. [Hot section](https://github.com/HelpSeeker/CoubDownloader#hot-section)  
+3.7. [Categories](https://github.com/HelpSeeker/CoubDownloader#categories)  
+4. [Misc. information](https://github.com/HelpSeeker/CoubDownloader#misc-information)  
+4.1. [Remux errors](https://github.com/HelpSeeker/CoubDownloader#remux-errors)  
+4.2. [Video resolution vs. quality](https://github.com/HelpSeeker/CoubDownloader#video-resolution-vs-quality)  
+4.3. [AAC audio](https://github.com/HelpSeeker/CoubDownloader#aac-audio)  
+4.4. ['share' videos](https://github.com/HelpSeeker/CoubDownloader#share-videos)  
+5. [Changes since Coub's database upgrade (watermark & co)](https://github.com/HelpSeeker/CoubDownloader#changes-since-coubs-database-upgrade-watermark--co)  
+6. [Changes since switching to Coub's API (previously used youtube-dl)](https://github.com/HelpSeeker/CoubDownloader#changes-since-switching-to-coubs-api-previously-used-youtube-dl)  
 
 ## Usage
 
 ```
 CoubDownloader is a simple download script for coub.com
 
-Usage: coub_v2.py [OPTIONS] INPUT [INPUT]... [-o FORMAT]
+Usage: coub.py [OPTIONS] INPUT [INPUT]...
 
 Input:
   LINK                   download specified coubs
@@ -45,28 +45,32 @@ Common options:
   -y, --yes              answer all prompts with yes
   -n, --no               answer all prompts with no
   -s, --short            disable video looping
-  -p, --path PATH        set output destination (default: '.')
+  -p, --path PATH        set output destination (def: '.')
   -k, --keep             keep the individual video/audio parts
-  -r, --repeat N         repeat video N times (default: until audio ends)
+  -r, --repeat N         repeat video N times (def: until audio ends)
   -d, --duration TIME    specify max. coub duration (FFmpeg syntax)
 
 Download options:
   --sleep TIME           pause the script for TIME seconds before each download
   --limit-num LIMIT      limit max. number of downloaded coubs
-  --sort ORDER           specify download order for channels/tags
+  --sort ORDER           specify download order for channels, tags, etc.
                          '--sort help' for all supported values
 
 Format selection:
-  --bestvideo            Download best available video quality (default)
+  --bestvideo            Download best available video quality (def)
   --worstvideo           Download worst available video quality
-  --bestaudio            Download best available audio quality (default)
+  --max-video FORMAT     Set limit for the best video format (def: 'higher')
+                         Supported values: med, high, higher
+  --min-video FORMAT     Set limit for the worst video format (def: 'med')
+                         Supported values: see '--max-video'
+  --bestaudio            Download best available audio quality (def)
   --worstaudio           Download worst available audio quality
   --aac                  Prefer AAC over higher quality MP3 audio
   --aac-strict           Only download AAC audio (never MP3)
   --share                Download 'share' video (shorter and includes audio)
 
 Channel options:
-  --recoubs              include recoubs during channel downloads (default)
+  --recoubs              include recoubs during channel downloads (def)
   --no-recoubs           exclude recoubs during channel downloads
   --only-recoubs         only download recoubs during channel downloads
 
@@ -81,7 +85,7 @@ Misc. options:
   --use-archive FILE     use FILE to keep track of already downloaded coubs
 
 Output:
-  -o, --output FORMAT    save output with the specified name (default: %id%)
+  -o, --output FORMAT    save output with the specified name (def: %id%)
 
     Special strings:
       %id%        - coub ID (identifier in the URL)
@@ -160,9 +164,41 @@ Input gets parsed in the following order:
 
 ## Misc. information
 
+### Remux errors (FFmpeg)
+
+```
+[mov,mp4,m4a,3gp,3g2,mj2 @ 0x563bd7dcf740] moov atom not found
+[concat @ 0x563bd7d883c0] Impossible to open 'abcdef.mp4'
+list.txt: Invalid data found when processing input
+```
+
+These errors are the product of encountering a not yet updated video stream. In the past Coub stored all HTML5 video streams in a broken state, but nowadays it's quite rare to find such streams. Only ~1% of all low quality streams are affected.
+
+To download these problematic streams, please refer to the [legacy version](https://github.com/HelpSeeker/CoubDownloader/releases/tag/v1).
+
+### Video resolution vs. quality
+
+Resolution is not a synonym for quality. That is what everybody with a bit of knowledge in video encoding will tell you. It is important to remember, when we discuss the quality of available video streams.
+
+Coub usually offers 3 video streams:
+
+* higher (~1600px width)
+* high (~1280px width)
+* med (~640px width)
+
+This is also the order in which *coub.py* ranks those video streams. Said ranking can be limited with `--min-/--max-video` and the final choice depends on `--best-/--worstvideo`. But the question is, does this really reflect the quality of those streams? And the answer is: **No**
+
+The main problem is that Coub does something very peculiar. In order to provide several available streams, they don't just scale input videos down, but also up. This is a recent change. Before the introduction of the watermarks, you would find coubs, which were only available in 360p, simply because a low resolution input video was used. Now you can find the same video in 900p as well, because they (quite noticeably) upscaled the low resolution input.
+
+This makes it very difficult to discern which stream actually offers the best quality. Not because of the used compression settings (Coub reencodes look equally bad at all resolutions), but because of the details lost in the scaling process. Usually you want to get the stream, which has the resolution closest to the source video and scale it yourself during playback. A properly configured media player can produce far better results than Coub's blurry upscaling. But even if blurry upscaling is preferred (e.g. to mitigate compression artifacts), you will save a considerate amount of disk space by letting your media player handle the scaling process.
+
+But how to apply that knowledge in practice? How do you know which stream to download? Well, I'm still looking for an answer myself. The only accurate method is to download all versions and compare them yourself. Details are a good indicator to look out for. Pick the stream which still has the most of them left. Alternatively you can also compare, which stream looks the sharpest to you.
+
+Unfortunately there's no clear rule, which would help to automate the decision process. However based on my personal experience I can give you the following hint. The best quality is often 'high', sometimes 'med' and almost never 'higher'.
+
 ### AAC audio
 
-I'd like to quickly address how *coub_v2.py* handles AAC audio, because it might be a bit confusing.
+I'd like to quickly address how *coub.py* handles AAC audio, because it might be a bit confusing.
 
 The script gathers potential audio streams and chooses the final link based on `--best-/worstaudio`.
 
@@ -224,7 +260,7 @@ There's no fallback for *share* videos. If the *share* version is not yet availa
 
 ## Changes since Coub's database upgrade (watermark & co)
 
-Coub started to massively overhaul their database and API. Of course those changes aren't documented (why would you document API changes anyway?), so it will take a while to weed through all the changes. A few things I need to change are already clear though:
+Coub started to massively overhaul their database and API. Of course those changes aren't documented (why would you document API changes anyway?).
 
 - [x] Remove video repair (most videos are already stored in a non-broken state and the rest will soon follow)
 - [x] Remove mobile option (they now come with a watermark and are the exact same as html5 med) 
@@ -234,17 +270,13 @@ Coub started to massively overhaul their database and API. Of course those chang
 - [x] Download coubs from the hot section
 - [x] Download coubs from categories
 
-~~I also need to find out if they already overhauled all videos. Otherwise I need to keep the old approach for compatibility, until they're finished.~~ 
-
-They aren't finished yet. There's also no predictable pattern for their update process. For now it's best to keep the old script for compatibility.
-
 ## Changes since switching to Coub's API (previously used youtube-dl)
 
 - [x] Download all coubs from a channel
 - [x] Download all recoubs from a channel  
 - [x] Limit number of downloaded coubs  
-- [x] Wait x seconds between downloads  
-- [x] Limit download speed  
+- [x] Wait x seconds between downloads
+- [x] ~~Limit download speed~~ (was only possible in the Bash version)
 - [x] Download all coubs with a certain tag  
 - [x] Check for the existence of a coub before downloading  
 - [x] Specify max. coub duration (FFmpeg syntax) 
