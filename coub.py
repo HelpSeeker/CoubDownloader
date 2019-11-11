@@ -8,7 +8,7 @@ import subprocess
 from fnmatch import fnmatch
 
 import urllib.error
-from urllib.request import urlopen, urlretrieve
+from urllib.request import urlopen
 from urllib.parse import quote as urlquote
 
 # TODO
@@ -961,15 +961,17 @@ def download(v_link, a_link, a_ext, name):
 
     if not opts.a_only:
         try:
-            urlretrieve(v_link, name + ".mp4")
-        except (IndexError, urllib.error.HTTPError):
+            with open(name + ".mp4", "wb") as f:
+                f.write(urlopen(v_link).read())
+        except urllib.error.HTTPError:
             err("Error: Coub unavailable!")
             raise
 
     if not opts.v_only and a_link:
         try:
-            urlretrieve(a_link, name + "." + a_ext)
-        except (IndexError, urllib.error.HTTPError):
+            with open(name + "." + a_ext, "wb") as f:
+                f.write(urlopen(a_link).read())
+        except urllib.error.HTTPError:
             if opts.a_only:
                 err("Error: Audio or coub unavailable!")
                 raise
