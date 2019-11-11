@@ -4,18 +4,16 @@ import sys
 import os
 import time
 import json
-import urllib.request
 import subprocess
-import base64
 from fnmatch import fnmatch
 
-# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-# Global Variables
-# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+import urllib.error
+from urllib.request import urlopen, urlretrieve
+from urllib.parse import quote as urlquote
 
-# options object also global (defined in main())
-
-coub_list = []
+# TODO
+# -) implement --limit-rate
+# -) look out for new API changes
 
 # Error codes
 # 1 -> missing required software
@@ -23,252 +21,334 @@ coub_list = []
 # 3 -> misc. runtime error (missing function argument, unknown value in case, etc.)
 # 4 -> not all input coubs exist after execution (i.e. some downloads failed)
 # 5 -> termination was requested mid-way by the user (i.e. Ctrl+C)
-missing_dep = 1
-err_option = 2
-err_runtime = 3
-err_download = 4
-user_interrupt = 5
+err_stat = {
+    'dep': 1,
+    'opt': 2,
+    'run': 3,
+    'down': 4,
+    'int': 5
+}
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-# Default Settings
+# Classes
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-class Options_Assembler:
-    """
-    Handles all actions regarding user options.
+class Options:
+    """Stores general options"""
 
-    -) assigns default options
-    -) parses command line options
-    -) checks for invalid user input
-    """
-    def __init__(self):
-        """Parse command line arguments"""
+    # Change verbosity of the script
+    # 0 for quiet, >= 1 for normal verbosity
+    verbosity = 1
 
-        # Change verbosity of the script
-        # 0 for quiet, >= 1 for normal verbosity
-        self.verbosity = 1
+    # Allowed values: yes, no, prompt
+    prompt_answer = "prompt"
 
-        # Allowed values: yes, no, prompt
-        self.prompt_answer = "prompt"
+    # Default download destination
+    path = "."
 
-        # Default download destination
-        self.save_path = "."
+    # Keep individual video/audio streams
+    keep = False
 
-        # Keep individual video/audio streams
-        self.keep = False
+    # How often to loop the video
+    # If longer than audio duration -> audio decides length
+    repeat = 1000
 
-        # How often to loop the video
-        # If longer than audio duration -> audio decides length
-        self.repeat = 1000
+    # Max. coub duration (FFmpeg syntax)
+    dur = None
 
-        # What video/audio quality to download
-        #  0 -> worst quality
-        # -1 -> best quality
-        # Everything else can lead to undefined behavior
-        self.v_quality = -1
-        self.a_quality = -1
+    # Pause between downloads (in sec)
+    sleep_dur = None
 
-        # Download video streams for mobile devices
-        # No watermark, but exclusively 360p
-        self.mobile = False
+    # Limit how many coubs can be downloaded during one script invocation
+    max_coubs = None
 
-        # Download reposts during channel downloads
-        self.recoubs = True
+    # Default sort order
+    sort = None
 
-        # ONLY download reposts during channel downloads
-        self.only_recoubs = False
+    # What video/audio quality to download
+    #  0 -> worst quality
+    # -1 -> best quality
+    # Everything else can lead to undefined behavior
+    v_quality = -1
+    a_quality = -1
 
-        # Show preview after each download with the given command
-        self.preview = False
-        self.preview_command = "mpv"
+    # Limits for the list of video streams
+    #   max: limits what counts as best stream
+    #   min: limits what counts as worst stream
+    # Supported values: med (~640px width), high (~1280px width), higher (~1600px width)
+    v_max = 'higher'
+    v_min = 'med'
 
-        # Only download video/audio stream
-        # Can't be both true!
-        self.a_only = False
-        self.v_only = False
+    # How much to prefer AAC audio
+    # 0 -> never download AAC audio
+    # 1 -> rank it between low and high quality MP3
+    # 2 -> prefer AAC, use MP3 fallback
+    # 3 -> either AAC or no audio
+    aac = 1
 
-        # Default sort order
-        self.sort_order = "newest"
+    # Use shared video+audio instead of merging separate streams
+    share = False
 
-        # Advanced settings
-        self.page_limit = 99           # used for tags; must be <= 99
-        self.entries_per_page = 25     # allowed: 1-25
-        self.concat_list = "list.txt"
-        self.tag_separator = "_"
+    # Download reposts during channel downloads
+    recoubs = True
 
-        # Don't touch these
-        self.input_links = []
-        self.input_lists = []
-        self.input_channels = []
-        self.input_tags = []
-        self.input_searches = []
+    # ONLY download reposts during channel downloads
+    only_recoubs = False
+
+    # Show preview after each download with the given command
+    preview = False
+    preview_command = "mpv"
+
+    # Only download video/audio stream
+    # Can't be both true!
+    a_only = False
+    v_only = False
+
+    # Output parsed coubs to file instead of downloading
+    # DO NOT TOUCH!
+    out_file = None
+
+    # Use an archive file to keep track of downloaded coubs
+    archive_file = None
+
+    # Output name formatting (default: %id%)
+    # Supports the following special keywords:
+    #   %id%        - coub ID (identifier in the URL)
+    #   %title%     - coub title
+    #   %creation%  - creation date/time
+    #   %category%  - coub category
+    #   %channel%   - channel title
+    #   %tags%      - all tags (separated by tag_sep, see below)
+    # All other strings are interpreted literally.
+    #
+    # Setting a custom value severely increases skip duration for existing coubs
+    # Usage of an archive file is recommended in such an instance
+    out_format = None
+
+    # Advanced settings
+    coubs_per_page = 25       # allowed: 1-25
+    concat_list = "list.txt"
+    tag_sep = "_"
+
+class CoubInputData:
+    """Stores coub-related data (e.g. links)"""
+
+    links = []
+    lists = []
+    channels = []
+    tags = []
+    searches = []
+    categories = []
+    hot = False
+
+    parsed = []
+
+    def check_category(self, cat):
+        """Make sure only valid categories get accepted"""
+
+        allowed_cat = [
+            "animals-pets",
+            "anime",
+            "art",
+            "cars",
+            "cartoons",
+            "celebrity",
+            "dance",
+            "fashion",
+            "gaming",
+            "mashup",
+            "movies",
+            "music",
+            "nature-travel",
+            "news",
+            "nsfw",
+            "science-technology",
+            "sports",
+            # Special categories
+            "newest",
+            "random",
+            "coub_of_the_day"
+        ]
+
+        cat = cat.split("/")[-1]
+
+        return bool(cat in allowed_cat)
+
+    def parse_links(self):
+        """Parse direct input links from the command line"""
+
+        for link in self.links:
+            if opts.max_coubs and len(self.parsed) >= opts.max_coubs:
+                break
+            self.parsed.append(link)
+
+        if self.links:
+            msg("Reading command line:")
+            msg(f"  {len(self.links)} link(s) found")
 
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-    def parse_options(self):
-        """Parse command line options"""
+    def parse_lists(self):
+        """Parse coub links from input lists"""
 
-        with_argument = ["-l", "--list",
-                         "-c", "--channel",
-                         "-t", "--tag",
-                         "-e", "--search",
-                         "-p", "--path",
-                         "-r", "--repeat",
-                         "-d", "--duration",
-                         "--sleep",
-                         "--limit-num",
-                         "--sort",
-                         "--preview",
-                         "--write-list",
-                         "--use-archive",
-                         "-o", "--output"]
+        for l in self.lists:
+            msg(f"Reading input list ({l}):")
 
-        position = 1
-        while position < len(sys.argv):
-            option = sys.argv[position]
-            if option in with_argument:
+            with open(l, "r") as f:
+                content = f.read()
+
+            # Replace tabs and spaces with newlines
+            # Emulates default wordsplitting in Bash
+            content = content.replace("\t", "\n")
+            content = content.replace(" ", "\n")
+            content = content.splitlines()
+
+            for link in content:
+                if opts.max_coubs and len(self.parsed) >= opts.max_coubs:
+                    break
+                self.parsed.append(link)
+
+            msg(f"  {len(content)} link(s) found")
+
+    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+    def parse_timeline(self, url_type, url):
+        """
+        Parse coub links from various Coub source
+
+        Currently supports
+        -) channels
+        -) tags
+        -) coub searches
+        """
+
+        if url_type == "channel":
+            channel = url.split("/")[-1]
+            req = "https://coub.com/api/v2/timeline/channel/" + channel
+            req += "?"
+        elif url_type == "tag":
+            tag = url.split("/")[-1]
+            tag = urlquote(tag)
+            req = "https://coub.com/api/v2/timeline/tag/" + tag
+            req += "?"
+        elif url_type == "search":
+            search = url.split("=")[-1]
+            search = urlquote(search)
+            req = "https://coub.com/api/v2/search/coubs?q=" + search
+            req += "&"
+        elif url_type == "category":
+            cat = url.split("/")[-1]
+            req = "https://coub.com/api/v2/timeline/explore/" + cat
+            req += "?"
+        elif url_type == "hot":
+            req = "https://coub.com/api/v2/timeline/hot"
+            req += "?"
+        else:
+            err("Error: Unknown input type in parse_timeline!")
+            clean()
+            sys.exit(err_stat['run'])
+
+        req += "per_page=" + str(opts.coubs_per_page)
+
+        # Add sort order
+        # Different timeline types support different values
+        # Invalid values get ignored though, so no need for further checks
+        if opts.sort:
+            req += "&order_by=" + opts.sort
+
+        req_json = urlopen(req).read()
+        req_json = json.loads(req_json)
+
+        pages = req_json['total_pages']
+
+        msg(f"Downloading {url_type} info ({url}):")
+
+        for p in range(1, pages+1):
+            # tag/hot section/category timeline redirects pages >99 to page 1
+            # other timelines work like intended
+            if url_type in ("tag", "hot", "category") and p > 99:
+                msg("  Max. page limit reached!")
+                return
+
+            msg(f"  {p} out of {pages} pages")
+            req_json = urlopen(req + "&page=" + str(p)).read()
+            req_json = json.loads(req_json)
+
+            for c in range(opts.coubs_per_page):
+                if opts.max_coubs and len(self.parsed) >= opts.max_coubs:
+                    return
+
                 try:
-                    argument = sys.argv[position+1]
-                except IndexError:
-                    err("Missing value for ", option, "!", sep="")
-                    sys.exit(err_option)
+                    c_id = req_json['coubs'][c]['recoub_to']['permalink']
+                    if not opts.recoubs:
+                        continue
+                    self.parsed.append("https://coub.com/view/" + c_id)
+                except (TypeError, KeyError, IndexError):
+                    if opts.only_recoubs:
+                        continue
+                    try:
+                        c_id = req_json['coubs'][c]['permalink']
+                        self.parsed.append("https://coub.com/view/" + c_id)
+                    except (TypeError, KeyError, IndexError):
+                        continue
 
-            try:
-                # Input
-                if fnmatch(option, "*coub.com/view/*"):
-                    self.input_links.append(option.strip("/"))
-                elif option in ("-l", "--list"):
-                    if os.path.exists(argument):
-                        self.input_lists.append(os.path.abspath(argument))
-                    else:
-                        err("'", argument, "' is no valid list.", sep="")
-                elif option in ("-c", "--channel"):
-                    self.input_channels.append(argument.strip("/"))
-                elif option in ("-t", "--tag"):
-                    self.input_tags.append(argument.strip("/"))
-                elif option in ("-e", "--search"):
-                    self.input_searches.append(argument.strip("/"))
-                # Common options
-                elif option in ("-h", "--help"):
-                    usage()
-                    sys.exit(0)
-                elif option in ("-q", "--quiet"):
-                    self.verbosity = 0
-                elif option in ("-y", "--yes"):
-                    self.prompt_answer = "yes"
-                elif option in ("-n", "--no"):
-                    self.prompt_answer = "no"
-                elif option in ("-s", "--short"):
-                    self.repeat = 1
-                elif option in ("-p", "--path"):
-                    self.save_path = argument
-                elif option in ("-k", "--keep"):
-                    self.keep = True
-                elif option in ("-r", "--repeat"):
-                    self.repeat = int(argument)
-                elif option in ("-d", "--duration"):
-                    self.duration = argument
-                # Download options
-                elif option == "--sleep":
-                    self.sleep_dur = float(argument)
-                elif option == "--limit-num":
-                    self.max_coubs = int(argument)
-                elif option == "--sort":
-                    self.sort_order = argument
-                # Format selection
-                elif option == "--bestvideo":
-                    self.v_quality = -1
-                elif option == "--worstvideo":
-                    self.v_quality = 0
-                elif option == "--bestaudio":
-                    self.a_quality = -1
-                elif option == "--worstaudio":
-                    self.a_quality = 0
-                elif option == "--mobile":
-                    self.mobile = True
-                # Channel options
-                elif option == "--recoubs":
-                    self.recoubs = True
-                elif option == "--no-recoubs":
-                    self.recoubs = False
-                elif option == "--only-recoubs":
-                    self.only_recoubs = True
-                # Preview options
-                elif option == "--preview":
-                    self.preview = True
-                    self.preview_command = argument
-                elif option == "--no-preview":
-                    self.preview = False
-                # Misc options
-                elif option == "--audio-only":
-                    self.a_only = True
-                elif option == "--video-only":
-                    self.v_only = True
-                elif option == "--write-list":
-                    self.out_file = os.path.abspath(argument)
-                elif option == "--use-archive":
-                    self.archive_file = os.path.abspath(argument)
-                # Output
-                elif option in ("-o", "--output"):
-                    self.out_format = argument
-                elif fnmatch(option, "-*"):
-                    err("Unknown flag '", option, "'!", sep="")
-                    err("Try '", os.path.basename(sys.argv[0]), \
-                        " --help' for more information.", sep="")
-                    sys.exit(err_option)
-                else:
-                    err("'", option, "' is neither an option nor a coub link!", sep="")
-                    err("Try '", os.path.basename(sys.argv[0]), \
-                        " --help' for more information.", sep="")
-                    sys.exit(err_option)
-            except ValueError:
-                err("Invalid ", option, " ('", argument, "')!", sep="")
-                sys.exit(err_option)
-
-            if option in with_argument:
-                position += 2
-            else:
-                position += 1
 
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-    def check_options(self):
-        """Check validity of command line options"""
+    def find_dupes(self):
+        """Find and remove duplicates from the parsed list"""
+        dupes = 0
 
-        if self.repeat <= 0:
-            err("-r/--repeat must be greater than 0!")
-            sys.exit(err_option)
-        elif hasattr(self, "max_coubs") and self.max_coubs <= 0:
-            err("--limit-num must be greater than zero!")
-            sys.exit(err_option)
+        self.parsed.sort()
+        last = self.parsed[-1]
 
-        if hasattr(self, "duration"):
-            command = ["ffmpeg", "-v", "quiet",
-                       "-f", "lavfi", "-i", "anullsrc",
-                       "-t", self.duration, "-c", "copy",
-                       "-f", "null", "-"]
-            try:
-                subprocess.check_call(command)
-            except subprocess.CalledProcessError:
-                err("Invalid duration! For the supported syntax see:")
-                err("https://ffmpeg.org/ffmpeg-utils.html#time-duration-syntax")
-                sys.exit(err_option)
+        for i in range(len(self.parsed)-2, -1, -1):
+            if last == self.parsed[i]:
+                dupes += 1
+                del self.parsed[i]
+            else:
+                last = self.parsed[i]
 
-        if self.a_only and self.v_only:
-            err("--audio-only and --video-only are mutually exclusive!")
-            sys.exit(err_option)
-        elif not self.recoubs and self.only_recoubs:
-            err("--no-recoubs and --only-recoubs are mutually exclusive!")
-            sys.exit(err_option)
+        return dupes
 
-        allowed_sort = ["newest",
-                        "oldest",
-                        "newest_popular",
-                        "likes_count",
-                        "views_count"]
-        if self.sort_order not in allowed_sort:
-            err("Invalid sort order ('", self.sort_order, "')!", sep="")
-            sys.exit(err_option)
+    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+    def parse_input(self):
+        """Parse coub links from all available sources"""
+
+        self.parse_links()
+        self.parse_lists()
+        for c in self.channels:
+            self.parse_timeline("channel", c)
+        for t in self.tags:
+            self.parse_timeline("tag", t)
+        for s in self.searches:
+            self.parse_timeline("search", s)
+        for c in self.categories:
+            self.parse_timeline("category", c)
+        if self.hot:
+            self.parse_timeline("hot", "https://coub.com/hot")
+
+        if not self.parsed:
+            err("Error: No coub links specified!")
+            clean()
+            sys.exit(err_stat['opt'])
+
+        if opts.max_coubs and len(self.parsed) >= opts.max_coubs:
+            msg(f"\nDownload limit ({opts.max_coubs}) reached!")
+
+        msg("\nResults:")
+        msg(f"  {len(self.parsed)} input link(s)")
+        msg(f"  {self.find_dupes()} duplicates")
+        msg(f"  {len(self.parsed)} output link(s)")
+
+        if opts.out_file:
+            with open(opts.out_file, "a") as f:
+                for link in self.parsed:
+                    print(link, file=f)
+            msg(f"\nParsed coubs written to '{opts.out_file}'!")
+            clean()
+            sys.exit(0)
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # Functions
@@ -280,7 +360,7 @@ def err(*args, **kwargs):
 
 def msg(*args, **kwargs):
     """Print to stdout based on verbosity level"""
-    if options.verbosity >= 1:
+    if opts.verbosity >= 1:
         print(*args, **kwargs)
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -288,17 +368,19 @@ def msg(*args, **kwargs):
 def usage():
     """Print help text"""
 
-    print(
-'''CoubDownloader is a simple download script for coub.com
+    print(f"""CoubDownloader is a simple download script for coub.com
 
-Usage: coub.py [OPTIONS] INPUT [INPUT]...
+Usage: {os.path.basename(sys.argv[0])} [OPTIONS] INPUT [INPUT]...
 
 Input:
   LINK                   download specified coubs
   -l, --list LIST        read coub links from a text file
-  -c, --channel CHANNEL  download all coubs from a channel
-  -t, --tag TAG          download all coubs with the specified tag
-  -e, --search TERM      download all search results for the given term
+  -c, --channel CHANNEL  download coubs from a channel
+  -t, --tag TAG          download coubs with the specified tag
+  -e, --search TERM      download search results for the given term
+  --hot                  download coubs from the 'Hot' section
+  --category CATEGORY    download coubs from a certain category
+                         '--category help' for all supported values
 
 Common options:
   -h, --help             show this help
@@ -306,29 +388,32 @@ Common options:
   -y, --yes              answer all prompts with yes
   -n, --no               answer all prompts with no
   -s, --short            disable video looping
-  -p, --path PATH        set output destination (default: '.')
+  -p, --path PATH        set output destination (def: '{opts.path}')
   -k, --keep             keep the individual video/audio parts
-  -r, --repeat N         repeat video N times (default: until audio ends)
+  -r, --repeat N         repeat video N times (def: until audio ends)
   -d, --duration TIME    specify max. coub duration (FFmpeg syntax)
 
 Download options:
   --sleep TIME           pause the script for TIME seconds before each download
   --limit-num LIMIT      limit max. number of downloaded coubs
-  --sort ORDER           specify download order for channels/tags
-                         Allowed values:
-                           newest (default)      likes_count
-                           newest_popular        views_count
-                           oldest (tags/search only)
+  --sort ORDER           specify download order for channels, tags, etc.
+                         '--sort help' for all supported values
 
 Format selection:
-  --bestvideo            Download best available video quality (default)
+  --bestvideo            Download best available video quality (def)
   --worstvideo           Download worst available video quality
-  --bestaudio            Download best available audio quality (default)
+  --max-video FORMAT     Set limit for the best video format (def: '{opts.v_max}')
+                         Supported values: med, high, higher
+  --min-video FORMAT     Set limit for the worst video format (def: '{opts.v_min}')
+                         Supported values: see '--max-video'
+  --bestaudio            Download best available audio quality (def)
   --worstaudio           Download worst available audio quality
-  --mobile               Download mobile video quality (no watermark, 360p)
+  --aac                  Prefer AAC over higher quality MP3 audio
+  --aac-strict           Only download AAC audio (never MP3)
+  --share                Download 'share' video (shorter and includes audio)
 
 Channel options:
-  --recoubs              include recoubs during channel downloads (default)
+  --recoubs              include recoubs during channel downloads (def)
   --no-recoubs           exclude recoubs during channel downloads
   --only-recoubs         only download recoubs during channel downloads
 
@@ -343,7 +428,7 @@ Misc. options:
   --use-archive FILE     use FILE to keep track of already downloaded coubs
 
 Output:
-  -o, --output FORMAT    save output with the specified name (default: %id%)
+  -o, --output FORMAT    save output with the specified name (def: %id%)
 
     Special strings:
       %id%        - coub ID (identifier in the URL)
@@ -351,15 +436,63 @@ Output:
       %creation%  - creation date/time
       %category%  - coub category
       %channel%   - channel title
-      %tags%      - all tags (separated by '_')
+      %tags%      - all tags (separated by '{opts.tag_sep}')
 
     Other strings will be interpreted literally.
-    This option has no influence on the file extension.'''
-    )
+    This option has no influence on the file extension.""")
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-def check_requirements():
+def usage_sort():
+    """Print supported values for --sort"""
+
+    print("""Supported sort values:
+
+Channels:
+  likes_count, views_count, newest_popular
+Tags:
+  likes_count, views_count, newest_popular, oldest
+Searches:
+  likes_count, views_count, newest_popular, oldest, newest
+Hot section:
+  likes_count, views_count, newest_popular, oldest
+Categories:
+  likes_count, views_count, newest_popular""")
+
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+def usage_category():
+    """Print supported values for --category"""
+
+    print("""Supported categories:
+
+Communities:
+  animals-pets
+  anime
+  art
+  cars
+  cartoons
+  celebrity
+  dance
+  fashion
+  gaming
+  mashup
+  movies
+  music
+  nature-travel
+  news
+  nsfw
+  science-technology
+  sports
+
+Special categories:
+  newest
+  random
+  coub_of_the_day""")
+
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+def check_prereq():
     """check existence of required software"""
 
     try:
@@ -367,223 +500,299 @@ def check_requirements():
                                    stderr=subprocess.DEVNULL)
     except FileNotFoundError:
         err("Error: FFmpeg not found!")
-        sys.exit(missing_dep)
+        sys.exit(err_stat['dep'])
+
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+def parse_cli():
+    """Parse command line"""
+    global opts, coubs
+
+    if not sys.argv[1:]:
+        usage()
+        sys.exit(0)
+
+    with_arg = [
+        "-l", "--list",
+        "-c", "--channel",
+        "-t", "--tag",
+        "-e", "--search",
+        "--category",
+        "-p", "--path",
+        "-r", "--repeat",
+        "-d", "--duration",
+        "--sleep",
+        "--limit-num",
+        "--sort",
+        "--max-video",
+        "--min-video",
+        "--preview",
+        "--write-list",
+        "--use-archive",
+        "-o", "--output"
+    ]
+
+    pos = 1
+    while pos < len(sys.argv):
+        opt = sys.argv[pos]
+        if opt in with_arg:
+            try:
+                arg = sys.argv[pos+1]
+            except IndexError:
+                err(f"Missing value for '{opt}'!")
+                sys.exit(err_stat['opt'])
+
+            pos += 2
+        else:
+            pos += 1
+
+        try:
+            # Input
+            if fnmatch(opt, "*coub.com/view/*"):
+                coubs.links.append(opt.strip("/"))
+            elif opt in ("-l", "--list"):
+                if os.path.exists(arg):
+                    coubs.lists.append(os.path.abspath(arg))
+                else:
+                    err(f"'{arg}' is not a valid list!")
+            elif opt in ("-c", "--channel"):
+                coubs.channels.append(arg.strip("/"))
+            elif opt in ("-t", "--tag"):
+                coubs.tags.append(arg.strip("/"))
+            elif opt in ("-e", "--search"):
+                coubs.searches.append(arg.strip("/"))
+            elif opt in ("--hot",):
+                coubs.hot = True
+            elif opt in ("--category",):
+                if arg == "help":
+                    usage_category()
+                    sys.exit(0)
+                elif coubs.check_category(arg.strip("/")):
+                    coubs.categories.append(arg.strip("/"))
+                else:
+                    err(f"'{arg}' is not a valid category!")
+            # Common options
+            elif opt in ("-h", "--help"):
+                usage()
+                sys.exit(0)
+            elif opt in ("-q", "--quiet"):
+                opts.verbosity = 0
+            elif opt in ("-y", "--yes"):
+                opts.prompt_answer = "yes"
+            elif opt in ("-n", "--no"):
+                opts.prompt_answer = "no"
+            elif opt in ("-s", "--short"):
+                opts.repeat = 1
+            elif opt in ("-p", "--path"):
+                opts.path = arg
+            elif opt in ("-k", "--keep"):
+                opts.keep = True
+            elif opt in ("-r", "--repeat"):
+                opts.repeat = int(arg)
+            elif opt in ("-d", "--duration"):
+                opts.dur = arg
+            # Download options
+            elif opt in ("--sleep",):
+                opts.sleep_dur = float(arg)
+            elif opt in ("--limit-num",):
+                opts.max_coubs = int(arg)
+            elif opt in ("--sort",):
+                if arg == "help":
+                    usage_sort()
+                    sys.exit(0)
+                else:
+                    opts.sort = arg
+            # Format selection
+            elif opt in ("--bestvideo",):
+                opts.v_quality = -1
+            elif opt in ("--worstvideo",):
+                opts.v_quality = 0
+            elif opt in ("--max-video",):
+                opts.v_max = arg
+            elif opt in ("--min-video",):
+                opts.v_min = arg
+            elif opt in ("--bestaudio",):
+                opts.a_quality = -1
+            elif opt in ("--worstaudio",):
+                opts.a_quality = 0
+            elif opt in ("--aac",):
+                opts.aac = 2
+            elif opt in ("--aac-strict",):
+                opts.aac = 3
+            elif opt in ("--share",):
+                opts.share = True
+            # Channel options
+            elif opt in ("--recoubs",):
+                opts.recoubs = True
+            elif opt in ("--no-recoubs",):
+                opts.recoubs = False
+            elif opt in ("--only-recoubs",):
+                opts.only_recoubs = True
+            # Preview options
+            elif opt in ("--preview",):
+                opts.preview = True
+                opts.preview_command = arg
+            elif opt in ("--no-preview",):
+                opts.preview = False
+            # Misc options
+            elif opt in ("--audio-only",):
+                opts.a_only = True
+            elif opt in ("--video-only",):
+                opts.v_only = True
+            elif opt in ("--write-list",):
+                opts.out_file = os.path.abspath(arg)
+            elif opt in ("--use-archive",):
+                opts.archive_file = os.path.abspath(arg)
+            # Output
+            elif opt in ("-o", "--output"):
+                opts.out_format = arg
+            # Unknown options
+            elif fnmatch(opt, "-*"):
+                err(f"Unknown flag '{opt}'!")
+                err(f"Try '{os.path.basename(sys.argv[0])} --help' for more information.")
+                sys.exit(err_stat['opt'])
+            else:
+                err(f"'{opt}' is neither an option nor a coub link!")
+                err(f"Try '{os.path.basename(sys.argv[0])} --help' for more information.")
+                sys.exit(err_stat['opt'])
+        except ValueError:
+            err(f"Invalid {opt} ('{arg}')!")
+            sys.exit(err_stat['opt'])
+
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+def check_options():
+    """Check validity of command line options"""
+
+    if opts.repeat <= 0:
+        err("-r/--repeat must be greater than 0!")
+        sys.exit(err_stat['opt'])
+    elif opts.max_coubs and opts.max_coubs <= 0:
+        err("--limit-num must be greater than zero!")
+        sys.exit(err_stat['opt'])
+
+    if opts.dur:
+        command = ["ffmpeg", "-v", "quiet",
+                   "-f", "lavfi", "-i", "anullsrc",
+                   "-t", opts.dur, "-c", "copy",
+                   "-f", "null", "-"]
+        try:
+            subprocess.check_call(command)
+        except subprocess.CalledProcessError:
+            err("Invalid duration! For the supported syntax see:")
+            err("https://ffmpeg.org/ffmpeg-utils.html#time-duration-syntax")
+            sys.exit(err_stat['opt'])
+
+    if opts.a_only and opts.v_only:
+        err("--audio-only and --video-only are mutually exclusive!")
+        sys.exit(err_stat['opt'])
+    elif not opts.recoubs and opts.only_recoubs:
+        err("--no-recoubs and --only-recoubs are mutually exclusive!")
+        sys.exit(err_stat['opt'])
+    elif opts.share and (opts.v_only or opts.a_only):
+        err("--share and --video-/audio-only are mutually exclusive!")
+        sys.exit(err_stat['opt'])
+
+    v_formats = {
+        'med': 0,
+        'high': 1,
+        'higher': 2
+    }
+    if opts.v_max not in v_formats:
+        err(f"Invalid value for --max-video ('{opts.v_max}')!")
+        sys.exit(err_stat['opt'])
+    elif opts.v_min not in v_formats:
+        err(f"Invalid value for --min-video ('{opts.v_min}')!")
+        sys.exit(err_stat['opt'])
+    elif v_formats[opts.v_min] > v_formats[opts.v_max]:
+        err("Quality of --min-quality greater than --max-quality!")
+        sys.exit(err_stat['opt'])
+
+    # Not really necessary to check as invalid values get ignored anyway
+    # But it also catches typos, so keep it for now
+    allowed_sort = [
+        "likes_count",
+        "views_count",
+        "newest_popular",
+        "oldest",
+        "newest"
+    ]
+    if opts.sort and opts.sort not in allowed_sort:
+        err(f"Invalid sort order ('{opts.sort}')!\n")
+        usage_sort()
+        sys.exit(err_stat['opt'])
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 def resolve_paths():
     """Handle output path"""
 
-    if not os.path.exists(options.save_path):
-        os.mkdir(options.save_path)
-    os.chdir(options.save_path)
+    if not os.path.exists(opts.path):
+        os.mkdir(opts.path)
+    os.chdir(opts.path)
 
-    if os.path.exists(options.concat_list):
-        err("Error: Reserved filename ('", options.concat_list, "') " \
-            "exists in '", options.save_path, "'!", sep="")
-        sys.exit(err_runtime)
-
-# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-def parse_input_links():
-    """Parse direct input links from the command line"""
-
-    for link in options.input_links:
-        if hasattr(options, "max_coubs") and \
-           len(coub_list) >= options.max_coubs:
-            break
-        coub_list.append(link)
-
-    if options.input_links:
-        msg("Reading command line:")
-        msg("  ", len(options.input_links), " link(s) found", sep="")
+    if os.path.exists(opts.concat_list):
+        err(f"Error: Reserved filename ('{opts.concat_list}') exists in '{opts.path}'!")
+        sys.exit(err_stat['run'])
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-def parse_input_list(in_list):
-    """Parse coub links from input lists"""
-
-    msg("Reading input list (", in_list, "):", sep="")
-
-    with open(in_list, "r") as f:
-        link_list = f.read()
-
-    # Replace tabs and spaces with newlines
-    # Emulates default wordsplitting in Bash
-    link_list = link_list.replace("\t", "\n")
-    link_list = link_list.replace(" ", "\n")
-    link_list = link_list.splitlines()
-
-    for link in link_list:
-        if hasattr(options, "max_coubs") and \
-           len(coub_list) >= options.max_coubs:
-            break
-        coub_list.append(link)
-
-    msg("  ", len(link_list), " link(s) found", sep="")
-
-# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-def parse_input_timeline(url_type, url):
-    """
-    Parse coub links from various Coub source
-
-    Currently supports
-    -) channels
-    -) tags
-    -) coub searches
-    """
-
-    if url_type == "channel":
-        channel_id = url.split("/")[-1]
-        api_call = "https://coub.com/api/v2/timeline/channel/" + channel_id
-        api_call += "?"
-    elif url_type == "tag":
-        tag_id = url.split("/")[-1]
-        tag_id = urllib.parse.quote(tag_id)
-        api_call = "https://coub.com/api/v2/timeline/tag/" + tag_id
-        api_call += "?"
-    elif url_type == "search":
-        search_term = url.split("=")[-1]
-        search_term = urllib.parse.quote(search_term)
-        api_call = "https://coub.com/api/v2/search/coubs?q=" + search_term
-        api_call += "&"
-    else:
-        err("Error: Unknown input type in parse_input_timeline!")
-        clean()
-        sys.exit(err_runtime)
-
-    api_call += "per_page=" + str(options.entries_per_page)
-
-    if options.sort_order == "oldest" and url_type in ("tag", "search"):
-        api_call += "&order_by=oldest"
-    # Don't do anything for newest (as it's the default)
-    # check_options already got rid of invalid values
-    elif options.sort_order != "newest":
-        api_call += "&order_by=" + options.sort_order
-
-    page_json = urllib.request.urlopen(api_call).read()
-    page_json = json.loads(page_json)
-
-    total_pages = page_json['total_pages']
-
-    msg("Downloading ", url_type, " info (", url, "):", sep="")
-
-    for page in range(1, total_pages+1):
-        # tag timeline redirects pages >99 to page 1
-        # channel timelines work like intended
-        if url_type == "tag" and page > options.page_limit:
-            msg("  Max. page limit reached!")
-            return
-
-        msg("  ", page, " out of ", total_pages, " pages", sep="")
-        page_json = urllib.request.urlopen(api_call + "&page=" + str(page)).read()
-        page_json = json.loads(page_json)
-
-        for entry in range(options.entries_per_page):
-            if hasattr(options, "max_coubs") and \
-               len(coub_list) >= options.max_coubs:
-                return
-
-            try:
-                coub_id = page_json['coubs'][entry]['recoub_to']['permalink']
-                if not options.recoubs:
-                    continue
-                coub_list.append("https://coub.com/view/" + coub_id)
-            except (TypeError, KeyError, IndexError):
-                if options.only_recoubs:
-                    continue
-                try:
-                    coub_id = page_json['coubs'][entry]['permalink']
-                    coub_list.append("https://coub.com/view/" + coub_id)
-                except (TypeError, KeyError, IndexError):
-                    continue
-
-
-# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-def parse_input():
-    """Parse coub links from all available sources"""
-
-    parse_input_links()
-    for in_list in options.input_lists:
-        parse_input_list(in_list)
-    for channel in options.input_channels:
-        parse_input_timeline("channel", channel)
-    for tag in options.input_tags:
-        parse_input_timeline("tag", tag)
-    for search in options.input_searches:
-        parse_input_timeline("search", search)
-
-    if not coub_list:
-        err("Error: No coub links specified!")
-        clean()
-        sys.exit(err_option)
-
-    if hasattr(options, "max_coubs") and \
-       len(coub_list) >= options.max_coubs:
-        msg("\nDownload limit (", options.max_coubs, ") reached!", sep="")
-
-    if hasattr(options, "out_file"):
-        with open(options.out_file, "w") as f:
-            for link in coub_list:
-                print(link, file=f)
-        msg("\nParsed coubs written to '", options.out_file, "'!", sep="")
-        clean()
-        sys.exit(0)
-
-# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-def get_out_name(coub_json, coub_id):
+def get_name(req_json, c_id):
     """Decide filename for output file"""
 
-    if not hasattr(options, "out_format"):
-        return coub_id
+    if not opts.out_format:
+        return c_id
 
-    out_name = options.out_format
+    name = opts.out_format
 
-    out_name = out_name.replace("%id%", coub_id)
-    out_name = out_name.replace("%title%", coub_json['title'])
-    out_name = out_name.replace("%creation%", coub_json['created_at'])
-    out_name = out_name.replace("%channel%", coub_json['channel']['title'])
+    name = name.replace("%id%", c_id)
+    name = name.replace("%title%", req_json['title'])
+    name = name.replace("%creation%", req_json['created_at'])
+    name = name.replace("%channel%", req_json['channel']['title'])
     # Coubs don't necessarily have a category
     try:
-        out_name = out_name.replace("%category%", coub_json['categories'][0]['permalink'])
-    except (KeyError, TypeError):
-        out_name = out_name.replace("%category%", "")
+        name = name.replace("%category%", req_json['categories'][0]['permalink'])
+    except (KeyError, TypeError, IndexError):
+        name = name.replace("%category%", "")
 
     tags = ""
-    for tag in coub_json['tags']:
-        tags += tag['title'] + options.tag_separator
-    out_name = out_name.replace("%tags%", tags)
+    for t in req_json['tags']:
+        tags += t['title'] + opts.tag_sep
+    name = name.replace("%tags%", tags)
 
     # Strip/replace special characters that can lead to script failure (ffmpeg concat)
     # ' common among coub titles
     # Newlines can be occasionally found as well
-    out_name = out_name.replace("'", "")
-    out_name = out_name.replace("\n", " ")
+    name = name.replace("'", "")
+    name = name.replace("\n", " ")
 
     try:
-        f = open(out_name, "w")
+        f = open(name, "w")
         f.close()
-        os.remove(out_name)
+        os.remove(name)
     except OSError:
-        err("Error: Filename invalid or too long! ", end="")
-        err("Falling back to '", coub_id, "'.", sep="")
-        out_name = coub_id
+        err(f"Error: Filename invalid or too long! Falling back to '{c_id}'")
+        name = c_id
 
-    return out_name
+    return name
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-def existence(name):
+def exists(name):
     """Check if a coub with given name already exists"""
 
-    if (os.path.exists(name + ".mkv") \
-            and not options.a_only and not options.v_only) or \
-       (os.path.exists(name + ".mp4") and options.v_only) or \
-       (os.path.exists(name + ".mp3") and options.a_only):
-        return True
+    if opts.v_only:
+        full_name = [name + ".mp4"]
+    elif opts.a_only:
+        # exists() gets possibly called before the API request
+        # to be safe check for both possible audio extensions
+        full_name = [name + ".mp3", name + ".m4a"]
+    else:
+        full_name = [name + ".mkv"]
+
+    for f in full_name:
+        if os.path.exists(f):
+            return True
 
     return False
 
@@ -592,11 +801,11 @@ def existence(name):
 def overwrite():
     """Decide if existing coub should be overwritten"""
 
-    if options.prompt_answer == "yes":
+    if opts.prompt_answer == "yes":
         return True
-    elif options.prompt_answer == "no":
+    elif opts.prompt_answer == "no":
         return False
-    elif options.prompt_answer == "prompt":
+    elif opts.prompt_answer == "prompt":
         print("Overwrite file?")
         print("1) yes")
         print("2) no")
@@ -609,156 +818,208 @@ def overwrite():
     else:
         err("Unknown prompt_answer in overwrite!")
         clean()
-        sys.exit(err_runtime)
+        sys.exit(err_stat['run'])
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-def use_archive(action, coub_id):
-    """
-    Handles all actions regarding archive usage
+def read_archive(c_id):
+    """Check archive file for coub ID"""
 
-    Supported actions:
-    -) read
-    -) write
-    """
-
-    if action == "read":
-        if not os.path.exists(options.archive_file):
-            return False
-        with open(options.archive_file, "r") as f:
-            archive = f.readlines()
-        for line in archive:
-            if line == coub_id + "\n":
-                return True
+    if not os.path.exists(opts.archive_file):
         return False
-    elif action == "write":
-        with open(options.archive_file, "a") as f:
-            print(coub_id, file=f)
-    else:
-        err("Error: Unknown action in use_archive!")
-        clean()
-        sys.exit(err_runtime)
+
+    with open(opts.archive_file, "r") as f:
+        content = f.readlines()
+    for l in content:
+        if l == c_id + "\n":
+            return True
+
+    return False
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-def parse_mobile_url(base64_url):
-    """Decrypt and decode the URL of mobile video streams"""
-    enc_list = list(base64_url)
-    dec_list = []
+def write_archive(c_id):
+    """Output coub ID to archive file"""
 
-    # The following steps are derived from Coub's own JS code
-    # flipped = _.reduce(str, function(res, c) {
-    #   var lower;
-    #   lower = c.toLowerCase();
-    #   return res + (c === lower ? c.toUpperCase() : lower);
-    # }, "");
-    # return window.atob(flipped);
-
-    for c in enc_list:
-        if c == c.lower():
-            dec_list.append(c.upper())
-        else:
-            dec_list.append(c.lower())
-
-    mobile_url = base64.b64decode(''.join(dec_list)).decode()
-    return mobile_url
+    with open(opts.archive_file, "a") as f:
+        print(c_id, file=f)
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-def download(data, name):
-    """Download individual video/audio streams of a coub"""
+def stream_lists(data):
+    """Collect available video/audio streams of a coub"""
+
+    # A few words (or maybe more) regarding Coub's streams:
+    #
+    # 'html5' has 3 video and 2 audio qualities
+    #     video: med    (~360p)
+    #            high   (~720p)
+    #            higher (~900p)
+    #     audio: med    (MP3@128Kbps CBR)
+    #            high   (MP3@160Kbps VBR)
+    #
+    # 'mobile' has 1 video and 2 audio qualities
+    #     video: video  (~360p)
+    #     audio: 0      (AAC@128Kbps CBR or MP3@128Kbps CBR)
+    #            1      (MP3@128Kbps CBR)
+    #
+    # 'share' has 1 quality (audio+video)
+    #     video+audio: default (~720p, sometimes ~360p + AAC@128Kbps CBR)
+    #
+    # -) all videos come with a watermark
+    # -) html5 video/audio and mobile audio may come in less available qualities
+    # -) html5 video med and mobile video are the same file
+    # -) html5 audio med and the worst mobile audio are the same file
+    # -) mobile audio 0 is always the best mobile audio
+    # -) often only mobile audio 0 is available as MP3 (no mobile audio 1)
+    # -) share video has the same quality as mobile video
+    # -) share audio is always AAC, even if mobile audio is only available as MP3
+    # -) share audio is often shorter than other audio versions
+    # -) videos come as MP4, MP3 audio as MP3 and AAC audio as M4A.
+    #
+    # All the aforementioned information regards the new Coub storage system (after the watermark introduction).
+    # Also Coub is still catching up with encoding, so not every stream existence is yet guaranteed.
+    #
+    # Streams that may still be unavailable:
+    #   -) share
+    #   -) mobile video with direct URL (not the old base64 format)
+    #   -) mobile audio in AAC
+    #   -) html5 video higher
+    #   -) html5 video med/high in a non-broken state (don't require \x00\x00 fix)
+    #
+    # There are no universal rules in which order new streams get added.
+    # Sometimes you find videos with non-broken html5 streams, but the old base64 mobile URL.
+    # Sometimes you find videos without html5 higher, but with the new mobile video.
+    # Sometimes only html5 video med is still broken.
+    #
+    # It's a mess. Also release an up-to-date API documentations, you dolts!
 
     video = []
     audio = []
-    v_size = 0
-    a_size = 0
 
-    for quality in ["low", "med", "high", "higher"]:
+    # Special treatment for shared video
+    if opts.share:
         try:
-            v_size = data['file_versions']['html5']['video'][quality]['size']
+            version = data['file_versions']['share']['default']
+            # Non-existence should result in None
+            # Unfortunately there are exceptions to this rule (e.g. '{}')
+            if not version or version in ("{}",):
+                raise KeyError
         except KeyError:
-            v_size = 0
+            return ([], [])
+        return ([version], [])
+
+    # Video stream parsing
+    v_formats = {
+        'med': 0,
+        'high': 1,
+        'higher': 2
+    }
+
+    v_max = v_formats[opts.v_max]
+    v_min = v_formats[opts.v_min]
+
+    for vq in v_formats:
+        if v_min <= v_formats[vq] <= v_max:
+            try:
+                version = data['file_versions']['html5']['video'][vq]
+            except KeyError:
+                continue
+
+            # v_size/a_size can be 0 OR None in case of a missing stream
+            # None is the exception and an irregularity in the Coub API
+            if version['size']:
+                video.append(version['url'])
+
+    # Audio streams parsing
+    if opts.aac >= 2:
+        a_combo = [("html5", "med"), ("html5", "high"), ("mobile", 0)]
+    else:
+        a_combo = [("html5", "med"), ("mobile", 0), ("html5", "high")]
+
+    for form, aq in a_combo:
         try:
-            a_size = data['file_versions']['html5']['audio'][quality]['size']
+            version = data['file_versions'][form]['audio'][aq]
         except KeyError:
-            a_size = 0
+            continue
 
-        # v_size/a_size can be 0 OR None in case of a missing stream
-        # None is the exception and an irregularity in the Coub API
-        if v_size:
-            video.append(data['file_versions']['html5']['video'][quality]['url'])
-        if a_size:
-            audio.append(data['file_versions']['html5']['audio'][quality]['url'])
+        if form == "mobile":
+            # Mobile audio doesn't list size
+            # So just pray that the file behind the link exists
+            if opts.aac:
+                audio.append(version)
+        else:
+            if version['size'] and opts.aac < 3:
+                audio.append(version['url'])
 
-    if options.mobile:
+    return (video, audio)
+
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+def download(v_link, a_link, a_ext, name):
+    """Download individual coub streams"""
+
+    if not opts.a_only:
         try:
-            gifv_api = data['file_versions']['mobile']['gifv']
-            gifv_url = parse_mobile_url(gifv_api)
-            video = [gifv_url]
-        except KeyError:
-            err("New API response detected!")
-            err("Falling back to html5 streams...")
-
-    if not options.a_only:
-        try:
-            urllib.request.urlretrieve(video[options.v_quality], name + ".mp4")
+            urlretrieve(v_link, name + ".mp4")
         except (IndexError, urllib.error.HTTPError):
             err("Error: Coub unavailable!")
             raise
 
-    if not options.v_only:
+    if not opts.v_only and a_link:
         try:
-            urllib.request.urlretrieve(audio[options.a_quality], name + ".mp3")
+            urlretrieve(a_link, name + "." + a_ext)
         except (IndexError, urllib.error.HTTPError):
-            if options.a_only:
+            if opts.a_only:
                 err("Error: Audio or coub unavailable!")
                 raise
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-def merge(name):
+def merge(a_ext, name):
     """Merge video/audio stream with ffmpeg and loop video"""
 
     # Print .txt for ffmpeg's concat
-    with open(options.concat_list, "w") as f:
-        for i in range(options.repeat):
+    with open(opts.concat_list, "w") as f:
+        for i in range(opts.repeat):
             print("file '" + name + ".mp4'", file=f)
 
     # Loop footage until shortest stream ends
     # Concatenated video (via list) counts as one long stream
     command = ["ffmpeg", "-y", "-v", "error",
                "-f", "concat", "-safe", "0",
-               "-i", options.concat_list, "-i", name + ".mp3"]
+               "-i", opts.concat_list, "-i", name + "." + a_ext]
 
-    if hasattr(options, "duration"):
-        command.extend(["-t", options.duration])
+    if opts.dur:
+        command.extend(["-t", opts.dur])
 
     command.extend(["-c", "copy", "-shortest", name + ".mkv"])
 
     subprocess.run(command)
 
-    if not options.keep:
+    if not opts.keep:
         os.remove(name + ".mp4")
-        os.remove(name + ".mp3")
+        os.remove(name + "." + a_ext)
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-def show_preview(name):
+def show_preview(a_ext, name):
     """Play finished coub with the given command"""
 
     # For normal downloads .mkv, unless error downloading audio
     if os.path.exists(name + ".mkv"):
-        extension = ".mkv"
+        ext = ".mkv"
     else:
-        extension = ".mp4"
-    if options.a_only:
-        extension = ".mp3"
-    if options.v_only:
-        extension = ".mp4"
+        ext = ".mp4"
+    if opts.a_only:
+        ext = "." + a_ext
+    if opts.v_only:
+        ext = ".mp4"
 
     try:
-        command = options.preview_command.split(" ")
-        command.append(name + extension)
+        # Need to split command string into list for check_call
+        command = opts.preview_command.split(" ")
+        command.append(name + ext)
         subprocess.check_call(command, stdout=subprocess.DEVNULL, \
                                        stderr=subprocess.DEVNULL)
     except subprocess.CalledProcessError:
@@ -770,8 +1031,8 @@ def show_preview(name):
 def clean():
     """Clean workspace"""
 
-    if os.path.exists(options.concat_list):
-        os.remove(options.concat_list)
+    if os.path.exists(opts.concat_list):
+        os.remove(opts.concat_list)
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # Main Function
@@ -779,85 +1040,91 @@ def clean():
 
 def main():
     """Main function body"""
-    global options
 
-    check_requirements()
-
-    options = Options_Assembler()
-    options.parse_options()
-    options.check_options()
-
+    check_prereq()
+    parse_cli()
+    check_options()
     resolve_paths()
 
     msg("\n### Parse Input ###\n")
-    parse_input()
+    coubs.parse_input()
 
     msg("\n### Download Coubs ###\n")
-    counter = 0
-    downloads = 0
-    for coub in coub_list:
-        counter += 1
-        msg("  ", counter, " out of ", len(coub_list), " (", coub, ")", sep="")
+    count = 0
+    done = 0
+    for c in coubs.parsed:
+        count += 1
+        msg(f"  {count} out of {len(coubs.parsed)} ({c})")
 
-        coub_id = coub.split("/")[-1]
+        c_id = c.split("/")[-1]
 
         # Pass existing files to avoid unnecessary downloads
         # This check handles archive file search and default output formatting
         # Avoids json request (slow!) just to skip files anyway
-        if (hasattr(options, "archive_file") and use_archive("read", coub_id)) or \
-           (not hasattr(options, "out_format") \
-                and existence(coub_id) and not overwrite()):
+        if (opts.archive_file and read_archive(c_id)) or \
+           (not opts.out_format and exists(c_id) and not overwrite()):
             msg("Already downloaded!")
             clean()
             continue
 
-        api_call = "https://coub.com/api/v2/coubs/" + coub_id
+        req = "https://coub.com/api/v2/coubs/" + c_id
         try:
-            coub_json = urllib.request.urlopen(api_call).read()
+            req_json = urlopen(req).read()
         except urllib.error.HTTPError:
             err("Error: Coub unavailable!")
             continue
-        coub_json = json.loads(coub_json)
+        req_json = json.loads(req_json)
 
-        out_name = get_out_name(coub_json, coub_id)
+        name = get_name(req_json, c_id)
+
+        # Get link list and assign final download URL
+        v_list, a_list = stream_lists(req_json)
+        try:
+            v_link = v_list[opts.v_quality]
+        except IndexError:
+            err("Error: Coub unavailable!")
+            continue
+        try:
+            a_link = a_list[opts.a_quality]
+            # Audio can be MP3 (.mp3) or AAC (.m4a)
+            a_ext = a_link.split(".")[-1]
+        except IndexError:
+            if opts.a_only:
+                err("Error: Audio or coub unavailable!")
+                continue
+            a_link = None
+            a_ext = None
 
         # Another check for custom output formatting
         # Far slower to skip existing files (archive usage is recommended)
-        if hasattr(options, "out_format") and existence(out_name) and not overwrite():
+        if opts.out_format and exists(name) and not overwrite():
             msg("Already downloaded!")
             clean()
-            downloads += 1
+            done += 1
             continue
 
-        if hasattr(options, "sleep_dur") and counter > 1:
-            time.sleep(options.sleep_dur)
+        if opts.sleep_dur and count > 1:
+            time.sleep(opts.sleep_dur)
+
         # Download video/audio streams
         # Skip if the requested media couldn't be downloaded
         try:
-            download(coub_json, out_name)
+            download(v_link, a_link, a_ext, name)
         except (IndexError, urllib.error.HTTPError):
             continue
 
-        # Fix broken video stream
-        if not options.a_only:
-            with open(out_name + ".mp4", "r+b") as f:
-                temp = f.read()
-            with open(out_name + ".mp4", "w+b") as f:
-                f.write(b'\x00\x00' + temp[2:])
-
         # Merge video and audio
-        if not options.v_only and not options.a_only and \
-           os.path.exists(out_name + ".mp3"):
-            merge(out_name)
+        if not opts.v_only and not opts.a_only and a_link:
+            merge(a_ext, name)
 
         # Write downloaded coub to archive
-        if hasattr(options, "archive_file"):
-            use_archive("write", coub_id)
+        if opts.archive_file:
+            write_archive(c_id)
 
         # Preview downloaded coub
-        if options.preview:
+        if opts.preview:
             try:
-                show_preview(out_name)
+                show_preview(a_ext, name)
             except subprocess.CalledProcessError:
                 pass
 
@@ -865,22 +1132,23 @@ def main():
         clean()
 
         # Record successful download
-        downloads += 1
+        done += 1
 
     msg("\n### Finished ###\n")
 
-    # Indicate failure, if not all input coubs exist after execution
-    if downloads < counter:
-        sys.exit(err_download)
+    # Indicate failure if not all input coubs exist after execution
+    if done < count:
+        sys.exit(err_stat['down'])
 
 # Execute main function
-if len(sys.argv) == 1:
-    usage()
+if __name__ == '__main__':
+    opts = Options()
+    coubs = CoubInputData()
+
+    try:
+        main()
+    except KeyboardInterrupt:
+        err("User Interrupt!")
+        clean()
+        sys.exit(err_stat['int'])
     sys.exit(0)
-try:
-    main()
-except KeyboardInterrupt:
-    err("User Interrupt!")
-    clean()
-    sys.exit(user_interrupt)
-sys.exit(0)
