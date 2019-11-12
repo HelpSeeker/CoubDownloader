@@ -1039,11 +1039,12 @@ def show_preview(a_ext, name):
 
 def download_coub(c):
     """Encompasses the whole download process for a single coub"""
+    global count, done
     lock = threading.Lock()
 
     with lock:
-        #count += 1
-        #msg(f"  {count} out of {len(coubs.parsed)} ({c})")
+        count += 1
+        msg(f"  {count} out of {len(coubs.parsed)} ({c})")
 
         c_id = c.split("/")[-1]
 
@@ -1087,7 +1088,7 @@ def download_coub(c):
         # Far slower to skip existing files (archive usage is recommended)
         if opts.out_format and exists(name) and not overwrite():
             msg("Already downloaded!")
-            #done += 1
+            done += 1
             return
 
         if opts.sleep_dur: # and count > 1:
@@ -1117,7 +1118,7 @@ def download_coub(c):
                 pass
 
         # Record successful download
-        # done += 1
+        done += 1
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # Main Function
@@ -1135,8 +1136,6 @@ def main():
     coubs.parse_input()
 
     msg("\n### Download Coubs ###\n")
-    count = 0
-    done = 0
 
     with ThreadPoolExecutor(max_workers=opts.connect) as executor:
         executor.map(download_coub, coubs.parsed)
@@ -1151,6 +1150,8 @@ def main():
 if __name__ == '__main__':
     opts = Options()
     coubs = CoubInputData()
+    count = 0
+    done = 0
 
     try:
         main()
