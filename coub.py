@@ -415,9 +415,6 @@ class CoubBuffer():
                 del self.coubs[i]
                 continue
 
-            self.coubs[i]['v_link'] = None
-            self.coubs[i]['a_link'] = None
-
             v_list, a_list = stream_lists(resp_json)
             try:
                 self.coubs[i]['v_link'] = v_list[opts.v_quality]
@@ -429,20 +426,22 @@ class CoubBuffer():
             try:
                 self.coubs[i]['a_link'] = a_list[opts.a_quality]
             except IndexError:
+                self.coubs[i]['a_link'] = None
                 if opts.a_only:
                     err("Error: Audio or coub unavailable!")
                     del self.coubs[i]
                     continue
 
-            self.coubs[i]['a_orig'] = None
-            self.coubs[i]['a_ext'] = None
-            self.coubs[i]['v_orig'] = os.path.basename(self.coubs[i]['v_link'])
-            self.coubs[i]['name'] = get_name(resp_json, self.coubs[i]['id'])
+            name = get_name(resp_json, self.coubs[i]['id'])
 
+            self.coubs[i]['name'] = name
+            self.coubs[i]['v_name'] = f"{name}.mp4"
             # Needs special treatment since audio link can be None
             if self.coubs[i]['a_link']:
-                self.coubs[i]['a_orig'] = os.path.basename(self.coubs[i]['a_link'])
-                self.coubs[i]['a_ext'] = self.coubs[i]['a_link'].split(".")[-1]
+                a_ext = self.coubs[i]['a_link'].split(".")[-1]
+                self.coubs[i]['a_name'] = f"{name}.{a_ext}"
+            else:
+                self.coubs[i]['a_name'] = None
 
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -461,25 +460,18 @@ class CoubBuffer():
 
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-    def rename_streams(self):
+    def check_streams(self):
         for i in range(len(self.coubs)-1, -1, -1):
             # Whether a download was successful gets tested here
             # If wanted stream is present -> success
             # I'm not happy with this solution
-            try:
-                os.replace(self.coubs[i]['v_orig'],
-                           f"{self.coubs[i]['name']}.mp4")
-            except FileNotFoundError:
+            if not opts.a_only and not os.path.exists(self.coubs[i]['v_name']):
                 err("Error: Coub unavailable!")
                 del self.coubs[i]
                 continue
 
-            try:
-                os.replace(self.coubs[i]['a_orig'],
-                           f"{self.coubs[i]['name']}.{self.coubs[i]['a_ext']}")
-            except (FileNotFoundError, TypeError):
-                self.coubs[i]['a_orig'] = None
-                self.coubs[i]['a_ext'] = None
+            if not opts.v_only and not os.path.exists(self.coubs[i]['a_name']):
+                self.coubs[i]['a_name'] = None
                 if opts.a_only:
                     err("Error: Audio or coub unavailable!")
                     del self.coubs[i]
@@ -490,20 +482,20 @@ class CoubBuffer():
     def merge(self):
         for c in self.coubs:
             try:
-                if not c['a_ext']:
+                if not c['a_name']:
                     continue
 
                 # Print .txt for ffmpeg's concat
                 with open(f"{c['name']}.txt", "w") as f:
                     for j in range(opts.repeat):
-                        print(f"file '{c['name']}.mp4'", file=f)
+                        print(f"file '{c['v_name']}'", file=f)
 
                 # Loop footage until shortest stream ends
                 # Concatenated video (via list) counts as one long stream
                 command = [
                     "ffmpeg", "-y", "-v", "error",
                     "-f", "concat", "-safe", "0",
-                    "-i", f"{c['name']}.txt", "-i", f"{c['name']}.{c['a_ext']}"
+                    "-i", f"{c['name']}.txt", "-i", f"{c['a_name']}"
                 ]
                 if opts.dur:
                     command.extend(["-t", opts.dur])
@@ -512,8 +504,8 @@ class CoubBuffer():
                 subprocess.run(command)
 
                 if not opts.keep:
-                    os.remove(f"{c['name']}.mp4")
-                    os.remove(f"{c['name']}.{c['a_ext']}")
+                    os.remove(f"{c['v_name']}")
+                    os.remove(f"{c['a_name']}")
             finally:
                 if os.path.exists(f"{c['name']}.txt"):
                     os.remove(f"{c['name']}.txt")
@@ -531,7 +523,7 @@ class CoubBuffer():
         """Preview all downloaded coubs in a batch"""
         for c in self.coubs:
             try:
-                show_preview(c['a_ext'], c['name'])
+                show_preview(c['a_name'].split(".")[-1], c['name'])
             except subprocess.CalledProcessError:
                 pass
 
@@ -555,7 +547,7 @@ class CoubBuffer():
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
     def postprocess(self):
-        self.rename_streams()
+        self.check_streams()
         if not opts.v_only and not opts.a_only:
             self.merge()
         if opts.archive_file:
@@ -568,14 +560,14 @@ class CoubBuffer():
 
     async def download(self):
         """Encompasses the whole download process for a single coub"""
-        video = [c['v_link'] for c in self.coubs]
-        audio = [c['a_link'] for c in self.coubs if c['a_link']]
+        video = [(c['v_link'], c['v_name']) for c in self.coubs]
+        audio = [(c['a_link'], c['a_name']) for c in self.coubs if c['a_link']]
         streams = video + audio
 
         tout = aiohttp.ClientTimeout(total=None)
         conn = aiohttp.TCPConnector(limit=opts.connect)
         async with aiohttp.ClientSession(timeout=tout, connector=conn) as session:
-            tasks = [(download_stream(session, s)) for s in streams]
+            tasks = [(download_stream(session, s[0], s[1])) for s in streams]
             await asyncio.gather(*tasks, return_exceptions=False)
 
         await asyncio.sleep(1)
@@ -1195,10 +1187,8 @@ def stream_lists(data):
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-async def download_stream(session, link):
+async def download_stream(session, link, path):
     """Download individual coub streams"""
-    path = os.path.basename(link)
-
     async with session.get(link) as response:
         with open(path, "wb") as f:
             while True:
