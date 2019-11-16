@@ -1250,7 +1250,14 @@ def main():
         batch = CoubBuffer()
         while len(batch.coubs) < batch_size:
             try:
-                batch.coubs.append({'id': coubs.parsed[0].split("/")[-1]})
+                batch.coubs.append({
+                    'id': coubs.parsed[0].split("/")[-1],
+                    'v_link': None,
+                    'a_link': None,
+                    'v_name': None,
+                    'a_name': None,
+                    'name': None
+                })
                 count += 1
                 del coubs.parsed[0]
             except IndexError:
