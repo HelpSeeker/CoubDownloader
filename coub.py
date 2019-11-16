@@ -462,15 +462,18 @@ class CoubBuffer():
 
     def check_streams(self):
         for i in range(len(self.coubs)-1, -1, -1):
+            v_name = self.coubs[i]['v_name']
+            a_name = self.coubs[i]['a_name']
+
             # Whether a download was successful gets tested here
             # If wanted stream is present -> success
             # I'm not happy with this solution
-            if not opts.a_only and not os.path.exists(self.coubs[i]['v_name']):
+            if not opts.a_only and not os.path.exists(v_name):
                 err("Error: Coub unavailable!")
                 del self.coubs[i]
                 continue
 
-            if not opts.v_only and not os.path.exists(self.coubs[i]['a_name']):
+            if not opts.v_only and a_name and not os.path.exists(a_name):
                 self.coubs[i]['a_name'] = None
                 if opts.a_only:
                     err("Error: Audio or coub unavailable!")
