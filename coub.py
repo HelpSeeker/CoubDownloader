@@ -156,6 +156,7 @@ class CoubInputData:
     hot = False
 
     parsed = []
+    count = 0
 
     def check_category(self, cat):
         """Make sure only valid categories get accepted"""
@@ -361,6 +362,11 @@ class CoubInputData:
             msg(f"\nParsed coubs written to '{opts.out_file}'!")
             sys.exit(0)
 
+    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+    def update_count(self):
+        self.count = len(self.parsed)
+
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 class CoubBuffer():
@@ -373,9 +379,9 @@ class CoubBuffer():
 
     def print_progress(self):
         if opts.batch == 1:
-            msg(f"  {count} out of {len(coubs.parsed)} (https://coub.com/view/{self.coubs[0]['id']})")
+            msg(f"  {count} out of {coubs.count} (https://coub.com/view/{self.coubs[0]['id']})")
         else:
-            msg(f"  {count} out of {len(coubs.parsed)}")
+            msg(f"  {count} out of {coubs.count}")
 
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -1241,20 +1247,22 @@ def main():
 
     msg("\n### Parse Input ###\n")
     coubs.parse_input()
+    coubs.update_count()
 
     msg("\n### Download Coubs ###\n")
 
     if not opts.batch:
-        batch_size = len(coubs.parsed)
+        batch_size = coubs.count
     else:
         batch_size = opts.batch
 
-    while count < len(coubs.parsed):
+    while coubs.parsed:
         batch = CoubBuffer()
-        for i in range(count, count+batch_size):
+        while len(batch.coubs) < batch_size:
             try:
-                batch.coubs.append({'id': coubs.parsed[i].split("/")[-1]})
+                batch.coubs.append({'id': coubs.parsed[0].split("/")[-1]})
                 count += 1
+                del coubs.parsed[0]
             except IndexError:
                 break
 
