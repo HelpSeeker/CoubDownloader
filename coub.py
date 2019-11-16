@@ -374,6 +374,7 @@ class CoubBuffer():
 
     def __init__(self):
         self.coubs = []
+        self.existing = 0
 
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -398,9 +399,14 @@ class CoubBuffer():
 
             if (opts.archive_file and read_archive(c_id)) or \
                (not opts.out_format and exists(c_id) and not overwrite()):
-                msg("Already downloaded!")
+                if opts.batch == 1:
+                    msg("Already downloaded!")
+                self.existing += 1
                 done += 1
                 del self.coubs[i]
+
+        if opts.batch != 1 and not opts.out_format:
+            msg(f"{self.existing} coubs already downloaded!")
 
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -454,9 +460,14 @@ class CoubBuffer():
 
         for i in range(len(self.coubs)-1, -1, -1):
             if exists(self.coubs[i]['name']) and not overwrite():
-                msg("Already downloaded!")
+                if opts.batch == 1:
+                    msg("Already downloaded!")
+                self.existing += 1
                 done += 1
                 del self.coubs[i]
+
+        if opts.batch != 1:
+            msg(f"{self.existing} coubs already downloaded!")
 
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
