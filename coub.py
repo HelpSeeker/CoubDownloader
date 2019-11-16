@@ -11,8 +11,8 @@ import urllib.error
 from urllib.request import urlopen
 from urllib.parse import quote as urlquote
 
-import threading
-from concurrent.futures import ThreadPoolExecutor
+import asyncio
+import aiohttp
 
 # TODO
 # -) implement --limit-rate
@@ -59,8 +59,17 @@ class Options:
     # Max. coub duration (FFmpeg syntax)
     dur = None
 
-    # Max no. of connections (experimental)
-    connect = 1
+    # Max no. of connections for aiohttp's ClientSession
+    # Be careful with this limit. Trust me.
+    # Raising it too high can potentially stall the script indefinitely
+    connect = 25
+
+    # No. of coubs to process per batch
+    # Within a batch pre- and postprocessing are done at once
+    # Downloading may be distributed to several threads
+    # 0 -> single batch for all coubs
+    # 1 -> one coub at a time
+    batch = 1
 
     # Pause between downloads (in sec)
     sleep_dur = None
@@ -353,6 +362,219 @@ class CoubInputData:
             sys.exit(0)
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+class CoubBuffer():
+    """Store batches of coubs to be processed"""
+
+    def __init__(self):
+        self.coubs = []
+
+    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+    def print_progress(self):
+        if opts.batch == 1:
+            msg(f"  {count} out of {len(coubs.parsed)} (https://coub.com/view/{self.coubs[0]['id']})")
+        else:
+            msg(f"  {count} out of {len(coubs.parsed)}")
+
+    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+    def def_existence(self):
+        """
+        Pass existing files to avoid unnecessary downloads
+        This check handles archive file search and default output formatting
+        # Avoids json request (slow!) just to skip files anyway
+        """
+        global done
+
+        for i in range(len(self.coubs)-1, -1, -1):
+            c_id = self.coubs[i]['id']
+
+            if (opts.archive_file and read_archive(c_id)) or \
+               (not opts.out_format and exists(c_id) and not overwrite()):
+                msg("Already downloaded!")
+                done += 1
+                del self.coubs[i]
+
+    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+    def parse_json(self):
+        for i in range(len(self.coubs)-1, -1, -1):
+            req = "https://coub.com/api/v2/coubs/" + self.coubs[i]['id']
+            try:
+                with urlopen(req) as resp:
+                    resp_json = json.load(resp)
+            except urllib.error.HTTPError:
+                err("Error: Coub unavailable!")
+                del self.coubs[i]
+                continue
+
+            self.coubs[i]['v_link'] = None
+            self.coubs[i]['a_link'] = None
+
+            v_list, a_list = stream_lists(resp_json)
+            try:
+                self.coubs[i]['v_link'] = v_list[opts.v_quality]
+            except IndexError:
+                err("Error: Coub unavailable!")
+                del self.coubs[i]
+                continue
+
+            try:
+                self.coubs[i]['a_link'] = a_list[opts.a_quality]
+            except IndexError:
+                if opts.a_only:
+                    err("Error: Audio or coub unavailable!")
+                    del self.coubs[i]
+                    continue
+
+            self.coubs[i]['a_orig'] = None
+            self.coubs[i]['a_ext'] = None
+            self.coubs[i]['v_orig'] = os.path.basename(self.coubs[i]['v_link'])
+            self.coubs[i]['name'] = get_name(resp_json, self.coubs[i]['id'])
+
+            # Needs special treatment since audio link can be None
+            if self.coubs[i]['a_link']:
+                self.coubs[i]['a_orig'] = os.path.basename(self.coubs[i]['a_link'])
+                self.coubs[i]['a_ext'] = self.coubs[i]['a_link'].split(".")[-1]
+
+    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+    def custom_existence(self):
+        """
+        Another check for custom output formatting
+        Far slower to skip existing files (archive usage is recommended)
+        """
+        global done
+
+        for i in range(len(self.coubs)-1, -1, -1):
+            if exists(self.coubs[i]['name']) and not overwrite():
+                msg("Already downloaded!")
+                done += 1
+                del self.coubs[i]
+
+    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+    def rename_streams(self):
+        for i in range(len(self.coubs)-1, -1, -1):
+            # Whether a download was successful gets tested here
+            # If wanted stream is present -> success
+            # I'm not happy with this solution
+            try:
+                os.replace(self.coubs[i]['v_orig'],
+                           f"{self.coubs[i]['name']}.mp4")
+            except FileNotFoundError:
+                err("Error: Coub unavailable!")
+                del self.coubs[i]
+                continue
+
+            try:
+                os.replace(self.coubs[i]['a_orig'],
+                           f"{self.coubs[i]['name']}.{self.coubs[i]['a_ext']}")
+            except (FileNotFoundError, TypeError):
+                self.coubs[i]['a_orig'] = None
+                self.coubs[i]['a_ext'] = None
+                if opts.a_only:
+                    err("Error: Audio or coub unavailable!")
+                    del self.coubs[i]
+                    continue
+
+    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+    def merge(self):
+        for c in self.coubs:
+            try:
+                if not c['a_ext']:
+                    continue
+
+                # Print .txt for ffmpeg's concat
+                with open(f"{c['name']}.txt", "w") as f:
+                    for j in range(opts.repeat):
+                        print(f"file '{c['name']}.mp4'", file=f)
+
+                # Loop footage until shortest stream ends
+                # Concatenated video (via list) counts as one long stream
+                command = [
+                    "ffmpeg", "-y", "-v", "error",
+                    "-f", "concat", "-safe", "0",
+                    "-i", f"{c['name']}.txt", "-i", f"{c['name']}.{c['a_ext']}"
+                ]
+                if opts.dur:
+                    command.extend(["-t", opts.dur])
+                command.extend(["-c", "copy", "-shortest", f"{c['name']}.mkv"])
+
+                subprocess.run(command)
+
+                if not opts.keep:
+                    os.remove(f"{c['name']}.mp4")
+                    os.remove(f"{c['name']}.{c['a_ext']}")
+            finally:
+                if os.path.exists(f"{c['name']}.txt"):
+                    os.remove(f"{c['name']}.txt")
+
+    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+    def archive(self):
+        """Write all downloaded coubs in a batch to archive"""
+        for c in self.coubs:
+            write_archive(c['id'])
+
+    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+    def preview_all(self):
+        """Preview all downloaded coubs in a batch"""
+        for c in self.coubs:
+            try:
+                show_preview(c['a_ext'], c['name'])
+            except subprocess.CalledProcessError:
+                pass
+
+    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+    def log_progress(self):
+        global done
+
+        for c in self.coubs:
+            done += 1
+
+    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+    def preprocess(self):
+        self.print_progress()
+        self.def_existence()
+        self.parse_json()
+        if opts.out_format:
+            self.custom_existence()
+
+    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+    def postprocess(self):
+        self.rename_streams()
+        if not opts.v_only and not opts.a_only:
+            self.merge()
+        if opts.archive_file:
+            self.archive()
+        if opts.preview:
+            self.preview_all()
+        self.log_progress()
+
+    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+    async def download(self):
+        """Encompasses the whole download process for a single coub"""
+        video = [c['v_link'] for c in self.coubs]
+        audio = [c['a_link'] for c in self.coubs if c['a_link']]
+        streams = video + audio
+
+        tout = aiohttp.ClientTimeout(total=None)
+        conn = aiohttp.TCPConnector(limit=opts.connect)
+        async with aiohttp.ClientSession(timeout=tout, connector=conn) as session:
+            tasks = [(download_stream(session, s)) for s in streams]
+            await asyncio.gather(*tasks, return_exceptions=False)
+
+        await asyncio.sleep(1)
+
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # Functions
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -396,24 +618,25 @@ Common options:
   -d, --duration TIME    specify max. coub duration (FFmpeg syntax)
 
 Download options:
-  --connections N        raise max. (!) number of connections (def: '{opts.connect}')
-  --sleep TIME           pause the script for TIME seconds before each download
+  --connections N        raise max. number of connections (def: '{opts.connect}')
+  --batch N              how many coubs to process per batch (def: '{opts.batch}')
+  --sleep TIME           pause the script for TIME seconds after each batch
   --limit-num LIMIT      limit max. number of downloaded coubs
   --sort ORDER           specify download order for channels, tags, etc.
                          '--sort help' for all supported values
 
 Format selection:
-  --bestvideo            Download best available video quality (def)
-  --worstvideo           Download worst available video quality
-  --max-video FORMAT     Set limit for the best video format (def: '{opts.v_max}')
+  --bestvideo            download best available video quality (def)
+  --worstvideo           download worst available video quality
+  --max-video FORMAT     set limit for the best video format (def: '{opts.v_max}')
                          Supported values: med, high, higher
-  --min-video FORMAT     Set limit for the worst video format (def: '{opts.v_min}')
+  --min-video FORMAT     set limit for the worst video format (def: '{opts.v_min}')
                          Supported values: see '--max-video'
-  --bestaudio            Download best available audio quality (def)
-  --worstaudio           Download worst available audio quality
-  --aac                  Prefer AAC over higher quality MP3 audio
-  --aac-strict           Only download AAC audio (never MP3)
-  --share                Download 'share' video (shorter and includes audio)
+  --bestaudio            download best available audio quality (def)
+  --worstaudio           download worst available audio quality
+  --aac                  prefer AAC over higher quality MP3 audio
+  --aac-strict           only download AAC audio (never MP3)
+  --share                download 'share' video (shorter and includes audio)
 
 Channel options:
   --recoubs              include recoubs during channel downloads (def)
@@ -525,6 +748,7 @@ def parse_cli():
         "-r", "--repeat",
         "-d", "--duration",
         "--connections",
+        "--batch",
         "--sleep",
         "--limit-num",
         "--sort",
@@ -598,6 +822,8 @@ def parse_cli():
             # Download options
             elif opt in ("--connections",):
                 opts.connect = int(arg)
+            elif opt in ("--batch",):
+                opts.batch = int(arg)
             elif opt in ("--sleep",):
                 opts.sleep_dur = float(arg)
             elif opt in ("--limit-num",):
@@ -678,6 +904,9 @@ def check_options():
         sys.exit(err_stat['opt'])
     elif opts.connect <= 0:
         err("--connections must be greater than 0!")
+        sys.exit(err_stat['opt'])
+    elif opts.batch < 0:
+        err("--batch can't be negative!")
         sys.exit(err_stat['opt'])
 
     if opts.dur:
@@ -960,55 +1189,17 @@ def stream_lists(data):
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-def download_streams(v_link, a_link, a_ext, name):
+async def download_stream(session, link):
     """Download individual coub streams"""
+    path = os.path.basename(link)
 
-    if not opts.a_only:
-        try:
-            with open(name + ".mp4", "wb") as f:
-                f.write(urlopen(v_link).read())
-        except urllib.error.HTTPError:
-            err("Error: Coub unavailable!")
-            raise
-
-    if not opts.v_only and a_link:
-        try:
-            with open(name + "." + a_ext, "wb") as f:
-                f.write(urlopen(a_link).read())
-        except urllib.error.HTTPError:
-            if opts.a_only:
-                err("Error: Audio or coub unavailable!")
-                raise
-
-# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-def merge(a_ext, name):
-    """Merge video/audio stream with ffmpeg and loop video"""
-    try:
-        # Print .txt for ffmpeg's concat
-        with open(name + ".txt", "w") as f:
-            for i in range(opts.repeat):
-                print("file '" + name + ".mp4'", file=f)
-
-        # Loop footage until shortest stream ends
-        # Concatenated video (via list) counts as one long stream
-        command = ["ffmpeg", "-y", "-v", "error",
-                   "-f", "concat", "-safe", "0",
-                   "-i", name + ".txt", "-i", name + "." + a_ext]
-
-        if opts.dur:
-            command.extend(["-t", opts.dur])
-
-        command.extend(["-c", "copy", "-shortest", name + ".mkv"])
-
-        subprocess.run(command)
-
-        if not opts.keep:
-            os.remove(name + ".mp4")
-            os.remove(name + "." + a_ext)
-    finally:
-        if os.path.exists(name + ".txt"):
-            os.remove(name + ".txt")
+    async with session.get(link) as response:
+        with open(path, "wb") as f:
+            while True:
+                chunk = await response.content.read(1024)
+                if not chunk:
+                    break
+                f.write(chunk)
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -1036,96 +1227,12 @@ def show_preview(a_ext, name):
         raise
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-def download_coub(c):
-    """Encompasses the whole download process for a single coub"""
-    global count, done
-    lock = threading.Lock()
-
-    with lock:
-        count += 1
-        msg(f"  {count} out of {len(coubs.parsed)} ({c})")
-
-        c_id = c.split("/")[-1]
-
-        # Pass existing files to avoid unnecessary downloads
-        # This check handles archive file search and default output formatting
-        # Avoids json request (slow!) just to skip files anyway
-        if (opts.archive_file and read_archive(c_id)) or \
-           (not opts.out_format and exists(c_id) and not overwrite()):
-            msg("Already downloaded!")
-            return
-
-        req = "https://coub.com/api/v2/coubs/" + c_id
-        try:
-            req_json = urlopen(req).read()
-        except urllib.error.HTTPError:
-            err("Error: Coub unavailable!")
-            return
-        req_json = json.loads(req_json)
-
-        name = get_name(req_json, c_id)
-
-        # Get link list and assign final download URL
-        v_list, a_list = stream_lists(req_json)
-        try:
-            v_link = v_list[opts.v_quality]
-        except IndexError:
-            err("Error: Coub unavailable!")
-            return
-        try:
-            a_link = a_list[opts.a_quality]
-            # Audio can be MP3 (.mp3) or AAC (.m4a)
-            a_ext = a_link.split(".")[-1]
-        except IndexError:
-            if opts.a_only:
-                err("Error: Audio or coub unavailable!")
-                return
-            a_link = None
-            a_ext = None
-
-        # Another check for custom output formatting
-        # Far slower to skip existing files (archive usage is recommended)
-        if opts.out_format and exists(name) and not overwrite():
-            msg("Already downloaded!")
-            done += 1
-            return
-
-        if opts.sleep_dur: # and count > 1:
-            time.sleep(opts.sleep_dur)
-
-    # Download video/audio streams
-    # Skip if the requested media couldn't be downloaded
-    try:
-        download_streams(v_link, a_link, a_ext, name)
-    except (IndexError, urllib.error.HTTPError):
-        return
-
-    with lock:
-        # Merge video and audio
-        if not opts.v_only and not opts.a_only and a_link:
-            merge(a_ext, name)
-
-        # Write downloaded coub to archive
-        if opts.archive_file:
-            write_archive(c_id)
-
-        # Preview downloaded coub
-        if opts.preview:
-            try:
-                show_preview(a_ext, name)
-            except subprocess.CalledProcessError:
-                pass
-
-        # Record successful download
-        done += 1
-
-# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # Main Function
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 def main():
     """Main function body"""
+    global count
 
     check_prereq()
     parse_cli()
@@ -1137,14 +1244,28 @@ def main():
 
     msg("\n### Download Coubs ###\n")
 
-    with ThreadPoolExecutor(max_workers=opts.connect) as executor:
-        executor.map(download_coub, coubs.parsed)
+    if not opts.batch:
+        batch_size = len(coubs.parsed)
+    else:
+        batch_size = opts.batch
+
+    while count < len(coubs.parsed):
+        batch = CoubBuffer()
+        for i in range(count, count+batch_size):
+            try:
+                batch.coubs.append({'id': coubs.parsed[i].split("/")[-1]})
+                count += 1
+            except IndexError:
+                break
+
+        batch.preprocess()
+        asyncio.run(batch.download())
+        batch.postprocess()
+
+        if opts.sleep_dur and coubs.parsed:
+            time.sleep(opts.sleep_dur)
 
     msg("\n### Finished ###\n")
-
-    # Indicate failure if not all input coubs exist after execution
-    if done < count:
-        sys.exit(err_stat['down'])
 
 # Execute main function
 if __name__ == '__main__':
@@ -1158,4 +1279,8 @@ if __name__ == '__main__':
     except KeyboardInterrupt:
         err("User Interrupt!")
         sys.exit(err_stat['int'])
+
+    # Indicate failure if not all input coubs exist after execution
+    if done < count:
+        sys.exit(err_stat['down'])
     sys.exit(0)
