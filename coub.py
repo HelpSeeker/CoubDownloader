@@ -570,8 +570,6 @@ class CoubBuffer():
             tasks = [(download_stream(session, s[0], s[1])) for s in streams]
             await asyncio.gather(*tasks, return_exceptions=False)
 
-        await asyncio.sleep(1)
-
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # Functions
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
