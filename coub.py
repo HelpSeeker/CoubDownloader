@@ -383,7 +383,7 @@ class CoubBuffer():
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
     def print_progress(self):
-        if opts.batch == 1:
+        if len(self.coubs) == 1:
             msg(f"  {count} out of {coubs.count} (https://coub.com/view/{self.coubs[0]['id']})")
         else:
             msg(f"  {count} out of {coubs.count}")
@@ -403,13 +403,13 @@ class CoubBuffer():
 
             if (opts.archive_file and read_archive(c_id)) or \
                (not opts.out_format and exists(c_id) and not overwrite()):
-                if opts.batch == 1:
+                if len(self.coubs) == 1:
                     msg("Already downloaded!")
                 self.existing += 1
                 done += 1
                 del self.coubs[i]
 
-        if opts.batch != 1 and not opts.out_format:
+        if len(self.coubs) > 1 and not opts.out_format:
             msg(f"{self.existing} coubs already downloaded!")
 
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -469,13 +469,13 @@ class CoubBuffer():
 
         for i in range(len(self.coubs)-1, -1, -1):
             if exists(self.coubs[i]['name']) and not overwrite():
-                if opts.batch == 1:
+                if len(self.coubs) == 1:
                     msg("Already downloaded!")
                 self.existing += 1
                 done += 1
                 del self.coubs[i]
 
-        if opts.batch != 1:
+        if len(self.coubs) > 1:
             msg(f"{self.existing} coubs already downloaded!")
 
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
