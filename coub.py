@@ -11,8 +11,12 @@ import urllib.error
 from urllib.request import urlopen
 from urllib.parse import quote as urlquote
 
-import asyncio
-import aiohttp
+try:
+    import asyncio
+    import aiohttp
+    aio = True
+except ModuleNotFoundError:
+    aio = False
 
 # TODO
 # -) implement --limit-rate
@@ -572,8 +576,18 @@ class CoubBuffer():
 
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-    async def download(self):
-        """Encompasses the whole download process for a single coub"""
+    def download(self):
+        """Encompasses the whole download process with sequential downloads"""
+        for c in self.coubs:
+            if c['v_link']:
+                download_stream(c['v_link'], c['v_name'])
+            if c['a_link']:
+                download_stream(c['a_link'], c['a_name'])
+
+    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+    async def download_aio(self):
+        """Encompasses the whole download process with asynchronous I/O"""
         video = [(c['v_link'], c['v_name']) for c in self.coubs]
         audio = [(c['a_link'], c['a_name']) for c in self.coubs if c['a_link']]
         streams = video + audio
@@ -581,7 +595,7 @@ class CoubBuffer():
         tout = aiohttp.ClientTimeout(total=None)
         conn = aiohttp.TCPConnector(limit=opts.connect)
         async with aiohttp.ClientSession(timeout=tout, connector=conn) as session:
-            tasks = [(download_stream(session, s[0], s[1])) for s in streams]
+            tasks = [(download_stream_aio(session, s[0], s[1])) for s in streams]
             await asyncio.gather(*tasks, return_exceptions=False)
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -1199,8 +1213,18 @@ def stream_lists(data):
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-async def download_stream(session, link, path):
-    """Download individual coub streams"""
+def download_stream(link, path):
+    """Download individual coub streams with urllib"""
+    try:
+        with urlopen(link) as stream, open(path, "wb") as f:
+            f.write(stream.read())
+    except urllib.error.HTTPError:
+        return
+
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+async def download_stream_aio(session, link, path):
+    """Download individual coub streams with aiohttp"""
     async with session.get(link) as response:
         with open(path, "wb") as f:
             while True:
@@ -1276,7 +1300,10 @@ def main():
                 break
 
         batch.preprocess()
-        asyncio.run(batch.download())
+        if not aio:
+            batch.download()
+        else:
+            asyncio.run(batch.download_aio())
         batch.postprocess()
 
         if opts.sleep_dur and coubs.parsed:

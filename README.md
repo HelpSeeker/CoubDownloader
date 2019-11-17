@@ -4,9 +4,7 @@ CoubDownloader is a simple script to download videos (called coubs) from [Coub](
 
 ## This branch
 
-This branch is a play- and training-ground for me, as I never worked with multithreading before.
-
-Usage is discouraged.
+This branch is a play- and training-ground for me. *Usage is discouraged.*
 
 ## Contents
 
@@ -57,6 +55,8 @@ Common options:
   -d, --duration TIME    specify max. coub duration (FFmpeg syntax)
 
 Download options:
+  --connections N        raise max. number of connections (def: 25)
+  --batch N              how many coubs to process per batch (def: 1)
   --sleep TIME           pause the script for TIME seconds before each download
   --limit-num LIMIT      limit max. number of downloaded coubs
   --sort ORDER           specify download order for channels, tags, etc.
@@ -109,6 +109,11 @@ Output:
 
 * Python >= 3.6
 * [FFmpeg](https://www.ffmpeg.org/)
+
+*Optional for asynchronous downloads:*
+
+* Python >= 3.7
+* [aiohttp](https://aiohttp.readthedocs.io/en/stable/)
 
 ## Input
 
