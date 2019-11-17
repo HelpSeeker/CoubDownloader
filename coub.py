@@ -379,6 +379,7 @@ class CoubBuffer():
     def __init__(self):
         self.coubs = []
         self.existing = 0
+        self.errors = 0
 
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -421,7 +422,9 @@ class CoubBuffer():
                 with urlopen(req) as resp:
                     resp_json = json.load(resp)
             except urllib.error.HTTPError:
-                err("Error: Coub unavailable!")
+                if len(self.coubs) == 1:
+                    err("Error: Coub unavailable!")
+                self.errors += 1
                 del self.coubs[i]
                 continue
 
@@ -429,7 +432,9 @@ class CoubBuffer():
             try:
                 self.coubs[i]['v_link'] = v_list[opts.v_quality]
             except IndexError:
-                err("Error: Coub unavailable!")
+                if len(self.coubs) == 1:
+                    err("Error: Coub unavailable!")
+                self.errors += 1
                 del self.coubs[i]
                 continue
 
@@ -438,7 +443,9 @@ class CoubBuffer():
             except IndexError:
                 self.coubs[i]['a_link'] = None
                 if opts.a_only:
-                    err("Error: Audio or coub unavailable!")
+                    if len(self.coubs) == 1:
+                        err("Error: Audio or coub unavailable!")
+                    self.errors += 1
                     del self.coubs[i]
                     continue
 
@@ -457,6 +464,11 @@ class CoubBuffer():
                 self.coubs[i]['a_name'] = f"{name}.{a_ext}"
             else:
                 self.coubs[i]['a_name'] = None
+
+        if len(self.coubs) > 1 and self.errors:
+            msg(f"{self.errors} coubs unavailable!")
+        # Reset counter to differentiate between errors before/after download
+        self.errors = 0
 
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -489,16 +501,23 @@ class CoubBuffer():
             # If wanted stream is present -> success
             # I'm not happy with this solution
             if not opts.a_only and not os.path.exists(v_name):
-                err("Error: Coub unavailable!")
+                if len(self.coubs) == 1:
+                    err("Error: Coub unavailable!")
+                self.errors += 1
                 del self.coubs[i]
                 continue
 
             if not opts.v_only and a_name and not os.path.exists(a_name):
                 self.coubs[i]['a_name'] = None
                 if opts.a_only:
-                    err("Error: Audio or coub unavailable!")
+                    if len(self.coubs) == 1:
+                        err("Error: Audio or coub unavailable!")
+                    self.errors += 1
                     del self.coubs[i]
                     continue
+
+        if len(self.coubs) > 1 and self.errors:
+            msg(f"{self.errors} coubs failed to download!")
 
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
