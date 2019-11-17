@@ -442,6 +442,11 @@ class CoubBuffer():
                     del self.coubs[i]
                     continue
 
+            if opts.v_only:
+                self.coubs[i]['a_link'] = None
+            if opts.a_only:
+                self.coubs[i]['v_link'] = None
+
             name = get_name(resp_json, self.coubs[i]['id'])
 
             self.coubs[i]['name'] = name
@@ -588,7 +593,7 @@ class CoubBuffer():
 
     async def download_aio(self):
         """Encompasses the whole download process with asynchronous I/O"""
-        video = [(c['v_link'], c['v_name']) for c in self.coubs]
+        video = [(c['v_link'], c['v_name']) for c in self.coubs if c['v_link']]
         audio = [(c['a_link'], c['a_name']) for c in self.coubs if c['a_link']]
         streams = video + audio
 
