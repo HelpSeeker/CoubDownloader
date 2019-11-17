@@ -409,7 +409,7 @@ class CoubBuffer():
                 done += 1
                 del self.coubs[i]
 
-        if len(self.coubs) > 1 and not opts.out_format:
+        if len(self.coubs) > 1 and not opts.out_format and self.existing:
             msg(f"{self.existing} coubs already downloaded!")
 
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -475,7 +475,7 @@ class CoubBuffer():
                 done += 1
                 del self.coubs[i]
 
-        if len(self.coubs) > 1:
+        if len(self.coubs) > 1 and self.existing:
             msg(f"{self.existing} coubs already downloaded!")
 
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
