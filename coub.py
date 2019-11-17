@@ -666,8 +666,8 @@ Common options:
   -d, --duration TIME    specify max. coub duration (FFmpeg syntax)
 
 Download options:
-  --connections N        raise max. number of connections (def: '{opts.connect}')
-  --batch N              how many coubs to process per batch (def: '{opts.batch}')
+  --connections N        raise max. number of connections (def: {opts.connect})
+  --batch N              how many coubs to process per batch (def: {opts.batch})
   --sleep TIME           pause the script for TIME seconds after each batch
   --limit-num LIMIT      limit max. number of downloaded coubs
   --sort ORDER           specify download order for channels, tags, etc.
@@ -676,9 +676,9 @@ Download options:
 Format selection:
   --bestvideo            download best available video quality (def)
   --worstvideo           download worst available video quality
-  --max-video FORMAT     set limit for the best video format (def: '{opts.v_max}')
+  --max-video FORMAT     set limit for the best video format (def: {opts.v_max})
                          Supported values: med, high, higher
-  --min-video FORMAT     set limit for the worst video format (def: '{opts.v_min}')
+  --min-video FORMAT     set limit for the worst video format (def: {opts.v_min})
                          Supported values: see '--max-video'
   --bestaudio            download best available audio quality (def)
   --worstaudio           download worst available audio quality
@@ -710,7 +710,7 @@ Output:
       %creation%  - creation date/time
       %category%  - coub category
       %channel%   - channel title
-      %tags%      - all tags (separated by '{opts.tag_sep}')
+      %tags%      - all tags (separated by {opts.tag_sep})
 
     Other strings will be interpreted literally.
     This option has no influence on the file extension.""")

@@ -4,7 +4,7 @@ CoubDownloader is a simple script to download videos (called coubs) from [Coub](
 
 ## This branch
 
-This branch is a play- and training-ground for me. *Usage is discouraged.*
+This branch is a play- and training-ground for me. **Usage is discouraged.**
 
 ## Contents
 
@@ -110,7 +110,7 @@ Output:
 * Python >= 3.6
 * [FFmpeg](https://www.ffmpeg.org/)
 
-*Optional for asynchronous downloads:*
+**Optional for asynchronous downloads:**
 
 * Python >= 3.7
 * [aiohttp](https://aiohttp.readthedocs.io/en/stable/)
