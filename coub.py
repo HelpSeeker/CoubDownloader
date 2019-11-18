@@ -379,7 +379,10 @@ class CoubBuffer():
     def __init__(self):
         self.coubs = []
         self.existing = 0
-        self.errors = 0
+        self.err = {
+            'before': 0,
+            'after': 0
+        }
 
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -424,7 +427,7 @@ class CoubBuffer():
             except urllib.error.HTTPError:
                 if len(self.coubs) == 1:
                     err("Error: Coub unavailable!")
-                self.errors += 1
+                self.err['before'] += 1
                 del self.coubs[i]
                 continue
 
@@ -434,7 +437,7 @@ class CoubBuffer():
             except IndexError:
                 if len(self.coubs) == 1:
                     err("Error: Coub unavailable!")
-                self.errors += 1
+                self.err['before'] += 1
                 del self.coubs[i]
                 continue
 
@@ -445,7 +448,7 @@ class CoubBuffer():
                 if opts.a_only:
                     if len(self.coubs) == 1:
                         err("Error: Audio or coub unavailable!")
-                    self.errors += 1
+                    self.err['before'] += 1
                     del self.coubs[i]
                     continue
 
@@ -465,10 +468,8 @@ class CoubBuffer():
             else:
                 self.coubs[i]['a_name'] = None
 
-        if len(self.coubs) > 1 and self.errors:
-            msg(f"{self.errors} coubs unavailable!")
-        # Reset counter to differentiate between errors before/after download
-        self.errors = 0
+        if len(self.coubs) > 1 and self.err['before']:
+            msg(f"{self.err['before']} coubs unavailable!")
 
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -492,7 +493,7 @@ class CoubBuffer():
 
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-    def check_streams(self):
+    def check_integrity(self):
         for i in range(len(self.coubs)-1, -1, -1):
             v_name = self.coubs[i]['v_name']
             a_name = self.coubs[i]['a_name']
@@ -503,7 +504,7 @@ class CoubBuffer():
             if not opts.a_only and not os.path.exists(v_name):
                 if len(self.coubs) == 1:
                     err("Error: Coub unavailable!")
-                self.errors += 1
+                self.err['after'] += 1
                 del self.coubs[i]
                 continue
 
@@ -512,12 +513,26 @@ class CoubBuffer():
                 if opts.a_only:
                     if len(self.coubs) == 1:
                         err("Error: Audio or coub unavailable!")
-                    self.errors += 1
+                    self.err['after'] += 1
                     del self.coubs[i]
                     continue
 
-        if len(self.coubs) > 1 and self.errors:
-            msg(f"{self.errors} coubs failed to download!")
+            if not (valid_stream(v_name) and valid_stream(a_name)):
+                if len(self.coubs) == 1:
+                    err("Error: Stream corruption!")
+                self.err['after'] += 1
+                # I'm too lazy to check against all special cases here
+                # Only thing that matters is the complete coub removal
+                try:
+                    os.remove(v_name)
+                    os.remove(a_name)
+                except:
+                    pass
+                del self.coubs[i]
+                continue
+
+        if len(self.coubs) > 1 and self.err['after']:
+            msg(f"{self.err['after']} coubs failed to download!")
 
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -589,7 +604,7 @@ class CoubBuffer():
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
     def postprocess(self):
-        self.check_streams()
+        self.check_integrity()
         if not opts.v_only and not opts.a_only:
             self.merge()
         if opts.archive_file:
@@ -1256,6 +1271,22 @@ async def download_stream_aio(session, link, path):
                 if not chunk:
                     break
                 f.write(chunk)
+
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+def valid_stream(path):
+    command = [
+        "ffmpeg", "-v", "error", "-i", path, "-t", "1", "-f", "null", "-"
+    ]
+    out = subprocess.run(command, capture_output=True, text=True)
+
+    # Checks against typical error messages in case of missing chunks
+    # "Header missing" -> audio corruption
+    # "Invalid NAL" -> video corruption
+    if "Header missing" in out.stderr or "Invalid NAL" in out.stderr:
+        return False
+
+    return True
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
