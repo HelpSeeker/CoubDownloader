@@ -18,10 +18,6 @@ try:
 except ModuleNotFoundError:
     aio = False
 
-# TODO
-# -) implement --limit-rate
-# -) look out for new API changes
-
 # Error codes
 # 1 -> missing required software
 # 2 -> invalid user-specified option
