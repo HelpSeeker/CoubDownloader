@@ -387,7 +387,8 @@ class CoubBuffer():
 
     def parse_json(self):
         for i in range(len(self.coubs)-1, -1, -1):
-            req = "https://coub.com/api/v2/coubs/" + self.coubs[i]['id']
+            c_id = self.coubs[i]['id']
+            req = "https://coub.com/api/v2/coubs/" + c_id
             try:
                 with urlopen(req) as resp:
                     resp_json = json.load(resp)
@@ -400,7 +401,7 @@ class CoubBuffer():
 
             v_list, a_list = stream_lists(resp_json)
             try:
-                self.coubs[i]['v_link'] = v_list[opts.v_quality]
+                v_link = v_list[opts.v_quality]
             except IndexError:
                 if len(self.coubs) == 1:
                     err("Error: Coub unavailable!")
@@ -409,9 +410,9 @@ class CoubBuffer():
                 continue
 
             try:
-                self.coubs[i]['a_link'] = a_list[opts.a_quality]
+                a_link = a_list[opts.a_quality]
             except IndexError:
-                self.coubs[i]['a_link'] = None
+                a_link = None
                 if opts.a_only:
                     if len(self.coubs) == 1:
                         err("Error: Audio or coub unavailable!")
@@ -419,21 +420,18 @@ class CoubBuffer():
                     del self.coubs[i]
                     continue
 
-            if opts.v_only:
-                self.coubs[i]['a_link'] = None
-            if opts.a_only:
-                self.coubs[i]['v_link'] = None
+            name = get_name(resp_json, c_id)
 
-            name = get_name(resp_json, self.coubs[i]['id'])
+            if not opts.a_only:
+                self.coubs[i]['v_name'] = f"{name}.mp4"
 
-            self.coubs[i]['name'] = name
-            self.coubs[i]['v_name'] = f"{name}.mp4"
-            # Needs special treatment since audio link can be None
-            if self.coubs[i]['a_link']:
-                a_ext = self.coubs[i]['a_link'].split(".")[-1]
+            if not opts.v_only and a_link:
+                a_ext = a_link.split(".")[-1]
                 self.coubs[i]['a_name'] = f"{name}.{a_ext}"
-            else:
-                self.coubs[i]['a_name'] = None
+
+            self.coubs[i]['v_link'] = v_link
+            self.coubs[i]['a_link'] = a_link
+            self.coubs[i]['name'] = name
 
         if len(self.coubs) > 1 and self.err['before']:
             msg(f"{self.err['before']} coubs unavailable!")
@@ -468,14 +466,14 @@ class CoubBuffer():
             # Whether a download was successful gets tested here
             # If wanted stream is present -> success
             # I'm not happy with this solution
-            if not opts.a_only and not os.path.exists(v_name):
+            if v_name and not os.path.exists(v_name):
                 if len(self.coubs) == 1:
                     err("Error: Coub unavailable!")
                 self.err['after'] += 1
                 del self.coubs[i]
                 continue
 
-            if not opts.v_only and a_name and not os.path.exists(a_name):
+            if a_name and not os.path.exists(a_name):
                 self.coubs[i]['a_name'] = None
                 if opts.a_only:
                     if len(self.coubs) == 1:
@@ -506,34 +504,40 @@ class CoubBuffer():
 
     def merge(self):
         for c in self.coubs:
-            try:
-                if not c['a_name']:
-                    continue
+            a_name = c['a_name']
+            v_name = c['v_name']
+            m_name = f"{c['name']}.mkv"     # merged name
+            t_name = f"{c['name']}.txt"     # txt name
 
+            # Checking against v_name here is redundant (at least for now)
+            if not (v_name and a_name):
+                continue
+
+            try:
                 # Print .txt for ffmpeg's concat
-                with open(f"{c['name']}.txt", "w") as f:
+                with open(t_name, "w") as f:
                     for j in range(opts.repeat):
-                        print(f"file '{c['v_name']}'", file=f)
+                        print(f"file '{v_name}'", file=f)
 
                 # Loop footage until shortest stream ends
                 # Concatenated video (via list) counts as one long stream
                 command = [
                     "ffmpeg", "-y", "-v", "error",
                     "-f", "concat", "-safe", "0",
-                    "-i", f"{c['name']}.txt", "-i", f"{c['a_name']}"
+                    "-i", t_name, "-i", a_name
                 ]
                 if opts.dur:
                     command.extend(["-t", opts.dur])
-                command.extend(["-c", "copy", "-shortest", f"{c['name']}.mkv"])
+                command.extend(["-c", "copy", "-shortest", m_name])
 
                 subprocess.run(command)
-
-                if not opts.keep:
-                    os.remove(f"{c['v_name']}")
-                    os.remove(f"{c['a_name']}")
             finally:
-                if os.path.exists(f"{c['name']}.txt"):
-                    os.remove(f"{c['name']}.txt")
+                if os.path.exists(t_name):
+                    os.remove(t_name)
+
+            if not opts.keep:
+                os.remove(v_name)
+                os.remove(a_name)
 
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -548,7 +552,7 @@ class CoubBuffer():
         """Preview all downloaded coubs in a batch"""
         for c in self.coubs:
             try:
-                show_preview(c['a_name'].split(".")[-1], c['name'])
+                show_preview(c)
             except subprocess.CalledProcessError:
                 pass
 
@@ -573,7 +577,7 @@ class CoubBuffer():
 
     def postprocess(self):
         self.check_integrity()
-        if not opts.v_only and not opts.a_only:
+        if not (opts.v_only or opts.a_only):
             self.merge()
         if opts.archive_file:
             self.archive()
@@ -586,17 +590,17 @@ class CoubBuffer():
     def download(self):
         """Encompasses the whole download process with sequential downloads"""
         for c in self.coubs:
-            if c['v_link']:
+            if c['v_name']:
                 download_stream(c['v_link'], c['v_name'])
-            if c['a_link']:
+            if c['a_name']:
                 download_stream(c['a_link'], c['a_name'])
 
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
     async def download_aio(self):
         """Encompasses the whole download process with asynchronous I/O"""
-        video = [(c['v_link'], c['v_name']) for c in self.coubs if c['v_link']]
-        audio = [(c['a_link'], c['a_name']) for c in self.coubs if c['a_link']]
+        video = [(c['v_link'], c['v_name']) for c in self.coubs if c['v_name']]
+        audio = [(c['a_link'], c['a_name']) for c in self.coubs if c['a_name']]
         streams = video + audio
 
         tout = aiohttp.ClientTimeout(total=None)
@@ -1291,23 +1295,22 @@ def valid_stream(path):
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-def show_preview(a_ext, name):
+def show_preview(coub):
     """Play finished coub with the given command"""
+    a_name = coub['a_name']
+    v_name = coub['v_name']
 
-    # For normal downloads .mkv, unless error downloading audio
-    if os.path.exists(name + ".mkv"):
-        ext = ".mkv"
-    else:
-        ext = ".mp4"
-    if opts.a_only:
-        ext = "." + a_ext
-    if opts.v_only:
-        ext = ".mp4"
+    if v_name and a_name:
+        play = f"{coub['name']}.mkv"
+    elif v_name:
+        play = v_name
+    elif a_name:
+        play = a_name
 
     try:
         # Need to split command string into list for check_call
         command = opts.preview_command.split(" ")
-        command.append(name + ext)
+        command.append(play)
         subprocess.check_call(command, stdout=subprocess.DEVNULL, \
                                        stderr=subprocess.DEVNULL)
     except subprocess.CalledProcessError:
