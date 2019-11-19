@@ -158,36 +158,7 @@ class CoubInputData:
     parsed = []
     count = 0
 
-    def check_category(self, cat):
-        """Make sure only valid categories get accepted"""
-
-        allowed_cat = [
-            "animals-pets",
-            "anime",
-            "art",
-            "cars",
-            "cartoons",
-            "celebrity",
-            "dance",
-            "fashion",
-            "gaming",
-            "mashup",
-            "movies",
-            "music",
-            "nature-travel",
-            "news",
-            "nsfw",
-            "science-technology",
-            "sports",
-            # Special categories
-            "newest",
-            "random",
-            "coub_of_the_day"
-        ]
-
-        cat = cat.split("/")[-1]
-
-        return bool(cat in allowed_cat)
+    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
     def parse_links(self):
         """Parse direct input links from the command line"""
@@ -778,6 +749,39 @@ Special categories:
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
+def check_category(cat):
+    """Make sure only valid categories get accepted"""
+
+    allowed_cat = [
+        "animals-pets",
+        "anime",
+        "art",
+        "cars",
+        "cartoons",
+        "celebrity",
+        "dance",
+        "fashion",
+        "gaming",
+        "mashup",
+        "movies",
+        "music",
+        "nature-travel",
+        "news",
+        "nsfw",
+        "science-technology",
+        "sports",
+        # Special categories
+        "newest",
+        "random",
+        "coub_of_the_day"
+    ]
+
+    cat = cat.split("/")[-1]
+
+    return bool(cat in allowed_cat)
+
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
 def check_prereq():
     """check existence of required software"""
 
@@ -855,7 +859,7 @@ def parse_cli():
                 if arg == "help":
                     usage_category()
                     sys.exit(0)
-                elif coubs.check_category(arg.strip("/")):
+                elif check_category(arg.strip("/")):
                     coubs.categories.append(arg.strip("/"))
                 else:
                     err(f"'{arg}' is not a valid category!")
