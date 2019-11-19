@@ -513,7 +513,8 @@ class CoubBuffer():
                     del self.coubs[i]
                     continue
 
-            if not (valid_stream(v_name) and valid_stream(a_name)):
+            if v_name and not valid_stream(v_name) or \
+               a_name and not valid_stream(a_name):
                 if len(self.coubs) == 1:
                     err("Error: Stream corruption!")
                 self.err['after'] += 1
