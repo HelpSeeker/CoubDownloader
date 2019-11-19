@@ -1288,8 +1288,15 @@ def valid_stream(path):
     # Checks against typical error messages in case of missing chunks
     # "Header missing" -> audio corruption
     # "Invalid NAL" -> video corruption
-    if "Header missing" in out.stderr or "Invalid NAL" in out.stderr:
-        return False
+    # "moov atom not found" -> old Coub storage method
+    typical = [
+        "Header missing",
+        "Invalid NAL",
+        "moov atom not found"
+    ]
+    for error in typical:
+        if error in out.stderr:
+            return False
 
     return True
 
