@@ -448,7 +448,10 @@ class CoubBuffer():
         global done
 
         for i in range(len(self.coubs)-1, -1, -1):
-            if exists(self.coubs[i]['name']) and \
+            name = self.coubs[i]['name']
+            c_id = self.coubs[i]['id']
+
+            if exists(name) and \
                not overwrite(c_id, print_info=len(self.coubs) > 1):
                 if len(self.coubs) == 1:
                     msg("Already downloaded!")
@@ -487,10 +490,11 @@ class CoubBuffer():
 
             if v_name and not valid_stream(v_name) or \
                a_name and not valid_stream(a_name):
-                err("Error: Stream corruption!", end=" ")
                 # Add additional info for larger batches
                 if len(self.coubs) > 1:
-                    err(f"(https://coub.com/view/{self.coubs[i]['id']})")
+                    err(f"Error: Stream corruption! (https://coub.com/view/{self.coubs[i]['id']})")
+                else:
+                    err("Error: Stream corruption!")
                 self.err['after'] += 1
                 # I'm too lazy to check against all special cases here
                 # Only thing that matters is the complete coub removal
