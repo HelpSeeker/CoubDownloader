@@ -484,8 +484,10 @@ class CoubBuffer():
 
             if v_name and not valid_stream(v_name) or \
                a_name and not valid_stream(a_name):
-                if len(self.coubs) == 1:
-                    err("Error: Stream corruption!")
+                err("Error: Stream corruption!", end=" ")
+                # Add additional info for larger batches
+                if len(self.coubs) > 1:
+                    err(f"(https://coub.com/view/{self.coubs[i]['id']})")
                 self.err['after'] += 1
                 # I'm too lazy to check against all special cases here
                 # Only thing that matters is the complete coub removal
