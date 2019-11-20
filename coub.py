@@ -43,8 +43,9 @@ class Options:
     # 0 for quiet, >= 1 for normal verbosity
     verbosity = 1
 
-    # Allowed values: yes, no, prompt
-    prompt_answer = "prompt"
+    # yes/no will answer prompts automatically
+    # Everything else will lead to a prompt
+    prompt_answer = None
 
     # Default download destination
     path = "."
@@ -365,7 +366,7 @@ class CoubBuffer():
         """
         Pass existing files to avoid unnecessary downloads
         This check handles archive file search and default output formatting
-        # Avoids json request (slow!) just to skip files anyway
+        Avoids json request (slow!) just to skip files anyway
         """
         global done
 
@@ -373,7 +374,8 @@ class CoubBuffer():
             c_id = self.coubs[i]['id']
 
             if (opts.archive_file and read_archive(c_id)) or \
-               (not opts.out_format and exists(c_id) and not overwrite()):
+               (not opts.out_format and exists(c_id) and \
+                not overwrite(c_id, print_info=len(self.coubs) > 1)):
                 if len(self.coubs) == 1:
                     msg("Already downloaded!")
                 self.existing += 1
@@ -446,7 +448,8 @@ class CoubBuffer():
         global done
 
         for i in range(len(self.coubs)-1, -1, -1):
-            if exists(self.coubs[i]['name']) and not overwrite():
+            if exists(self.coubs[i]['name']) and \
+               not overwrite(c_id, print_info=len(self.coubs) > 1):
                 if len(self.coubs) == 1:
                     msg("Already downloaded!")
                 self.existing += 1
@@ -1102,15 +1105,20 @@ def exists(name):
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-def overwrite():
+def overwrite(c_id, print_info):
     """Decide if existing coub should be overwritten"""
 
     if opts.prompt_answer == "yes":
         return True
     elif opts.prompt_answer == "no":
         return False
-    elif opts.prompt_answer == "prompt":
-        print("Overwrite file?")
+    else:
+        # this should get printed even with --quiet
+        # so print() instead of msg()
+        if print_info:
+            print(f"Overwrite file? (https://coub.com/view/{c_id})")
+        else:
+            print("Overwrite file?")
         print("1) yes")
         print("2) no")
         while True:
@@ -1119,9 +1127,6 @@ def overwrite():
                 return True
             if answer == "2":
                 return False
-    else:
-        err("Unknown prompt_answer in overwrite!")
-        sys.exit(err_stat['run'])
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
