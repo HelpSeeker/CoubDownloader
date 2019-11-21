@@ -991,7 +991,7 @@ def check_options():
     if opts.repeat <= 0:
         err("-r/--repeat must be greater than 0!")
         sys.exit(err_stat['opt'])
-    elif opts.max_coubs and opts.max_coubs <= 0:
+    elif opts.max_coubs is not None and opts.max_coubs <= 0:
         err("--limit-num must be greater than 0!")
         sys.exit(err_stat['opt'])
     elif opts.connect <= 0:
