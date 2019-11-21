@@ -344,8 +344,23 @@ class CoubInputData:
 class CoubBuffer():
     """Store batches of coubs to be processed"""
 
-    def __init__(self):
+    def __init__(self, parsed):
+        global count
+
         self.coubs = []
+
+        for c in parsed:
+            self.coubs.append({
+                'id': c.split("/")[-1],
+                'v_link': None,
+                'a_link': None,
+                'v_name': None,
+                'a_name': None,
+                'name': None
+            })
+            count += 1
+
+        self.init_size = len(self.coubs)
         self.existing = 0
         self.err = {
             'before': 0,
@@ -355,7 +370,7 @@ class CoubBuffer():
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
     def print_progress(self):
-        if len(self.coubs) == 1:
+        if self.init_size == 1:
             msg(f"  {count} out of {coubs.count} (https://coub.com/view/{self.coubs[0]['id']})")
         else:
             msg(f"  {count} out of {coubs.count}")
@@ -375,15 +390,15 @@ class CoubBuffer():
 
             if (opts.archive_file and read_archive(c_id)) or \
                (not opts.out_format and exists(c_id) and \
-                not overwrite(c_id, print_info=len(self.coubs) > 1)):
-                if len(self.coubs) == 1:
+                not overwrite(c_id, print_info=self.init_size > 1)):
+                if self.init_size == 1:
                     msg("Already downloaded!")
                 self.existing += 1
                 done += 1
                 del self.coubs[i]
 
-        if len(self.coubs) > 1 and not opts.out_format and self.existing:
-            msg(f"{self.existing} coubs already downloaded!")
+        if self.init_size > 1 and not opts.out_format and self.existing:
+            msg(f"{self.existing} coub(s) already downloaded!")
 
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -395,7 +410,7 @@ class CoubBuffer():
                 with urlopen(req) as resp:
                     resp_json = json.load(resp)
             except urllib.error.HTTPError:
-                if len(self.coubs) == 1:
+                if self.init_size == 1:
                     err("Error: Coub unavailable!")
                 self.err['before'] += 1
                 del self.coubs[i]
@@ -405,7 +420,7 @@ class CoubBuffer():
             try:
                 v_link = v_list[opts.v_quality]
             except IndexError:
-                if len(self.coubs) == 1:
+                if self.init_size == 1:
                     err("Error: Coub unavailable!")
                 self.err['before'] += 1
                 del self.coubs[i]
@@ -416,7 +431,7 @@ class CoubBuffer():
             except IndexError:
                 a_link = None
                 if opts.a_only:
-                    if len(self.coubs) == 1:
+                    if self.init_size == 1:
                         err("Error: Audio or coub unavailable!")
                     self.err['before'] += 1
                     del self.coubs[i]
@@ -435,8 +450,8 @@ class CoubBuffer():
             self.coubs[i]['a_link'] = a_link
             self.coubs[i]['name'] = name
 
-        if len(self.coubs) > 1 and self.err['before']:
-            msg(f"{self.err['before']} coubs unavailable!")
+        if self.init_size > 1 and self.err['before']:
+            msg(f"{self.err['before']} coub(s) unavailable!")
 
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -452,15 +467,15 @@ class CoubBuffer():
             c_id = self.coubs[i]['id']
 
             if exists(name) and \
-               not overwrite(c_id, print_info=len(self.coubs) > 1):
-                if len(self.coubs) == 1:
+               not overwrite(c_id, print_info=self.init_size > 1):
+                if self.init_size == 1:
                     msg("Already downloaded!")
                 self.existing += 1
                 done += 1
                 del self.coubs[i]
 
-        if len(self.coubs) > 1 and self.existing:
-            msg(f"{self.existing} coubs already downloaded!")
+        if self.init_size > 1 and self.existing:
+            msg(f"{self.existing} coub(s) already downloaded!")
 
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -473,7 +488,7 @@ class CoubBuffer():
             # If wanted stream is present -> success
             # I'm not happy with this solution
             if v_name and not os.path.exists(v_name):
-                if len(self.coubs) == 1:
+                if self.init_size == 1:
                     err("Error: Coub unavailable!")
                 self.err['after'] += 1
                 del self.coubs[i]
@@ -482,7 +497,7 @@ class CoubBuffer():
             if a_name and not os.path.exists(a_name):
                 self.coubs[i]['a_name'] = None
                 if opts.a_only:
-                    if len(self.coubs) == 1:
+                    if self.init_size == 1:
                         err("Error: Audio or coub unavailable!")
                     self.err['after'] += 1
                     del self.coubs[i]
@@ -491,7 +506,7 @@ class CoubBuffer():
             if v_name and not valid_stream(v_name) or \
                a_name and not valid_stream(a_name):
                 # Add additional info for larger batches
-                if len(self.coubs) > 1:
+                if self.init_size > 1:
                     err(f"Error: Stream corruption! (https://coub.com/view/{self.coubs[i]['id']})")
                 else:
                     err("Error: Stream corruption!")
@@ -506,8 +521,8 @@ class CoubBuffer():
                 del self.coubs[i]
                 continue
 
-        if len(self.coubs) > 1 and self.err['after']:
-            msg(f"{self.err['after']} coubs failed to download!")
+        if self.init_size > 1 and self.err['after']:
+            msg(f"{self.err['after']} coub(s) failed to download!")
 
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -1341,8 +1356,6 @@ def show_preview(coub):
 
 def main():
     """Main function body"""
-    global count
-
     check_prereq()
     parse_cli()
     check_options()
@@ -1360,21 +1373,8 @@ def main():
         batch_size = opts.batch
 
     while coubs.parsed:
-        batch = CoubBuffer()
-        while len(batch.coubs) < batch_size:
-            try:
-                batch.coubs.append({
-                    'id': coubs.parsed[0].split("/")[-1],
-                    'v_link': None,
-                    'a_link': None,
-                    'v_name': None,
-                    'a_name': None,
-                    'name': None
-                })
-                count += 1
-                del coubs.parsed[0]
-            except IndexError:
-                break
+        batch = CoubBuffer(coubs.parsed[:batch_size])
+        del coubs.parsed[:batch_size]
 
         batch.preprocess()
         if not aio:
