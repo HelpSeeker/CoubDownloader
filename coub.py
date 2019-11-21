@@ -1313,11 +1313,12 @@ def valid_stream(path):
     out = subprocess.run(command, capture_output=True, text=True)
 
     # Checks against typical error messages in case of missing chunks
-    # "Header missing" -> audio corruption
+    # "Header missing"/"Failed to read frame size" -> audio corruption
     # "Invalid NAL" -> video corruption
     # "moov atom not found" -> old Coub storage method
     typical = [
         "Header missing",
+        "Failed to read frame size", 
         "Invalid NAL",
         "moov atom not found"
     ]
