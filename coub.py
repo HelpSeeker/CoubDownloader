@@ -1083,7 +1083,8 @@ def get_name(req_json, c_id):
 
     tags = ""
     for t in req_json['tags']:
-        tags += t['title'] + opts.tag_sep
+        # Don't add tag separator after the last tag
+        tags += f"{t['title']}{opts.tag_sep if t != req_json['tags'][-1] else ''}"
     name = name.replace("%tags%", tags)
 
     # Strip/replace special characters that can lead to script failure (ffmpeg concat)
