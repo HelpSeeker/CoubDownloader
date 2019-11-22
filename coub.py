@@ -680,7 +680,7 @@ Download options:
   --connections N        raise max. number of connections (def: {opts.connect})
   --batch N              how many coubs to process per batch (def: {opts.batch})
                            N > 1: enable asynchronous download
-                           N = 0: process all coubs in a single batch 
+                           N = 0: process all coubs in a single batch
   --sleep TIME           pause the script for TIME seconds after each batch
   --limit-num LIMIT      limit max. number of downloaded coubs
   --sort ORDER           specify download order for channels, tags, etc.
@@ -1324,7 +1324,7 @@ def valid_stream(path):
     # "moov atom not found" -> old Coub storage method
     typical = [
         "Header missing",
-        "Failed to read frame size", 
+        "Failed to read frame size",
         "Invalid NAL",
         "moov atom not found"
     ]
