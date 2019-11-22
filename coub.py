@@ -663,7 +663,7 @@ Input:
   -e, --search TERM      download search results for the given term
   --hot                  download coubs from the 'Hot' section
   --category CATEGORY    download coubs from a certain category
-                         '--category help' for all supported values
+                           '--category help' for all supported values
 
 Common options:
   -h, --help             show this help
@@ -679,18 +679,20 @@ Common options:
 Download options:
   --connections N        raise max. number of connections (def: {opts.connect})
   --batch N              how many coubs to process per batch (def: {opts.batch})
+                           N > 1: enable asynchronous download
+                           N = 0: process all coubs in a single batch 
   --sleep TIME           pause the script for TIME seconds after each batch
   --limit-num LIMIT      limit max. number of downloaded coubs
   --sort ORDER           specify download order for channels, tags, etc.
-                         '--sort help' for all supported values
+                           '--sort help' for all supported values
 
 Format selection:
   --bestvideo            download best available video quality (def)
   --worstvideo           download worst available video quality
   --max-video FORMAT     set limit for the best video format (def: {opts.v_max})
-                         Supported values: med, high, higher
+                           Supported values: med, high, higher
   --min-video FORMAT     set limit for the worst video format (def: {opts.v_min})
-                         Supported values: see '--max-video'
+                           Supported values: see '--max-video'
   --bestaudio            download best available audio quality (def)
   --worstaudio           download worst available audio quality
   --aac                  prefer AAC over higher quality MP3 audio
@@ -1051,6 +1053,10 @@ def check_options():
         err(f"Invalid sort order ('{opts.sort}')!\n")
         usage_sort()
         sys.exit(err_stat['opt'])
+
+    # Only warn the user
+    if not aio and opts.batch != 1:
+        err("Warning: Usage of aiohttp recommended for batch size >1!")
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
