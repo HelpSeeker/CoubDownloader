@@ -15,10 +15,9 @@ CoubDownloader is a simple script to download videos (called coubs) from [Coub](
 3.6. [Hot section](https://github.com/HelpSeeker/CoubDownloader#hot-section)  
 3.7. [Categories](https://github.com/HelpSeeker/CoubDownloader#categories)  
 4. [Misc. information](https://github.com/HelpSeeker/CoubDownloader#misc-information)  
-4.1. [Remux errors](https://github.com/HelpSeeker/CoubDownloader#remux-errors-ffmpeg)  
-4.2. [Video resolution vs. quality](https://github.com/HelpSeeker/CoubDownloader#video-resolution-vs-quality)  
-4.3. [AAC audio](https://github.com/HelpSeeker/CoubDownloader#aac-audio)  
-4.4. ['share' videos](https://github.com/HelpSeeker/CoubDownloader#share-videos)  
+4.1. [Video resolution vs. quality](https://github.com/HelpSeeker/CoubDownloader#video-resolution-vs-quality)  
+4.2. [AAC audio](https://github.com/HelpSeeker/CoubDownloader#aac-audio)  
+4.3. ['share' videos](https://github.com/HelpSeeker/CoubDownloader#share-videos)  
 5. [Changes since Coub's database upgrade (watermark & co)](https://github.com/HelpSeeker/CoubDownloader#changes-since-coubs-database-upgrade-watermark--co)  
 6. [Changes since switching to Coub's API (previously used youtube-dl)](https://github.com/HelpSeeker/CoubDownloader#changes-since-switching-to-coubs-api-previously-used-youtube-dl)  
 
@@ -37,7 +36,7 @@ Input:
   -e, --search TERM      download search results for the given term
   --hot                  download coubs from the 'Hot' section
   --category CATEGORY    download coubs from a certain category
-                         '--category help' for all supported values
+                           '--category help' for all supported values
 
 Common options:
   -h, --help             show this help
@@ -51,18 +50,22 @@ Common options:
   -d, --duration TIME    specify max. coub duration (FFmpeg syntax)
 
 Download options:
+  --connections N        raise max. number of connections (def: 25)
+  --batch N              how many coubs to process per batch (def: 1)
+                           N > 1: enable asynchronous download
+                           N = 0: process all coubs in a single batch
   --sleep TIME           pause the script for TIME seconds before each download
   --limit-num LIMIT      limit max. number of downloaded coubs
   --sort ORDER           specify download order for channels, tags, etc.
-                         '--sort help' for all supported values
+                           '--sort help' for all supported values
 
 Format selection:
   --bestvideo            Download best available video quality (def)
   --worstvideo           Download worst available video quality
   --max-video FORMAT     Set limit for the best video format (def: 'higher')
-                         Supported values: med, high, higher
+                           Supported values: med, high, higher
   --min-video FORMAT     Set limit for the worst video format (def: 'med')
-                         Supported values: see '--max-video'
+                           Supported values: see '--max-video'
   --bestaudio            Download best available audio quality (def)
   --worstaudio           Download worst available audio quality
   --aac                  Prefer AAC over higher quality MP3 audio
@@ -103,6 +106,11 @@ Output:
 
 * Python >= 3.6
 * [FFmpeg](https://www.ffmpeg.org/)
+
+**Optional for asynchronous downloads:**
+
+* Python >= 3.7
+* [aiohttp](https://aiohttp.readthedocs.io/en/stable/)
 
 ## Input
 
@@ -163,18 +171,6 @@ Input gets parsed in the following order:
 * Hot section
 
 ## Misc. information
-
-### Remux errors (FFmpeg)
-
-```
-[mov,mp4,m4a,3gp,3g2,mj2 @ 0x563bd7dcf740] moov atom not found
-[concat @ 0x563bd7d883c0] Impossible to open 'abcdef.mp4'
-list.txt: Invalid data found when processing input
-```
-
-These errors are the product of encountering a not yet updated video stream. In the past Coub stored all HTML5 video streams in a broken state, but nowadays it's quite rare to find such streams. Only ~1% of all low quality streams are affected.
-
-To download these problematic streams, please refer to the [legacy version](https://github.com/HelpSeeker/CoubDownloader/releases/tag/v1).
 
 ### Video resolution vs. quality
 
@@ -269,6 +265,8 @@ Coub started to massively overhaul their database and API. Of course those chang
 - [x] Add shared option (video+audio already combined)
 - [x] Download coubs from the hot section
 - [x] Download coubs from categories
+- [x] Asynchronous stream download
+- [x] Detect stream corruption (incl. old Coub storage method)
 
 ## Changes since switching to Coub's API (previously used youtube-dl)
 
