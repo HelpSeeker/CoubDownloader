@@ -2,10 +2,6 @@
 
 CoubDownloader is a simple script to download videos (called coubs) from [Coub](https://coub.com).
 
-## This branch
-
-This branch is a play- and training-ground for me. **Usage is discouraged.**
-
 ## Contents
 
 1. [Usage](https://github.com/HelpSeeker/CoubDownloader#usage)  
