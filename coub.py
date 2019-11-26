@@ -170,7 +170,7 @@ class CoubInputData:
             self.parsed.append(link)
 
         if self.links:
-            msg("Reading command line:")
+            msg("\nReading command line:")
             msg(f"  {len(self.links)} link(s) found")
 
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -179,7 +179,7 @@ class CoubInputData:
         """Parse coub links from input lists"""
 
         for l in self.lists:
-            msg(f"Reading input list ({l}):")
+            msg(f"\nReading input list ({l}):")
 
             with open(l, "r") as f:
                 content = f.read()
@@ -234,50 +234,51 @@ class CoubInputData:
             err("Error: Unknown input type in parse_timeline!")
             sys.exit(err_stat['run'])
 
-        req += "per_page=" + str(opts.coubs_per_page)
+        req += f"per_page={opts.coubs_per_page}"
 
         # Add sort order
         # Different timeline types support different values
         # Invalid values get ignored though, so no need for further checks
         if opts.sort:
-            req += "&order_by=" + opts.sort
+            req += f"&order_by={opts.sort}"
 
-        req_json = urlopen(req).read()
-        req_json = json.loads(req_json)
+        with urlopen(req) as resp:
+            resp_json = json.loads(resp.read())
 
-        pages = req_json['total_pages']
+        pages = resp_json['total_pages']
+        # tag/hot section/category timeline redirects pages >99 to page 1
+        # other timelines work like intended
+        if url_type in ("tag", "hot", "category") and pages > 99:
+            pages = 99
 
-        msg(f"Downloading {url_type} info ({url}):")
+        msg(f"\nDownloading {url_type} info ({url}):")
 
         for p in range(1, pages+1):
-            # tag/hot section/category timeline redirects pages >99 to page 1
-            # other timelines work like intended
-            if url_type in ("tag", "hot", "category") and p > 99:
-                msg("  Max. page limit reached!")
-                return
-
             msg(f"  {p} out of {pages} pages")
-            req_json = urlopen(req + "&page=" + str(p)).read()
-            req_json = json.loads(req_json)
+            with urlopen(f"{req}&page={p}") as resp:
+                resp_json = json.loads(resp.read())
 
-            for c in range(opts.coubs_per_page):
+            for c in resp_json['coubs']:
                 if opts.max_coubs and len(self.parsed) >= opts.max_coubs:
                     return
 
-                try:
-                    c_id = req_json['coubs'][c]['recoub_to']['permalink']
+                if c['recoub_to']:
+                    # Recoubs have both recoub_to/permalink and permalink
+                    # Therefore opts.recoubs can't be used in the prior if
                     if not opts.recoubs:
                         continue
-                    self.parsed.append("https://coub.com/view/" + c_id)
-                except (TypeError, KeyError, IndexError):
+                    c_info = c['recoub_to']
+                else:
                     if opts.only_recoubs:
                         continue
-                    try:
-                        c_id = req_json['coubs'][c]['permalink']
-                        self.parsed.append("https://coub.com/view/" + c_id)
-                    except (TypeError, KeyError, IndexError):
-                        continue
+                    c_info = c
 
+                if 'permalink' in c_info:
+                    c_id = c['permalink']
+                else:
+                    continue
+
+                self.parsed.append(f"https://coub.com/view/{c_id}")
 
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -316,7 +317,7 @@ class CoubInputData:
             self.parse_timeline("hot", "https://coub.com/hot")
 
         if not self.parsed:
-            err("Error: No coub links specified!")
+            err("\nError: No coub links specified!")
             sys.exit(err_stat['opt'])
 
         if opts.max_coubs and len(self.parsed) >= opts.max_coubs:
@@ -1369,7 +1370,7 @@ def main():
     check_options()
     resolve_paths()
 
-    msg("\n### Parse Input ###\n")
+    msg("\n### Parse Input ###")
     coubs.parse_input()
     coubs.update_count()
 
