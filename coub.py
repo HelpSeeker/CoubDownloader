@@ -199,6 +199,31 @@ class CoubInputData:
 
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
+    def parse_page(self, resp):
+        for c in resp['coubs']:
+            if opts.max_coubs and len(self.parsed) >= opts.max_coubs:
+                return
+
+            if c['recoub_to']:
+                # Recoubs have both recoub_to/permalink and permalink
+                # Therefore opts.recoubs can't be used in the prior if
+                if not opts.recoubs:
+                    continue
+                c_info = c['recoub_to']
+            else:
+                if opts.only_recoubs:
+                    continue
+                c_info = c
+
+            if 'permalink' in c_info:
+                c_id = c['permalink']
+            else:
+                continue
+
+            self.parsed.append(f"https://coub.com/view/{c_id}")
+
+    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
     def parse_timeline(self, url_type, url):
         """
         Parse coub links from various Coub source
@@ -253,32 +278,33 @@ class CoubInputData:
 
         msg(f"\nDownloading {url_type} info ({url}):")
 
-        for p in range(1, pages+1):
-            msg(f"  {p} out of {pages} pages")
-            with urlopen(f"{req}&page={p}") as resp:
-                resp_json = json.loads(resp.read())
+        if aio:
+            requests = []
+            for p in range(1, pages+1):
+                requests.append(f"{req}&page={p}")
+                # Crude check to limit the max. number of requested pages
+                # Necessary as --limit-num checks against parsed list
+                # but links only get parsed AFTER all responses are collected
+                if opts.max_coubs:
+                    limit = opts.max_coubs - len(self.parsed)
+                    if p*opts.coubs_per_page >= limit:
+                        break
 
-            for c in resp_json['coubs']:
+            responses = asyncio.run(download_responses_aio(requests, pages))
+
+            for resp in responses:
+                self.parse_page(resp)
+
+            if opts.max_coubs and len(self.parsed) >= opts.max_coubs:
+                return
+        else:
+            for p in range(1, pages+1):
+                msg(f"  {p} out of {pages} pages")
+                with urlopen(f"{req}&page={p}") as resp:
+                    self.parse_page(json.loads(resp.read()))
+
                 if opts.max_coubs and len(self.parsed) >= opts.max_coubs:
                     return
-
-                if c['recoub_to']:
-                    # Recoubs have both recoub_to/permalink and permalink
-                    # Therefore opts.recoubs can't be used in the prior if
-                    if not opts.recoubs:
-                        continue
-                    c_info = c['recoub_to']
-                else:
-                    if opts.only_recoubs:
-                        continue
-                    c_info = c
-
-                if 'permalink' in c_info:
-                    c_id = c['permalink']
-                else:
-                    continue
-
-                self.parsed.append(f"https://coub.com/view/{c_id}")
 
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -1288,6 +1314,29 @@ def stream_lists(data):
                 audio.append(version['url'])
 
     return (video, audio)
+
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+async def json_aio(session, request, progress):
+    msg(progress)
+    async with session.get(request) as resp:
+        j = await resp.read()
+
+    return json.loads(j)
+
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+async def download_responses_aio(requests, max_pages):
+    quantity = len(requests)
+    prog = [f"  {i} out of {max_pages} pages" for i in range(1, quantity+1)]
+
+    tout = aiohttp.ClientTimeout(total=None)
+    conn = aiohttp.TCPConnector(limit=opts.connect)
+    async with aiohttp.ClientSession(timeout=tout, connector=conn) as s:
+        tasks = [(json_aio(s, requests[i], prog[i])) for i in range(quantity)]
+        responses = await asyncio.gather(*tasks, return_exceptions=False)
+
+    return responses
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
