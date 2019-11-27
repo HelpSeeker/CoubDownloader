@@ -234,40 +234,44 @@ class CoubInputData:
         -) coub searches
         """
 
+        if opts.max_coubs and len(self.parsed) >= opts.max_coubs:
+            return
+
         if url_type == "channel":
             channel = url.split("/")[-1]
-            req = "https://coub.com/api/v2/timeline/channel/" + channel
-            req += "?"
+            template = "https://coub.com/api/v2/timeline/channel/" + channel
+            template += "?"
         elif url_type == "tag":
             tag = url.split("/")[-1]
             tag = urlquote(tag)
-            req = "https://coub.com/api/v2/timeline/tag/" + tag
-            req += "?"
+            template = "https://coub.com/api/v2/timeline/tag/" + tag
+            template += "?"
         elif url_type == "search":
             search = url.split("=")[-1]
             search = urlquote(search)
-            req = "https://coub.com/api/v2/search/coubs?q=" + search
-            req += "&"
+            template = "https://coub.com/api/v2/search/coubs?q=" + search
+            template += "&"
         elif url_type == "category":
             cat = url.split("/")[-1]
-            req = "https://coub.com/api/v2/timeline/explore/" + cat
-            req += "?"
+            template = "https://coub.com/api/v2/timeline/explore/" + cat
+            template += "?"
         elif url_type == "hot":
-            req = "https://coub.com/api/v2/timeline/hot"
-            req += "?"
+            template = "https://coub.com/api/v2/timeline/hot"
+            template += "?"
         else:
             err("Error: Unknown input type in parse_timeline!")
             sys.exit(err_stat['run'])
 
-        req += f"per_page={opts.coubs_per_page}"
+        template += f"per_page={opts.coubs_per_page}"
 
         # Add sort order
         # Different timeline types support different values
         # Invalid values get ignored though, so no need for further checks
         if opts.sort:
-            req += f"&order_by={opts.sort}"
+            template += f"&order_by={opts.sort}"
 
-        with urlopen(req) as resp:
+        # Initial API call in order to get the page count
+        with urlopen(template) as resp:
             resp_json = json.loads(resp.read())
 
         pages = resp_json['total_pages']
@@ -278,33 +282,28 @@ class CoubInputData:
 
         msg(f"\nDownloading {url_type} info ({url}):")
 
+        requests = []
+        for p in range(1, pages+1):
+            requests.append(f"{template}&page={p}")
+            # Crude check to limit the max. number of requested pages
+            # Necessary as --limit-num checks against parsed list
+            # but links only get parsed AFTER all responses are collected
+            if opts.max_coubs:
+                limit = opts.max_coubs - len(self.parsed)
+                if p*opts.coubs_per_page >= limit:
+                    break
+
         if aio:
-            requests = []
-            for p in range(1, pages+1):
-                requests.append(f"{req}&page={p}")
-                # Crude check to limit the max. number of requested pages
-                # Necessary as --limit-num checks against parsed list
-                # but links only get parsed AFTER all responses are collected
-                if opts.max_coubs:
-                    limit = opts.max_coubs - len(self.parsed)
-                    if p*opts.coubs_per_page >= limit:
-                        break
+            responses = asyncio.run(get_responses_aio(requests, pages))
+        else:
+            responses = get_responses(requests, pages)
 
-            responses = asyncio.run(download_responses_aio(requests, pages))
-
-            for resp in responses:
-                self.parse_page(resp)
+        for resp in responses:
+            resp_json = json.loads(resp)
+            self.parse_page(resp_json)
 
             if opts.max_coubs and len(self.parsed) >= opts.max_coubs:
                 return
-        else:
-            for p in range(1, pages+1):
-                msg(f"  {p} out of {pages} pages")
-                with urlopen(f"{req}&page={p}") as resp:
-                    self.parse_page(json.loads(resp.read()))
-
-                if opts.max_coubs and len(self.parsed) >= opts.max_coubs:
-                    return
 
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -642,9 +641,9 @@ class CoubBuffer():
         """Encompasses the whole download process with sequential downloads"""
         for c in self.coubs:
             if c['v_name']:
-                download_stream(c['v_link'], c['v_name'])
+                save_stream(c['v_link'], c['v_name'])
             if c['a_name']:
-                download_stream(c['a_link'], c['a_name'])
+                save_stream(c['a_link'], c['a_name'])
 
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -657,7 +656,7 @@ class CoubBuffer():
         tout = aiohttp.ClientTimeout(total=None)
         conn = aiohttp.TCPConnector(limit=opts.connect)
         async with aiohttp.ClientSession(timeout=tout, connector=conn) as session:
-            tasks = [(download_stream_aio(session, s[0], s[1])) for s in streams]
+            tasks = [(save_stream_aio(session, s[0], s[1])) for s in streams]
             await asyncio.gather(*tasks, return_exceptions=False)
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -1317,30 +1316,44 @@ def stream_lists(data):
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-async def json_aio(session, request, progress):
+async def request_aio(session, req, progress):
     msg(progress)
-    async with session.get(request) as resp:
+    async with session.get(req) as resp:
         j = await resp.read()
 
-    return json.loads(j)
+    return j
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-async def download_responses_aio(requests, max_pages):
+def get_responses(requests, max_pages):
+    quantity = len(requests)
+    prog = [f"  {i} out of {max_pages} pages" for i in range(1, quantity+1)]
+
+    responses = []
+    for i in range(quantity):
+        msg(prog[i])
+        with urlopen(requests[i]) as resp:
+            responses.append(resp.read())
+
+    return responses
+
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+async def get_responses_aio(requests, max_pages):
     quantity = len(requests)
     prog = [f"  {i} out of {max_pages} pages" for i in range(1, quantity+1)]
 
     tout = aiohttp.ClientTimeout(total=None)
     conn = aiohttp.TCPConnector(limit=opts.connect)
     async with aiohttp.ClientSession(timeout=tout, connector=conn) as s:
-        tasks = [(json_aio(s, requests[i], prog[i])) for i in range(quantity)]
+        tasks = [(request_aio(s, requests[i], prog[i])) for i in range(quantity)]
         responses = await asyncio.gather(*tasks, return_exceptions=False)
 
     return responses
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-def download_stream(link, path):
+def save_stream(link, path):
     """Download individual coub streams with urllib"""
     try:
         with urlopen(link) as stream, open(path, "wb") as f:
@@ -1350,7 +1363,7 @@ def download_stream(link, path):
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-async def download_stream_aio(session, link, path):
+async def save_stream_aio(session, link, path):
     """Download individual coub streams with aiohttp"""
     async with session.get(link) as response:
         with open(path, "wb") as f:
@@ -1439,10 +1452,10 @@ def main():
             del coubs.parsed[:batch_size]
 
         batch.preprocess()
-        if not aio:
-            batch.download()
-        else:
+        if aio:
             asyncio.run(batch.download_aio())
+        else:
+            batch.download()
         batch.postprocess()
 
         if opts.sleep_dur and coubs.parsed:
