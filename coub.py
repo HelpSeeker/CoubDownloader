@@ -443,18 +443,18 @@ class CoubBuffer():
                 continue
 
             v_list, a_list = stream_lists(resp_json)
-            try:
+            if v_list:
                 v_link = v_list[opts.v_quality]
-            except IndexError:
+            else:
                 if self.init_size == 1:
                     err("Error: Coub unavailable!")
                 self.err['before'] += 1
                 del self.coubs[i]
                 continue
 
-            try:
+            if a_list:
                 a_link = a_list[opts.a_quality]
-            except IndexError:
+            else:
                 a_link = None
                 if opts.a_only:
                     if self.init_size == 1:
@@ -537,13 +537,12 @@ class CoubBuffer():
                 else:
                     err("Error: Stream corruption!")
                 self.err['after'] += 1
-                # I'm too lazy to check against all special cases here
-                # Only thing that matters is the complete coub removal
-                try:
+
+                if os.path.exists(v_name):
                     os.remove(v_name)
+                if os.path.exists(a_name):
                     os.remove(a_name)
-                except:
-                    pass
+
                 del self.coubs[i]
                 continue
 
