@@ -601,10 +601,7 @@ class CoubBuffer():
     def preview_all(self):
         """Preview all downloaded coubs in a batch"""
         for c in self.coubs:
-            try:
-                show_preview(c)
-            except subprocess.CalledProcessError:
-                pass
+            show_preview(c)
 
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -1417,9 +1414,8 @@ def show_preview(coub):
         command.append(play)
         subprocess.check_call(command, stdout=subprocess.DEVNULL, \
                                        stderr=subprocess.DEVNULL)
-    except subprocess.CalledProcessError:
-        err("Error: Missing file, invalid command or user interrupt in show_preview!")
-        raise
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        err("Warning: Preview command failed!")
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # Main Function
