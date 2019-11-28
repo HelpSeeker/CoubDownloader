@@ -1208,45 +1208,51 @@ def stream_lists(data):
     # A few words (or maybe more) regarding Coub's streams:
     #
     # 'html5' has 3 video and 2 audio qualities
-    #     video: med    (~360p)
-    #            high   (~720p)
-    #            higher (~900p)
+    #     video: med    ( ~640px width)
+    #            high   (~1280px width)
+    #            higher (~1600px width)
     #     audio: med    (MP3@128Kbps CBR)
     #            high   (MP3@160Kbps VBR)
     #
     # 'mobile' has 1 video and 2 audio qualities
-    #     video: video  (~360p)
-    #     audio: 0      (AAC@128Kbps CBR or MP3@128Kbps CBR)
+    #     video: video  (~640px width)
+    #     audio: 0      (AAC@128Kbps CBR or rarely MP3@128Kbps CBR)
     #            1      (MP3@128Kbps CBR)
     #
     # 'share' has 1 quality (audio+video)
-    #     video+audio: default (~720p, sometimes ~360p + AAC@128Kbps CBR)
+    #     video+audio: default (video: ~1280px width, sometimes ~640px width
+    #                           audio: AAC@128Kbps CBR)
     #
     # -) all videos come with a watermark
-    # -) html5 video/audio and mobile audio may come in less available qualities
+    # -) html5 video/audio and mobile audio may come in less available
+    #    qualities (although it's quite rare)
     # -) html5 video med and mobile video are the same file
     # -) html5 audio med and the worst mobile audio are the same file
     # -) mobile audio 0 is always the best mobile audio
-    # -) often only mobile audio 0 is available as MP3 (no mobile audio 1)
-    # -) share video has the same quality as mobile video
-    # -) share audio is always AAC, even if mobile audio is only available as MP3
-    # -) share audio is often shorter than other audio versions
-    # -) videos come as MP4, MP3 audio as MP3 and AAC audio as M4A.
+    # -) often mobile audio 0 is AAC, but occasionally it's MP3, in which case
+    #    there's no mobile audio 1
+    # -) share audio is always AAC, even if mobile audio is only available as
+    #    MP3
+    # -) share audio is pretty much always shorter than other audio versions
+    # -) videos come as MP4, MP3 audio as MP3 and AAC audio as M4A
     #
-    # All the aforementioned information regards the new Coub storage system (after the watermark introduction).
-    # Also Coub is still catching up with encoding, so not every stream existence is yet guaranteed.
+    # I'd also like to stress that Coub may down- but also upscale (!) the
+    # original footage to provide their standard resolutions. Therefore there's
+    # no such thing as a "best" video stream. Ideally the resolution closest to
+    # the original one should be downloaded.
+    #
+    # All the aforementioned information regards the new Coub storage system
+    # (after the watermark introduction).
+    # Coub is almost done with encoding, but not every stream existence is yet
+    # guaranteed.
     #
     # Streams that may still be unavailable:
     #   -) share
-    #   -) mobile video with direct URL (not the old base64 format)
-    #   -) mobile audio in AAC
+    #   -) mobile audio in AAC (very very rare)
     #   -) html5 video higher
-    #   -) html5 video med/high in a non-broken state (don't require \x00\x00 fix)
+    #   -) html5 video med in a non-broken state (don't require \x00\x00 fix)
     #
     # There are no universal rules in which order new streams get added.
-    # Sometimes you find videos with non-broken html5 streams, but the old base64 mobile URL.
-    # Sometimes you find videos without html5 higher, but with the new mobile video.
-    # Sometimes only html5 video med is still broken.
     #
     # It's a mess. Also release an up-to-date API documentations, you dolts!
 
@@ -1255,15 +1261,12 @@ def stream_lists(data):
 
     # Special treatment for shared video
     if opts.share:
-        try:
-            version = data['file_versions']['share']['default']
-            # Non-existence should result in None
-            # Unfortunately there are exceptions to this rule (e.g. '{}')
-            if not version or version in ("{}",):
-                raise KeyError
-        except KeyError:
-            return ([], [])
-        return ([version], [])
+        version = data['file_versions']['share']['default']
+        # Non-existence results in None or '{}' (rare)
+        if version and version not in ("{}",):
+            return ([version], [])
+
+        return ([], [])
 
     # Video stream parsing
     v_formats = {
@@ -1275,38 +1278,41 @@ def stream_lists(data):
     v_max = v_formats[opts.v_max]
     v_min = v_formats[opts.v_min]
 
+    version = data['file_versions']['html5']['video']
     for vq in v_formats:
         if v_min <= v_formats[vq] <= v_max:
-            try:
-                version = data['file_versions']['html5']['video'][vq]
-            except KeyError:
-                continue
-
-            # v_size/a_size can be 0 OR None in case of a missing stream
+            # v_size can be 0 OR None in case of a missing stream
             # None is the exception and an irregularity in the Coub API
-            if version['size']:
-                video.append(version['url'])
+            if vq in version and version[vq]['size']:
+                video.append(version[vq]['url'])
 
     # Audio streams parsing
     if opts.aac >= 2:
-        a_combo = [("html5", "med"), ("html5", "high"), ("mobile", 0)]
+        a_combo = [
+            ("html5", "med"),
+            ("html5", "high"),
+            ("mobile", 0)
+        ]
     else:
-        a_combo = [("html5", "med"), ("mobile", 0), ("html5", "high")]
+        a_combo = [
+            ("html5", "med"),
+            ("mobile", 0),
+            ("html5", "high")
+        ]
 
     for form, aq in a_combo:
-        try:
-            version = data['file_versions'][form]['audio'][aq]
-        except KeyError:
+        if 'audio' in data['file_versions'][form]:
+            version = data['file_versions'][form]['audio']
+        else:
             continue
 
         if form == "mobile":
-            # Mobile audio doesn't list size
-            # So just pray that the file behind the link exists
             if opts.aac:
-                audio.append(version)
-        else:
-            if version['size'] and opts.aac < 3:
-                audio.append(version['url'])
+                # Mobile audio doesn't list its size
+                # So just pray that the file behind the link exists
+                audio.append(version[aq])
+        elif aq in version and version[aq]['size'] and opts.aac < 3:
+            audio.append(version[aq]['url'])
 
     return (video, audio)
 
