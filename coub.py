@@ -29,7 +29,7 @@ err_stat = {
     'opt': 2,
     'run': 3,
     'down': 4,
-    'int': 5
+    'int': 5,
 }
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -382,7 +382,7 @@ class CoubBuffer():
                 'a_link': None,
                 'v_name': None,
                 'a_name': None,
-                'name': None
+                'name': None,
             })
             count += 1
 
@@ -390,14 +390,15 @@ class CoubBuffer():
         self.existing = 0
         self.err = {
             'before': 0,
-            'after': 0
+            'after': 0,
         }
 
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
     def print_progress(self):
         if self.init_size == 1:
-            msg(f"  {count} out of {coubs.count} (https://coub.com/view/{self.coubs[0]['id']})")
+            link = f"https://coub.com/view/{self.coubs[0]['id']}"
+            msg(f"  {count} out of {coubs.count} ({link})")
         else:
             msg(f"  {count} out of {coubs.count}")
 
@@ -533,7 +534,8 @@ class CoubBuffer():
                a_name and not valid_stream(a_name):
                 # Add additional info for larger batches
                 if self.init_size > 1:
-                    err(f"Error: Stream corruption! (https://coub.com/view/{self.coubs[i]['id']})")
+                    link = f"https://coub.com/view/{self.coubs[i]['id']}"
+                    err(f"Error: Stream corruption! ({link})")
                 else:
                     err("Error: Stream corruption!")
                 self.err['after'] += 1
@@ -573,7 +575,7 @@ class CoubBuffer():
                 command = [
                     "ffmpeg", "-y", "-v", "error",
                     "-f", "concat", "-safe", "0",
-                    "-i", t_name, "-i", a_name
+                    "-i", t_name, "-i", a_name,
                 ]
                 if opts.dur:
                     command.extend(["-t", opts.dur])
@@ -825,7 +827,7 @@ def check_category(cat):
         # Special categories
         "newest",
         "random",
-        "coub_of_the_day"
+        "coub_of_the_day",
     ]
 
     cat = cat.split("/")[-1]
@@ -873,7 +875,7 @@ def parse_cli():
         "--preview",
         "--write-list",
         "--use-archive",
-        "-o", "--output"
+        "-o", "--output",
     ]
 
     pos = 1
@@ -1026,10 +1028,12 @@ def check_options():
         sys.exit(err_stat['opt'])
 
     if opts.dur:
-        command = ["ffmpeg", "-v", "quiet",
-                   "-f", "lavfi", "-i", "anullsrc",
-                   "-t", opts.dur, "-c", "copy",
-                   "-f", "null", "-"]
+        command = [
+            "ffmpeg", "-v", "quiet",
+            "-f", "lavfi", "-i", "anullsrc",
+            "-t", opts.dur, "-c", "copy",
+            "-f", "null", "-",
+        ]
         try:
             subprocess.check_call(command)
         except subprocess.CalledProcessError:
@@ -1050,7 +1054,7 @@ def check_options():
     v_formats = {
         'med': 0,
         'high': 1,
-        'higher': 2
+        'higher': 2,
     }
     if opts.v_max not in v_formats:
         err(f"Invalid value for --max-video ('{opts.v_max}')!")
@@ -1069,7 +1073,7 @@ def check_options():
         "views_count",
         "newest_popular",
         "oldest",
-        "newest"
+        "newest",
     ]
     if opts.sort and opts.sort not in allowed_sort:
         err(f"Invalid sort order ('{opts.sort}')!\n")
@@ -1272,7 +1276,7 @@ def stream_lists(data):
     v_formats = {
         'med': 0,
         'high': 1,
-        'higher': 2
+        'higher': 2,
     }
 
     v_max = v_formats[opts.v_max]
@@ -1291,13 +1295,13 @@ def stream_lists(data):
         a_combo = [
             ("html5", "med"),
             ("html5", "high"),
-            ("mobile", 0)
+            ("mobile", 0),
         ]
     else:
         a_combo = [
             ("html5", "med"),
             ("mobile", 0),
-            ("html5", "high")
+            ("html5", "high"),
         ]
 
     for form, aq in a_combo:
@@ -1391,7 +1395,7 @@ def valid_stream(path):
         "Header missing",
         "Failed to read frame size",
         "Invalid NAL",
-        "moov atom not found"
+        "moov atom not found",
     ]
     for error in typical:
         if error in out.stderr:
