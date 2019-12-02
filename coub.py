@@ -439,6 +439,15 @@ class Coub():
 
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
+    def download(self):
+        """Encompasses the whole download process with sequential downloads"""
+        if self.v_name:
+            save_stream(self.v_link, self.v_name)
+        if self.a_name:
+            save_stream(self.a_link, self.a_name)
+
+    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
     def check_integrity(self):
         if self.erroneous():
             return
@@ -513,16 +522,6 @@ class CoubBuffer():
 
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-    def download(self):
-        """Encompasses the whole download process with sequential downloads"""
-        for c in self.coubs:
-            if c.v_name:
-                save_stream(c.v_link, c.v_name)
-            if c.a_name:
-                save_stream(c.a_link, c.a_name)
-
-    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
     async def download_aio(self):
         """Encompasses the whole download process with asynchronous I/O"""
         video = [(c.v_link, c.v_name) for c in self.coubs if c.v_name]
@@ -552,7 +551,8 @@ class CoubBuffer():
         if aio:
             asyncio.run(self.download_aio())
         else:
-            self.download()
+            for c in self.coubs:
+                c.download()
 
         for c in self.coubs:
             c.check_integrity()
