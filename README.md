@@ -111,6 +111,7 @@ Output:
 
 * Python >= 3.7
 * [aiohttp](https://aiohttp.readthedocs.io/en/stable/)
+* [aiofiles](https://github.com/Tinche/aiofiles)
 
 ## Input
 

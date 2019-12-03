@@ -14,6 +14,7 @@ from urllib.parse import quote as urlquote
 try:
     import asyncio
     import aiohttp
+    import aiofiles
     aio = True
 except ModuleNotFoundError:
     aio = False
@@ -1320,13 +1321,12 @@ def save_stream(link, path):
 
 async def save_stream_aio(session, link, path):
     """Download individual coub streams with aiohttp"""
-    async with session.get(link) as response:
-        with open(path, "wb") as f:
-            while True:
-                chunk = await response.content.read(1024)
-                if not chunk:
-                    break
-                f.write(chunk)
+    async with session.get(link) as resp, aiofiles.open(path, "wb") as f:
+        while True:
+            chunk = await resp.content.read(1024)
+            if not chunk:
+                break
+            await f.write(chunk)
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
