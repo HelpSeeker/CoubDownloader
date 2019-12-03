@@ -456,18 +456,21 @@ class Coub():
         # If wanted stream is present -> success
         # I'm not happy with this solution
         if self.v_name and not os.path.exists(self.v_name):
-            self.unavailable = True
+            self.corrupted = True
             return
 
         if self.a_name and not os.path.exists(self.a_name):
-            self.unavailable = True
+            self.a_name = None
+            if opts.a_only:
+                self.corrupted = True
             return
 
         if self.v_name and not valid_stream(self.v_name) or \
            self.a_name and not valid_stream(self.a_name):
-            if os.path.exists(self.v_name):
+
+            if self.v_name and os.path.exists(self.v_name):
                 os.remove(self.v_name)
-            if os.path.exists(self.a_name):
+            if self.a_name and os.path.exists(self.a_name):
                 os.remove(self.a_name)
 
             self.corrupted = True
@@ -519,6 +522,38 @@ class CoubBuffer():
 
     def __init__(self, parsed):
         self.coubs = [Coub(link) for link in parsed]
+        self.size = len(self.coubs)
+
+    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+    def print_progress(self):
+        if self.size == 1:
+            msg(f"  {count} out of {coubs.count} ({self.coubs[0].link})")
+        else:
+            msg(f"  {count} out of {coubs.count}")
+
+    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+    def list_errors(self, err_type):
+        err_list = {
+            'unavailable': [c for c in self.coubs if c.unavailable],
+            'exists': [c for c in self.coubs if c.exists],
+            'corrupted': [c for c in self.coubs if c.corrupted],
+        }
+        err_info = {
+            'unavailable': "unavailable",
+            'exists': "already downloaded",
+            'corrupted': "failed to download properly",
+        }
+
+        amount = len(err_list[err_type])
+        if not amount:
+            return
+
+        if self.size == 1:
+            err(f"Coub {err_info[err_type]}!")
+        else:
+            err(f"{amount} coub(s) {err_info[err_type]}!")
 
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -539,23 +574,29 @@ class CoubBuffer():
     def process(self):
         global count, done
 
+        # Preprocessing stage
+        count += self.size
+        self.print_progress()
         for c in self.coubs:
-            count += 1
-            msg(f"  {count} out of {coubs.count} ({c.link})")
-
             c.check_existence(custom_name=False)
             c.parse_json()
             if opts.out_format:
                 c.check_existence(custom_name=True)
+        self.list_errors(err_type='unavailable')
+        self.list_errors(err_type='exists')
 
+        # Download
         if aio:
             asyncio.run(self.download_aio())
         else:
             for c in self.coubs:
                 c.download()
 
+        # Postprocessing stage
         for c in self.coubs:
             c.check_integrity()
+        self.list_errors(err_type='corrupted')
+        for c in self.coubs:
             if not (opts.v_only or opts.a_only):
                 c.merge()
             if opts.archive_file:
