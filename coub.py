@@ -412,8 +412,44 @@ class Coub():
 
         try:
             with urlopen(self.req) as resp:
-                resp_json = json.load(resp)
-        except urllib.error.HTTPError:
+                resp_json = resp.read()
+                resp_json = json.loads(resp_json)
+        except:
+            self.unavailable = True
+            return
+
+        v_list, a_list = stream_lists(resp_json)
+        if v_list:
+            self.v_link = v_list[opts.v_quality]
+        else:
+            self.unavailable = True
+            return
+
+        if a_list:
+            self.a_link = a_list[opts.a_quality]
+        elif opts.a_only:
+            self.unavailable = True
+            return
+
+        self.name = get_name(resp_json, self.id)
+
+        if not opts.a_only:
+            self.v_name = f"{self.name}.mp4"
+        if not opts.v_only and self.a_link:
+            a_ext = self.a_link.split(".")[-1]
+            self.a_name = f"{self.name}.{a_ext}"
+
+    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+    async def parse_json_aio(self, session):
+        if self.erroneous():
+            return
+
+        try:
+            async with session.get(self.req) as resp:
+                resp_json = await resp.read()
+                resp_json = json.loads(resp_json)
+        except:
             self.unavailable = True
             return
 
@@ -558,6 +594,15 @@ class CoubBuffer():
 
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
+    async def parse_json_aio(self):
+        tout = aiohttp.ClientTimeout(total=None)
+        conn = aiohttp.TCPConnector(limit=opts.connect)
+        async with aiohttp.ClientSession(timeout=tout, connector=conn) as session:
+            tasks = [c.parse_json_aio(session) for c in self.coubs]
+            await asyncio.gather(*tasks, return_exceptions=False)
+
+    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
     async def download_aio(self):
         """Encompasses the whole download process with asynchronous I/O"""
         video = [(c.v_link, c.v_name) for c in self.coubs if c.v_name]
@@ -580,7 +625,14 @@ class CoubBuffer():
         self.print_progress()
         for c in self.coubs:
             c.check_existence(custom_name=False)
-            c.parse_json()
+
+        if aio:
+            asyncio.run(self.parse_json_aio())
+        else:
+            for c in self.coubs:
+                c.parse_json()
+
+        for c in self.coubs:
             if opts.out_format:
                 c.check_existence(custom_name=True)
         self.list_errors(err_type='unavailable')
