@@ -1313,7 +1313,11 @@ def save_stream(link, path):
     """Download individual coub streams with urllib"""
     try:
         with urlopen(link) as stream, open(path, "wb") as f:
-            f.write(stream.read())
+            while True:
+                chunk = stream.read(1024)
+                if not chunk:
+                    break
+                f.write(chunk)
     except urllib.error.HTTPError:
         return
 
@@ -1321,9 +1325,9 @@ def save_stream(link, path):
 
 async def save_stream_aio(session, link, path):
     """Download individual coub streams with aiohttp"""
-    async with session.get(link) as resp, aiofiles.open(path, "wb") as f:
+    async with session.get(link) as stream, aiofiles.open(path, "wb") as f:
         while True:
-            chunk = await resp.content.read(1024)
+            chunk = await stream.content.read(1024)
             if not chunk:
                 break
             await f.write(chunk)
