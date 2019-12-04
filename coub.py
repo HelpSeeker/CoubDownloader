@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 
-import sys
-import os
-import time
+import asyncio
 import json
+import os
 import subprocess
+import sys
+import time
+
 from fnmatch import fnmatch
 
 import urllib.error
@@ -12,7 +14,6 @@ from urllib.request import urlopen
 from urllib.parse import quote as urlquote
 
 try:
-    import asyncio
     import aiohttp
     import aiofiles
     aio = True
@@ -406,14 +407,19 @@ class Coub():
 
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-    def parse_json(self):
+    async def parse_json(self, session=None):
         if self.erroneous():
             return
 
         try:
-            with urlopen(self.req) as resp:
-                resp_json = resp.read()
-                resp_json = json.loads(resp_json)
+            if aio:
+                async with session.get(self.req) as resp:
+                    resp_json = await resp.read()
+                    resp_json = json.loads(resp_json)
+            else:
+                with urlopen(self.req) as resp:
+                    resp_json = resp.read()
+                    resp_json = json.loads(resp_json)
         except:
             self.unavailable = True
             return
@@ -438,50 +444,6 @@ class Coub():
         if not opts.v_only and self.a_link:
             a_ext = self.a_link.split(".")[-1]
             self.a_name = f"{self.name}.{a_ext}"
-
-    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-    async def parse_json_aio(self, session):
-        if self.erroneous():
-            return
-
-        try:
-            async with session.get(self.req) as resp:
-                resp_json = await resp.read()
-                resp_json = json.loads(resp_json)
-        except:
-            self.unavailable = True
-            return
-
-        v_list, a_list = stream_lists(resp_json)
-        if v_list:
-            self.v_link = v_list[opts.v_quality]
-        else:
-            self.unavailable = True
-            return
-
-        if a_list:
-            self.a_link = a_list[opts.a_quality]
-        elif opts.a_only:
-            self.unavailable = True
-            return
-
-        self.name = get_name(resp_json, self.id)
-
-        if not opts.a_only:
-            self.v_name = f"{self.name}.mp4"
-        if not opts.v_only and self.a_link:
-            a_ext = self.a_link.split(".")[-1]
-            self.a_name = f"{self.name}.{a_ext}"
-
-    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-    def download(self):
-        """Encompasses the whole download process with sequential downloads"""
-        if self.v_name:
-            save_stream(self.v_link, self.v_name)
-        if self.a_name:
-            save_stream(self.a_link, self.a_name)
 
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -594,26 +556,34 @@ class CoubBuffer():
 
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-    async def parse_json_aio(self):
-        tout = aiohttp.ClientTimeout(total=None)
-        conn = aiohttp.TCPConnector(limit=opts.connect)
-        async with aiohttp.ClientSession(timeout=tout, connector=conn) as session:
-            tasks = [c.parse_json_aio(session) for c in self.coubs]
-            await asyncio.gather(*tasks, return_exceptions=False)
+    async def parse(self):
+        if aio:
+            tout = aiohttp.ClientTimeout(total=None)
+            conn = aiohttp.TCPConnector(limit=opts.connect)
+            async with aiohttp.ClientSession(timeout=tout, connector=conn) as session:
+                tasks = [c.parse_json(session) for c in self.coubs]
+                await asyncio.gather(*tasks, return_exceptions=False)
+        else:
+            for c in self.coubs:
+                await c.parse_json()
 
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-    async def download_aio(self):
+    async def download(self):
         """Encompasses the whole download process with asynchronous I/O"""
         video = [(c.v_link, c.v_name) for c in self.coubs if c.v_name]
         audio = [(c.a_link, c.a_name) for c in self.coubs if c.a_name]
         streams = video + audio
 
-        tout = aiohttp.ClientTimeout(total=None)
-        conn = aiohttp.TCPConnector(limit=opts.connect)
-        async with aiohttp.ClientSession(timeout=tout, connector=conn) as session:
-            tasks = [(save_stream_aio(session, s[0], s[1])) for s in streams]
-            await asyncio.gather(*tasks, return_exceptions=False)
+        if aio:
+            tout = aiohttp.ClientTimeout(total=None)
+            conn = aiohttp.TCPConnector(limit=opts.connect)
+            async with aiohttp.ClientSession(timeout=tout, connector=conn) as session:
+                tasks = [save_stream(s[0], s[1], session) for s in streams]
+                await asyncio.gather(*tasks, return_exceptions=False)
+        else:
+            for s in streams:
+                await save_stream(s[0], s[1])
 
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -626,11 +596,7 @@ class CoubBuffer():
         for c in self.coubs:
             c.check_existence(custom_name=False)
 
-        if aio:
-            asyncio.run(self.parse_json_aio())
-        else:
-            for c in self.coubs:
-                c.parse_json()
+        asyncio.run(self.parse())
 
         for c in self.coubs:
             if opts.out_format:
@@ -639,11 +605,7 @@ class CoubBuffer():
         self.list_errors(err_type='exists')
 
         # Download
-        if aio:
-            asyncio.run(self.download_aio())
-        else:
-            for c in self.coubs:
-                c.download()
+        asyncio.run(self.download())
 
         # Postprocessing stage
         for c in self.coubs:
@@ -1361,28 +1323,25 @@ async def get_responses_aio(requests, max_pages):
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-def save_stream(link, path):
-    """Download individual coub streams with urllib"""
-    try:
-        with urlopen(link) as stream, open(path, "wb") as f:
+async def save_stream(link, path, session=None):
+    """Download individual coub streams with aiohttp"""
+    if aio:
+        async with session.get(link) as stream, aiofiles.open(path, "wb") as f:
             while True:
-                chunk = stream.read(1024)
+                chunk = await stream.content.read(1024)
                 if not chunk:
                     break
-                f.write(chunk)
-    except urllib.error.HTTPError:
-        return
-
-# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-async def save_stream_aio(session, link, path):
-    """Download individual coub streams with aiohttp"""
-    async with session.get(link) as stream, aiofiles.open(path, "wb") as f:
-        while True:
-            chunk = await stream.content.read(1024)
-            if not chunk:
-                break
-            await f.write(chunk)
+                await f.write(chunk)
+    else:
+        try:
+            with urlopen(link) as stream, open(path, "wb") as f:
+                while True:
+                    chunk = stream.read(1024)
+                    if not chunk:
+                        break
+                    f.write(chunk)
+        except urllib.error.HTTPError:
+            return
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
