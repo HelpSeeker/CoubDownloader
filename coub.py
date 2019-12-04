@@ -8,6 +8,7 @@ import sys
 import time
 
 from fnmatch import fnmatch
+from math import ceil
 
 import urllib.error
 from urllib.request import urlopen
@@ -201,8 +202,17 @@ class CoubInputData:
 
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-    def parse_page(self, resp):
-        for c in resp['coubs']:
+    async def parse_page(self, req, session=None):
+        if aio:
+            async with session.get(req) as resp:
+                resp_json = await resp.read()
+                resp_json = json.loads(resp_json)
+        else:
+            with urlopen(req) as resp:
+                resp_json = resp.read()
+                resp_json = json.loads(resp_json)
+
+        for c in resp_json['coubs']:
             if opts.max_coubs and len(self.parsed) >= opts.max_coubs:
                 return
 
@@ -226,7 +236,7 @@ class CoubInputData:
 
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-    def parse_timeline(self, url_type, url):
+    async def parse_timeline(self, url_type, url):
         """
         Parse coub links from various Coub source
 
@@ -239,73 +249,45 @@ class CoubInputData:
         if opts.max_coubs and len(self.parsed) >= opts.max_coubs:
             return
 
-        if url_type == "channel":
-            channel = url.split("/")[-1]
-            template = "https://coub.com/api/v2/timeline/channel/" + channel
-            template += "?"
-        elif url_type == "tag":
-            tag = url.split("/")[-1]
-            tag = urlquote(tag)
-            template = "https://coub.com/api/v2/timeline/tag/" + tag
-            template += "?"
-        elif url_type == "search":
-            search = url.split("=")[-1]
-            search = urlquote(search)
-            template = "https://coub.com/api/v2/search/coubs?q=" + search
-            template += "&"
-        elif url_type == "category":
-            cat = url.split("/")[-1]
-            template = "https://coub.com/api/v2/timeline/explore/" + cat
-            template += "?"
-        elif url_type == "hot":
-            template = "https://coub.com/api/v2/timeline/hot"
-            template += "?"
-        else:
-            err("Error: Unknown input type in parse_timeline!")
-            sys.exit(err_stat['run'])
-
-        template += f"per_page={opts.coubs_per_page}"
-
-        # Add sort order
-        # Different timeline types support different values
-        # Invalid values get ignored though, so no need for further checks
-        if opts.sort:
-            template += f"&order_by={opts.sort}"
+        template = get_request_template(url_type, url)
 
         # Initial API call in order to get the page count
         with urlopen(template) as resp:
             resp_json = json.loads(resp.read())
 
-        pages = resp_json['total_pages']
+        total_pages = resp_json['total_pages']
         # tag/hot section/category timeline redirects pages >99 to page 1
         # other timelines work like intended
-        if url_type in ("tag", "hot", "category") and pages > 99:
-            pages = 99
+        if url_type in ("tag", "hot", "category") and total_pages > 99:
+            total_pages = 99
+
+        pages = total_pages
+
+        # Limit max. number of requested pages
+        # Necessary as self.parse_page() returns when limit
+        # is reached, but only AFTER the request was made
+        if opts.max_coubs:
+            to_limit = opts.max_coubs - len(self.parsed)
+            max_pages = ceil(to_limit / opts.coubs_per_page)
+            if pages > max_pages:
+                pages = max_pages
+
+        requests = [f"{template}&page={p}" for p in range(1, pages+1)]
 
         msg(f"\nDownloading {url_type} info ({url}):")
 
-        requests = []
-        for p in range(1, pages+1):
-            requests.append(f"{template}&page={p}")
-            # Crude check to limit the max. number of requested pages
-            # Necessary as --limit-num checks against parsed list
-            # but links only get parsed AFTER all responses are collected
-            if opts.max_coubs:
-                limit = opts.max_coubs - len(self.parsed)
-                if p*opts.coubs_per_page >= limit:
-                    break
-
         if aio:
-            responses = asyncio.run(get_responses_aio(requests, pages))
+            msg(f"  {pages} out of {total_pages} pages")
+
+            tout = aiohttp.ClientTimeout(total=None)
+            conn = aiohttp.TCPConnector(limit=opts.connect)
+            async with aiohttp.ClientSession(timeout=tout, connector=conn) as session:
+                tasks = [self.parse_page(req, session) for req in requests]
+                await asyncio.gather(*tasks, return_exceptions=False)
         else:
-            responses = get_responses(requests, pages)
-
-        for resp in responses:
-            resp_json = json.loads(resp)
-            self.parse_page(resp_json)
-
-            if opts.max_coubs and len(self.parsed) >= opts.max_coubs:
-                return
+            for i in range(pages):
+                msg(f"  {i+1} out of {total_pages} pages")
+                await self.parse_page(requests[i])
 
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -333,15 +315,15 @@ class CoubInputData:
         self.parse_links()
         self.parse_lists()
         for c in self.channels:
-            self.parse_timeline("channel", c)
+            asyncio.run(self.parse_timeline("channel", c))
         for t in self.tags:
-            self.parse_timeline("tag", t)
+            asyncio.run(self.parse_timeline("tag", t))
         for s in self.searches:
-            self.parse_timeline("search", s)
+            asyncio.run(self.parse_timeline("search", s))
         for c in self.categories:
-            self.parse_timeline("category", c)
+            asyncio.run(self.parse_timeline("category", c))
         if self.hot:
-            self.parse_timeline("hot", "https://coub.com/hot")
+            asyncio.run(self.parse_timeline("hot", "https://coub.com/hot"))
 
         if not self.parsed:
             err("\nError: No coub links specified!")
@@ -1050,6 +1032,43 @@ def check_options():
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
+def get_request_template(url_type, url):
+    if url_type == "channel":
+        channel = url.split("/")[-1]
+        template = "https://coub.com/api/v2/timeline/channel/" + channel
+        template += "?"
+    elif url_type == "tag":
+        tag = url.split("/")[-1]
+        tag = urlquote(tag)
+        template = "https://coub.com/api/v2/timeline/tag/" + tag
+        template += "?"
+    elif url_type == "search":
+        search = url.split("=")[-1]
+        search = urlquote(search)
+        template = "https://coub.com/api/v2/search/coubs?q=" + search
+        template += "&"
+    elif url_type == "category":
+        cat = url.split("/")[-1]
+        template = "https://coub.com/api/v2/timeline/explore/" + cat
+        template += "?"
+    elif url_type == "hot":
+        template = "https://coub.com/api/v2/timeline/hot"
+        template += "?"
+    else:
+        err("Error: Unknown input type in get_request_template()!")
+        sys.exit(err_stat['run'])
+
+    template += f"per_page={opts.coubs_per_page}"
+
+    # Different timeline types support different values
+    # Invalid values get ignored though, so no need for further checks
+    if opts.sort:
+        template += f"&order_by={opts.sort}"
+
+    return template
+
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
 def resolve_paths():
     """Handle output path"""
 
@@ -1283,43 +1302,6 @@ def stream_lists(data):
             audio.append(version[aq]['url'])
 
     return (video, audio)
-
-# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-async def request_aio(session, req, progress):
-    msg(progress)
-    async with session.get(req) as resp:
-        j = await resp.read()
-
-    return j
-
-# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-def get_responses(requests, max_pages):
-    quantity = len(requests)
-    prog = [f"  {i} out of {max_pages} pages" for i in range(1, quantity+1)]
-
-    responses = []
-    for i in range(quantity):
-        msg(prog[i])
-        with urlopen(requests[i]) as resp:
-            responses.append(resp.read())
-
-    return responses
-
-# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-async def get_responses_aio(requests, max_pages):
-    quantity = len(requests)
-    prog = [f"  {i} out of {max_pages} pages" for i in range(1, quantity+1)]
-
-    tout = aiohttp.ClientTimeout(total=None)
-    conn = aiohttp.TCPConnector(limit=opts.connect)
-    async with aiohttp.ClientSession(timeout=tout, connector=conn) as s:
-        tasks = [(request_aio(s, requests[i], prog[i])) for i in range(quantity)]
-        responses = await asyncio.gather(*tasks, return_exceptions=False)
-
-    return responses
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
