@@ -507,18 +507,18 @@ class Coub():
             # Print .txt for FFmpeg's concat
             with open(t_name, "w") as f:
                 for _ in range(opts.repeat):
-                    print(f"file '{self.v_name}'", file=f)
+                    print(f"file 'file:{self.v_name}'", file=f)
 
             # Loop footage until shortest stream ends
             # Concatenated video (via list) counts as one long stream
             command = [
                 "ffmpeg", "-y", "-v", "error",
                 "-f", "concat", "-safe", "0",
-                "-i", t_name, "-i", self.a_name,
+                "-i", f"file:{t_name}", "-i", f"file:{self.a_name}",
             ]
             if opts.dur:
                 command.extend(["-t", opts.dur])
-            command.extend(["-c", "copy", "-shortest", m_name])
+            command.extend(["-c", "copy", "-shortest", f"file:{m_name}"])
 
             subprocess.run(command)
         finally:
@@ -1386,7 +1386,10 @@ async def save_stream(link, path, session=None):
 def valid_stream(path):
     """Test a given stream for eventual corruption with a test remux (FFmpeg)."""
     command = [
-        "ffmpeg", "-v", "error", "-i", path, "-t", "1", "-f", "null", "-"
+        "ffmpeg", "-v", "error",
+        "-i", f"file:{path}",
+        "-t", "1",
+        "-f", "null", "-",
     ]
     out = subprocess.run(command, capture_output=True, text=True)
 
