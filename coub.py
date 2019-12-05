@@ -1392,9 +1392,14 @@ def main():
         batch_size = opts.batch
 
     while coubs.parsed:
-        batch = CoubBuffer(coubs.parsed[:batch_size])
+        if batch_size != 1 and len(coubs.parsed) == batch_size+1:
+            batch = CoubBuffer(coubs.parsed)
+            del coubs.parsed[:]
+        else:
+            batch = CoubBuffer(coubs.parsed[:batch_size])
+            del coubs.parsed[:batch_size]
+
         batch.process()
-        del coubs.parsed[:batch_size]
 
         if opts.sleep_dur and coubs.parsed:
             time.sleep(opts.sleep_dur)
