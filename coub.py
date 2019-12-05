@@ -402,7 +402,7 @@ class Coub():
 
         if custom_name and exists(self.name) and not overwrite(self.name):
             self.exists = True
-        elif opts.archive_file and read_archive(self.id):
+        elif opts.archive_file and self.in_archive():
             self.exists = True
         elif not custom_name and exists(self.id) and not overwrite(self.id):
             self.exists = True
@@ -519,6 +519,48 @@ class Coub():
             os.remove(self.v_name)
             os.remove(self.a_name)
 
+    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+    def in_archive(self):
+        """Test if a coub's ID is present in the archive file."""
+        if not os.path.exists(opts.archive_file):
+            return False
+
+        with open(opts.archive_file, "r") as f:
+            content = f.readlines()
+        for l in content:
+            if l == self.id + "\n":
+                return True
+
+        return False
+
+    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+    def archive(self):
+        """Log a coub's ID in the archive file."""
+        with open(opts.archive_file, "a") as f:
+            print(self.id, file=f)
+
+    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+    def preview(self):
+        """Play a coub with the user provided command."""
+        if self.v_name and self.a_name:
+            play = f"{self.name}.mkv"
+        elif self.v_name:
+            play = self.v_name
+        elif self.a_name:
+            play = self.a_name
+
+        try:
+            # Need to split command string into list for check_call
+            command = opts.preview_command.split(" ")
+            command.append(play)
+            subprocess.check_call(command, stdout=subprocess.DEVNULL, \
+                                           stderr=subprocess.DEVNULL)
+        except (subprocess.CalledProcessError, FileNotFoundError):
+            err("Warning: Preview command failed!")
+
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 class CoubBuffer():
@@ -625,9 +667,9 @@ class CoubBuffer():
             if not (opts.v_only or opts.a_only):
                 c.merge()
             if opts.archive_file:
-                write_archive(c.id)
+                c.archive()
             if opts.preview:
-                show_preview(c)
+                c.preview()
 
             done += 1
 
@@ -1185,28 +1227,6 @@ def overwrite(name):
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-def read_archive(c_id):
-    """Check if the given coub ID is present in the archive file."""
-    if not os.path.exists(opts.archive_file):
-        return False
-
-    with open(opts.archive_file, "r") as f:
-        content = f.readlines()
-    for l in content:
-        if l == c_id + "\n":
-            return True
-
-    return False
-
-# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-def write_archive(c_id):
-    """Log the given coub ID in the archive file."""
-    with open(opts.archive_file, "a") as f:
-        print(c_id, file=f)
-
-# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
 def stream_lists(data):
     """Return all the available video/audio streams of the given coub."""
     # A few words (or maybe more) regarding Coub's streams:
@@ -1366,26 +1386,6 @@ def valid_stream(path):
             return False
 
     return True
-
-# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-def show_preview(coub):
-    """Play a finished coub with the given command."""
-    if coub.v_name and coub.a_name:
-        play = f"{coub.name}.mkv"
-    elif coub.v_name:
-        play = coub.v_name
-    elif coub.a_name:
-        play = coub.a_name
-
-    try:
-        # Need to split command string into list for check_call
-        command = opts.preview_command.split(" ")
-        command.append(play)
-        subprocess.check_call(command, stdout=subprocess.DEVNULL, \
-                                       stderr=subprocess.DEVNULL)
-    except (subprocess.CalledProcessError, FileNotFoundError):
-        err("Warning: Preview command failed!")
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # Main Function
