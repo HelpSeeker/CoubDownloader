@@ -395,16 +395,26 @@ class Coub():
 
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-    def check_existence(self, custom_name=False):
+    def check_existence(self):
         """Test if the coub already exists or is present in the archive."""
         if self.erroneous():
             return
 
-        if custom_name and exists(self.name) and not overwrite(self.name):
+        if opts.archive_file and self.in_archive():
             self.exists = True
-        elif opts.archive_file and self.in_archive():
-            self.exists = True
-        elif not custom_name and exists(self.id) and not overwrite(self.id):
+            return
+
+        old_file = None
+        # Existence of self.name indicates whether API request was already
+        # made (i.e. if 1st or 2nd check)
+        if not opts.out_format:
+            if not self.name:
+                old_file = exists(self.id)
+        else:
+            if self.name:
+                old_file = exists(self.name)
+
+        if old_file and not overwrite(old_file):
             self.exists = True
 
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -622,8 +632,9 @@ class CoubBuffer():
 
     async def download(self):
         """Download all available and requested coub streams."""
-        video = [(c.v_link, c.v_name) for c in self.coubs if c.v_name]
-        audio = [(c.a_link, c.a_name) for c in self.coubs if c.a_name]
+        to_download = [c for c in self.coubs if not c.erroneous()]
+        video = [(c.v_link, c.v_name) for c in to_download if c.v_name]
+        audio = [(c.a_link, c.a_name) for c in to_download if c.a_name]
         streams = video + audio
 
         if aio:
@@ -645,14 +656,18 @@ class CoubBuffer():
         # Preprocessing stage
         count += self.size
         self.print_progress()
+        # 1st existence check
+        # Handles default naming scheme and archive usage
         for c in self.coubs:
-            c.check_existence(custom_name=False)
+            c.check_existence()
 
         asyncio.run(self.parse())
 
-        for c in self.coubs:
-            if opts.out_format:
-                c.check_existence(custom_name=True)
+        # 2nd existence check
+        # Handles custom names exclusively (slower since API request necessary)
+        if opts.out_format:
+            for c in self.coubs:
+                c.check_existence()
         self.list_errors(err_type='unavailable')
         self.list_errors(err_type='exists')
 
@@ -1006,7 +1021,11 @@ def parse_cli():
                 opts.archive_file = os.path.abspath(arg)
             # Output
             elif opt in ("-o", "--output"):
-                opts.out_format = arg
+                # The default naming scheme is the same as using %id%
+                # but internally the default value is None
+                # So simply don't assign the argument if it's only %id%
+                if arg != "%id%":
+                    opts.out_format = arg
             # Unknown options
             elif fnmatch(opt, "-*"):
                 err(f"Unknown flag '{opt}'!")
@@ -1197,9 +1216,9 @@ def exists(name):
 
     for f in full_name:
         if os.path.exists(f):
-            return True
+            return f
 
-    return False
+    return None
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
