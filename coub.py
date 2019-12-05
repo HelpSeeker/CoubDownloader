@@ -1227,7 +1227,7 @@ def overwrite(name):
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-def stream_lists(data):
+def stream_lists(resp_json):
     """Return all the available video/audio streams of the given coub."""
     # A few words (or maybe more) regarding Coub's streams:
     #
@@ -1285,7 +1285,7 @@ def stream_lists(data):
 
     # Special treatment for shared video
     if opts.share:
-        version = data['file_versions']['share']['default']
+        version = resp_json['file_versions']['share']['default']
         # Non-existence results in None or '{}' (the latter is rare)
         if version and version not in ("{}",):
             return ([version], [])
@@ -1302,7 +1302,7 @@ def stream_lists(data):
     v_max = v_formats[opts.v_max]
     v_min = v_formats[opts.v_min]
 
-    version = data['file_versions']['html5']['video']
+    version = resp_json['file_versions']['html5']['video']
     for vq in v_formats:
         if v_min <= v_formats[vq] <= v_max:
             # html5 stream sizes can be 0 OR None in case of a missing stream
@@ -1325,8 +1325,8 @@ def stream_lists(data):
         ]
 
     for form, aq in a_combo:
-        if 'audio' in data['file_versions'][form]:
-            version = data['file_versions'][form]['audio']
+        if 'audio' in resp_json['file_versions'][form]:
+            version = resp_json['file_versions'][form]['audio']
         else:
             continue
 
