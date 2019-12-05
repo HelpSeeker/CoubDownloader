@@ -24,7 +24,7 @@ except ModuleNotFoundError:
 # Error codes
 # 1 -> missing required software
 # 2 -> invalid user-specified option
-# 3 -> misc. runtime error (missing function argument, unknown value in case, etc.)
+# 3 -> misc. runtime error
 # 4 -> not all input coubs exist after execution (i.e. some downloads failed)
 # 5 -> termination was requested mid-way by the user (i.e. Ctrl+C)
 err_stat = {
@@ -40,7 +40,7 @@ err_stat = {
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 class Options:
-    """Stores general options"""
+    """Define and store all import user settings."""
 
     # Change verbosity of the script
     # 0 for quiet, >= 1 for normal verbosity
@@ -57,25 +57,29 @@ class Options:
     keep = False
 
     # How often to loop the video
-    # If longer than audio duration -> audio decides length
+    # Only has an effect, if the looped video is shorter than the audio
+    # Otherwise the max. length is limited by the audio duration
     repeat = 1000
 
     # Max. coub duration (FFmpeg syntax)
+    # Can be used in combination with repeat, in which case the shorter
+    # duration will be used
     dur = None
 
     # Max no. of connections for aiohttp's ClientSession
-    # Be careful with this limit. Trust me.
-    # Raising it too high can potentially stall the script indefinitely
+    # Raising this value can lead to shorter download times, but also
+    # increases the risk of Coub throttling or terminating your connections
+    # There's also no benefit in higher values, if your connection is already
+    # fully utilized
     connect = 25
 
     # No. of coubs to process per batch
-    # Within a batch pre- and postprocessing are done at once
-    # Downloading may be distributed to several threads
+    # Bigger batches make better use of asynchronous parsing/download
     # 0 -> single batch for all coubs
     # 1 -> one coub at a time
     batch = 1
 
-    # Pause between downloads (in sec)
+    # Pause between batches (in sec)
     sleep_dur = None
 
     # Limit how many coubs can be downloaded during one script invocation
@@ -85,27 +89,31 @@ class Options:
     sort = None
 
     # What video/audio quality to download
-    #  0 -> worst quality
-    # -1 -> best quality
+    #   0 -> worst quality
+    #  -1 -> best quality
     # Everything else can lead to undefined behavior
     v_quality = -1
     a_quality = -1
 
     # Limits for the list of video streams
-    #   max: limits what counts as best stream
-    #   min: limits what counts as worst stream
-    # Supported values: med (~640px width), high (~1280px width), higher (~1600px width)
+    #   v_max: limits what counts as best stream
+    #   v_min: limits what counts as worst stream
+    # Supported values:
+    #   med    ( ~640px width)
+    #   high   (~1280px width)
+    #   higher (~1600px width)
     v_max = 'higher'
     v_min = 'med'
 
     # How much to prefer AAC audio
-    # 0 -> never download AAC audio
-    # 1 -> rank it between low and high quality MP3
-    # 2 -> prefer AAC, use MP3 fallback
-    # 3 -> either AAC or no audio
+    #   0 -> never download AAC audio
+    #   1 -> rank it between low and high quality MP3
+    #   2 -> prefer AAC, use MP3 fallback
+    #   3 -> either AAC or no audio
     aac = 1
 
     # Use shared video+audio instead of merging separate streams
+    # Leads to shorter videos, also no further quality selection
     share = False
 
     # Download reposts during channel downloads
@@ -114,17 +122,19 @@ class Options:
     # ONLY download reposts during channel downloads
     only_recoubs = False
 
-    # Show preview after each download with the given command
+    # Preview a downloaded coub with the given command
+    # Keyboard shortcuts may not work for CLI audio players
     preview = False
     preview_command = "mpv"
 
     # Only download video/audio stream
-    # Can't be both true!
+    # a_only and v_only are mutually exclusive
     a_only = False
     v_only = False
 
     # Output parsed coubs to file instead of downloading
-    # DO NOT TOUCH!
+    # Values other than None will terminate the script after the initial
+    # parsing process (i.e. no coubs will be downloaded)
     out_file = None
 
     # Use an archive file to keep track of downloaded coubs
@@ -140,7 +150,7 @@ class Options:
     #   %tags%      - all tags (separated by tag_sep, see below)
     # All other strings are interpreted literally.
     #
-    # Setting a custom value severely increases skip duration for existing coubs
+    # Setting a custom value increases skip duration for existing coubs
     # Usage of an archive file is recommended in such an instance
     out_format = None
 
@@ -149,7 +159,7 @@ class Options:
     tag_sep = "_"
 
 class CoubInputData:
-    """Stores coub-related data (e.g. links)"""
+    """Store and parse all user-defined input sources."""
 
     links = []
     lists = []
@@ -160,13 +170,14 @@ class CoubInputData:
     hot = False
 
     parsed = []
+    # This keeps track of the initial size of parsed for progress messages
+    # Necessary as each coub buffer in main() will decimate parsed further
     count = 0
 
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
     def parse_links(self):
-        """Parse direct input links from the command line"""
-
+        """Parse the coub links given directly via the command line."""
         for link in self.links:
             if opts.max_coubs and len(self.parsed) >= opts.max_coubs:
                 break
@@ -179,8 +190,7 @@ class CoubInputData:
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
     def parse_lists(self):
-        """Parse coub links from input lists"""
-
+        """Parse the coub links provided in list form (i.e. external file)."""
         for l in self.lists:
             msg(f"\nReading input list ({l}):")
 
@@ -203,6 +213,7 @@ class CoubInputData:
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
     async def parse_page(self, req, session=None):
+        """Request a single timeline page and parse its content."""
         if aio:
             async with session.get(req) as resp:
                 resp_json = await resp.read()
@@ -238,14 +249,18 @@ class CoubInputData:
 
     async def parse_timeline(self, url_type, url):
         """
-        Parse coub links from various Coub source
+        Parse the coub links from tags, channels, etc.
 
-        Currently supports
-        -) channels
-        -) tags
-        -) coub searches
+        The Coub API refers to the list of coubs from a tag, channel,
+        category, etc. as a timeline.
+
+        Currently supported timelines:
+          -) channels
+          -) tags
+          -) coub searches
+          -) categories
+          -) 'hot' section (i.e. popular coubs)
         """
-
         if opts.max_coubs and len(self.parsed) >= opts.max_coubs:
             return
 
@@ -292,12 +307,14 @@ class CoubInputData:
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
     def find_dupes(self):
-        """Find and remove duplicates from the parsed list"""
+        """Find and remove duplicates from the parsed coub link list."""
         dupes = 0
 
         self.parsed.sort()
         last = self.parsed[-1]
 
+        # There are faster and more elegant ways to do this
+        # but I also want to keep track of how many dupes were found
         for i in range(len(self.parsed)-2, -1, -1):
             if last == self.parsed[i]:
                 dupes += 1
@@ -310,8 +327,7 @@ class CoubInputData:
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
     def parse_input(self):
-        """Parse coub links from all available sources"""
-
+        """Handle the parsing process of all provided input sources."""
         self.parse_links()
         self.parse_lists()
         for c in self.channels:
@@ -347,14 +363,16 @@ class CoubInputData:
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
     def update_count(self):
+        """Keep track of the initial number of parsed links."""
         self.count = len(self.parsed)
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 class Coub():
-    """Stores all data and methods to process a single coub"""
+    """Store all relevant infos and methods to process a single coub."""
 
     def __init__(self, link):
+        """Initialize a Coub object."""
         self.link = link
         self.id = link.split("/")[-1]
         self.req = f"https://coub.com/api/v2/coubs/{self.id}"
@@ -372,11 +390,13 @@ class Coub():
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
     def erroneous(self):
+        """Test if any errors occurred for the coub."""
         return bool(self.unavailable or self.exists or self.corrupted)
 
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
     def check_existence(self, custom_name=False):
+        """Test if the coub already exists or is present in the archive."""
         if self.erroneous():
             return
 
@@ -390,6 +410,7 @@ class Coub():
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
     async def parse_json(self, session=None):
+        """Get all necessary coub infos from the Coub API."""
         if self.erroneous():
             return
 
@@ -430,6 +451,7 @@ class Coub():
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
     def check_integrity(self):
+        """Test if a coub was downloaded successfully (e.g. no corruption)."""
         if self.erroneous():
             return
 
@@ -460,6 +482,7 @@ class Coub():
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
     def merge(self):
+        """Mux the separate video/audio streams with FFmpeg."""
         if self.erroneous():
             return
 
@@ -471,7 +494,7 @@ class Coub():
         t_name = f"{self.name}.txt"     # txt name
 
         try:
-            # Print .txt for ffmpeg's concat
+            # Print .txt for FFmpeg's concat
             with open(t_name, "w") as f:
                 for _ in range(opts.repeat):
                     print(f"file '{self.v_name}'", file=f)
@@ -499,15 +522,17 @@ class Coub():
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 class CoubBuffer():
-    """Store batches of coubs to be processed"""
+    """Process several coubs together in batches."""
 
     def __init__(self, parsed):
+        """Initialize buffer with the given list."""
         self.coubs = [Coub(link) for link in parsed]
         self.size = len(self.coubs)
 
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
     def print_progress(self):
+        """Print the current progress."""
         if self.size == 1:
             msg(f"  {count} out of {coubs.count} ({self.coubs[0].link})")
         else:
@@ -516,6 +541,7 @@ class CoubBuffer():
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
     def list_errors(self, err_type):
+        """Print the amount of (specific) errors that occurred within a batch."""
         err_list = {
             'unavailable': [c for c in self.coubs if c.unavailable],
             'exists': [c for c in self.coubs if c.exists],
@@ -539,6 +565,7 @@ class CoubBuffer():
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
     async def parse(self):
+        """Gather parsing tasks (and execute them asynchronously if possible)."""
         if aio:
             tout = aiohttp.ClientTimeout(total=None)
             conn = aiohttp.TCPConnector(limit=opts.connect)
@@ -552,7 +579,7 @@ class CoubBuffer():
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
     async def download(self):
-        """Encompasses the whole download process with asynchronous I/O"""
+        """Download all available and requested coub streams."""
         video = [(c.v_link, c.v_name) for c in self.coubs if c.v_name]
         audio = [(c.a_link, c.a_name) for c in self.coubs if c.a_name]
         streams = video + audio
@@ -570,6 +597,7 @@ class CoubBuffer():
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
     def process(self):
+        """Process all coubs within a batch."""
         global count, done
 
         # Preprocessing stage
@@ -608,19 +636,18 @@ class CoubBuffer():
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 def err(*args, **kwargs):
-    """Print to stderr"""
+    """Print to stderr."""
     print(*args, file=sys.stderr, **kwargs)
 
 def msg(*args, **kwargs):
-    """Print to stdout based on verbosity level"""
+    """Print to stdout based on verbosity level."""
     if opts.verbosity >= 1:
         print(*args, **kwargs)
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 def usage():
-    """Print help text"""
-
+    """Print the help text."""
     print(f"""CoubDownloader is a simple download script for coub.com
 
 Usage: {os.path.basename(sys.argv[0])} [OPTIONS] INPUT [INPUT]...
@@ -701,8 +728,7 @@ Output:
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 def usage_sort():
-    """Print supported values for --sort"""
-
+    """Print supported values for --sort."""
     print("""Supported sort values:
 
 Channels:
@@ -719,8 +745,7 @@ Categories:
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 def usage_category():
-    """Print supported values for --category"""
-
+    """Print supported values for --category."""
     print("""Supported categories:
 
 Communities:
@@ -750,8 +775,7 @@ Special categories:
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 def check_category(cat):
-    """Make sure only valid categories get accepted"""
-
+    """Test given category for its validity."""
     allowed_cat = [
         "animals-pets",
         "anime",
@@ -783,8 +807,7 @@ def check_category(cat):
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 def check_prereq():
-    """check existence of required software"""
-
+    """Test if all required 3rd-party tools are installed."""
     try:
         subprocess.run(["ffmpeg"], stdout=subprocess.DEVNULL, \
                                    stderr=subprocess.DEVNULL)
@@ -795,7 +818,7 @@ def check_prereq():
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 def parse_cli():
-    """Parse command line"""
+    """Parse the command line."""
     global opts, coubs
 
     if not sys.argv[1:]:
@@ -958,8 +981,7 @@ def parse_cli():
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 def check_options():
-    """Check validity of command line options"""
-
+    """Test the user input (command line) for its validity."""
     if opts.repeat <= 0:
         err("-r/--repeat must be greater than 0!")
         sys.exit(err_stat['opt'])
@@ -1013,7 +1035,7 @@ def check_options():
         sys.exit(err_stat['opt'])
 
     # Not really necessary to check as invalid values get ignored anyway
-    # But it also catches typos, so keep it for now
+    # But it helps to catch typos
     allowed_sort = [
         "likes_count",
         "views_count",
@@ -1033,6 +1055,7 @@ def check_options():
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 def get_request_template(url_type, url):
+    """Assemble template URL (Coub API) for timeline requests."""
     if url_type == "channel":
         channel = url.split("/")[-1]
         template = "https://coub.com/api/v2/timeline/channel/" + channel
@@ -1070,8 +1093,7 @@ def get_request_template(url_type, url):
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 def resolve_paths():
-    """Handle output path"""
-
+    """Change into (and create) the destination directory."""
     if not os.path.exists(opts.path):
         os.mkdir(opts.path)
     os.chdir(opts.path)
@@ -1079,8 +1101,7 @@ def resolve_paths():
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 def get_name(req_json, c_id):
-    """Decide filename for output file"""
-
+    """Assemble final output name of a given coub."""
     if not opts.out_format:
         return c_id
 
@@ -1121,13 +1142,13 @@ def get_name(req_json, c_id):
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 def exists(name):
-    """Check if a coub with given name already exists"""
-
+    """Test if a video with the given name and requested extension exists."""
     if opts.v_only:
         full_name = [name + ".mp4"]
     elif opts.a_only:
-        # exists() gets possibly called before the API request
-        # to be safe check for both possible audio extensions
+        # exists() gets called before and after the API request was made
+        # Before the request there's no way to tell for sure, which extension
+        # the audio will have
         full_name = [name + ".mp3", name + ".m4a"]
     else:
         full_name = [name + ".mkv"]
@@ -1141,8 +1162,7 @@ def exists(name):
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 def overwrite(name):
-    """Decide if existing coub should be overwritten"""
-
+    """Prompt the user if they want to overwrite an existing coub."""
     if opts.prompt_answer == "yes":
         return True
     elif opts.prompt_answer == "no":
@@ -1166,8 +1186,7 @@ def overwrite(name):
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 def read_archive(c_id):
-    """Check archive file for coub ID"""
-
+    """Check if the given coub ID is present in the archive file."""
     if not os.path.exists(opts.archive_file):
         return False
 
@@ -1182,16 +1201,14 @@ def read_archive(c_id):
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 def write_archive(c_id):
-    """Output coub ID to archive file"""
-
+    """Log the given coub ID in the archive file."""
     with open(opts.archive_file, "a") as f:
         print(c_id, file=f)
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 def stream_lists(data):
-    """Collect available video/audio streams of a coub"""
-
+    """Return all the available video/audio streams of the given coub."""
     # A few words (or maybe more) regarding Coub's streams:
     #
     # 'html5' has 3 video and 2 audio qualities
@@ -1249,7 +1266,7 @@ def stream_lists(data):
     # Special treatment for shared video
     if opts.share:
         version = data['file_versions']['share']['default']
-        # Non-existence results in None or '{}' (rare)
+        # Non-existence results in None or '{}' (the latter is rare)
         if version and version not in ("{}",):
             return ([version], [])
 
@@ -1268,12 +1285,12 @@ def stream_lists(data):
     version = data['file_versions']['html5']['video']
     for vq in v_formats:
         if v_min <= v_formats[vq] <= v_max:
-            # v_size can be 0 OR None in case of a missing stream
+            # html5 stream sizes can be 0 OR None in case of a missing stream
             # None is the exception and an irregularity in the Coub API
             if vq in version and version[vq]['size']:
                 video.append(version[vq]['url'])
 
-    # Audio streams parsing
+    # Audio stream parsing
     if opts.aac >= 2:
         a_combo = [
             ("html5", "med"),
@@ -1306,7 +1323,7 @@ def stream_lists(data):
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 async def save_stream(link, path, session=None):
-    """Download individual coub streams with aiohttp"""
+    """Download a single media stream."""
     if aio:
         async with session.get(link) as stream, aiofiles.open(path, "wb") as f:
             while True:
@@ -1328,6 +1345,7 @@ async def save_stream(link, path, session=None):
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 def valid_stream(path):
+    """Test a given stream for eventual corruption with a test remux (FFmpeg)."""
     command = [
         "ffmpeg", "-v", "error", "-i", path, "-t", "1", "-f", "null", "-"
     ]
@@ -1352,7 +1370,7 @@ def valid_stream(path):
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 def show_preview(coub):
-    """Play finished coub with the given command"""
+    """Play a finished coub with the given command."""
     if coub.v_name and coub.a_name:
         play = f"{coub.name}.mkv"
     elif coub.v_name:
@@ -1374,7 +1392,7 @@ def show_preview(coub):
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 def main():
-    """Main function body"""
+    """Download all requested coubs."""
     check_prereq()
     parse_cli()
     check_options()
