@@ -1211,13 +1211,17 @@ def get_name(req_json, c_id):
 
 def exists(name):
     """Test if a video with the given name and requested extension exists."""
-    if opts.v_only:
+    if opts.v_only or opts.share:
         full_name = [name + ".mp4"]
     elif opts.a_only:
         # exists() gets called before and after the API request was made
-        # Before the request there's no way to tell for sure, which extension
-        # the audio will have
-        full_name = [name + ".mp3", name + ".m4a"]
+        # Unless MP3 or AAC audio are strictly prohibited, there's no way to
+        # tell the final extension before the API request
+        full_name = []
+        if opts.aac > 0:
+            full_name.append(name + ".m4a")
+        if opts.aac < 3:
+            full_name.append(name + ".mp3")
     else:
         full_name = [name + ".mkv"]
 
