@@ -104,12 +104,11 @@ Output:
 
 ## Requirements
 
-* Python >= 3.6
+* Python >= 3.7
 * [FFmpeg](https://www.ffmpeg.org/)
 
-**Optional for asynchronous downloads:**
+**Optional for asynchronous downloads (recommended):**
 
-* Python >= 3.7
 * [aiohttp](https://aiohttp.readthedocs.io/en/stable/)
 
 ## Input
@@ -266,6 +265,8 @@ Coub started to massively overhaul their database and API. Of course those chang
 - [x] Download coubs from the hot section
 - [x] Download coubs from categories
 - [x] Asynchronous stream download
+- [x] Asynchronous timeline parsing
+- [x] Asynchronous coub parsing
 - [x] Detect stream corruption (incl. old Coub storage method)
 
 ## Changes since switching to Coub's API (previously used youtube-dl)
