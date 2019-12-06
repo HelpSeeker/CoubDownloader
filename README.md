@@ -110,7 +110,6 @@ Output:
 **Optional for asynchronous downloads (recommended):**
 
 * [aiohttp](https://aiohttp.readthedocs.io/en/stable/)
-* [aiofiles](https://github.com/Tinche/aiofiles)
 
 ## Input
 

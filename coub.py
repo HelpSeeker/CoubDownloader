@@ -16,7 +16,6 @@ from urllib.parse import quote as urlquote
 
 try:
     import aiohttp
-    import aiofiles
     aio = True
 except ModuleNotFoundError:
     aio = False
@@ -1372,12 +1371,13 @@ def stream_lists(resp_json):
 async def save_stream(link, path, session=None):
     """Download a single media stream."""
     if aio:
-        async with session.get(link) as stream, aiofiles.open(path, "wb") as f:
-            while True:
-                chunk = await stream.content.read(1024)
-                if not chunk:
-                    break
-                await f.write(chunk)
+        async with session.get(link) as stream:
+            with open(path, "wb") as f:
+                while True:
+                    chunk = await stream.content.read(1024)
+                    if not chunk:
+                        break
+                    f.write(chunk)
     else:
         try:
             with urlopen(link) as stream, open(path, "wb") as f:
