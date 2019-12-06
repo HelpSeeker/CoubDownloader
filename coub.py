@@ -548,6 +548,11 @@ class Coub():
 
     def archive(self):
         """Log a coub's ID in the archive file."""
+        # This return also prevents users from creating new archive files
+        # from already existing coub collections
+        if self.erroneous():
+            return
+
         with open(opts.archive_file, "a") as f:
             print(self.id, file=f)
 
@@ -555,6 +560,9 @@ class Coub():
 
     def preview(self):
         """Play a coub with the user provided command."""
+        if self.erroneous():
+            return
+
         if self.v_name and self.a_name:
             play = f"{self.name}.mkv"
         elif self.v_name:
