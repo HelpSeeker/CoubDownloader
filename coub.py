@@ -798,7 +798,7 @@ def check_prereq():
 
 def parse_cli():
     """Parse the command line."""
-    global opts, coubs
+    global opts, user_input
 
     if not sys.argv[1:]:
         usage()
@@ -841,26 +841,26 @@ def parse_cli():
         try:
             # Input
             if fnmatch(opt, "*coub.com/view/*"):
-                coubs.links.append(opt.strip("/"))
+                user_input.links.append(opt.strip("/"))
             elif opt in ("-l", "--list"):
                 if os.path.exists(arg):
-                    coubs.lists.append(os.path.abspath(arg))
+                    user_input.lists.append(os.path.abspath(arg))
                 else:
                     err(f"'{arg}' is not a valid list!")
             elif opt in ("-c", "--channel"):
-                coubs.channels.append(arg.strip("/"))
+                user_input.channels.append(arg.strip("/"))
             elif opt in ("-t", "--tag"):
-                coubs.tags.append(arg.strip("/"))
+                user_input.tags.append(arg.strip("/"))
             elif opt in ("-e", "--search"):
-                coubs.searches.append(arg.strip("/"))
+                user_input.searches.append(arg.strip("/"))
             elif opt in ("--hot",):
-                coubs.hot = True
+                user_input.hot = True
             elif opt in ("--category",):
                 if arg == "help":
                     usage_category()
                     sys.exit(0)
                 elif check_category(arg.strip("/")):
-                    coubs.categories.append(arg.strip("/"))
+                    user_input.categories.append(arg.strip("/"))
                 else:
                     err(f"'{arg}' is not a valid category!")
             # Common options
@@ -1351,19 +1351,19 @@ def main():
     resolve_paths()
 
     msg("\n### Parse Input ###")
-    coubs.parse_input()
-    coubs.update_count()
+    user_input.parse_input()
+    user_input.update_count()
 
     msg("\n### Download Coubs ###\n")
 
-    asyncio.run(process(coubs.parsed), debug=False)
+    asyncio.run(process(user_input.parsed), debug=False)
 
     msg("\n### Finished ###\n")
 
 # Execute main function
 if __name__ == '__main__':
     opts = Options()
-    coubs = CoubInputData()
+    user_input = CoubInputData()
     count = 0
     done = 0
 
