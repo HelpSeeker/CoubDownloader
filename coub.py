@@ -72,12 +72,6 @@ class Options:
     # fully utilized
     connect = 25
 
-    # No. of coubs to process per batch
-    # Bigger batches make better use of asynchronous parsing/download
-    # 0 -> single batch for all coubs
-    # 1 -> one coub at a time
-    batch = 1
-
     # Limit how many coubs can be downloaded during one script invocation
     max_coubs = None
 
@@ -415,7 +409,7 @@ class Coub():
 
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-    async def parse_json(self, session=None):
+    async def parse(self, session=None):
         """Get all necessary coub infos from the Coub API."""
         if self.erroneous():
             return
@@ -453,6 +447,22 @@ class Coub():
         if not opts.v_only and self.a_link:
             a_ext = self.a_link.split(".")[-1]
             self.a_name = f"{self.name}.{a_ext}"
+
+    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+    async def download(self, session=None):
+        """Download all requested streams."""
+        if self.erroneous():
+            return
+
+        streams = []
+        if self.v_name:
+            streams.append((self.v_link, self.v_name))
+        if self.a_name:
+            streams.append((self.a_link, self.a_name))
+
+        tasks = [save_stream(s[0], s[1], session) for s in streams]
+        await asyncio.gather(*tasks)
 
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -575,122 +585,35 @@ class Coub():
         except (subprocess.CalledProcessError, FileNotFoundError):
             err("Warning: Preview command failed!")
 
-# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-class CoubBuffer():
-    """Process several coubs together in batches."""
-
-    def __init__(self, parsed):
-        """Initialize buffer with the given list."""
-        self.coubs = [Coub(link) for link in parsed]
-        self.size = len(self.coubs)
-
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-    def print_progress(self):
-        """Print the current progress."""
-        if self.size == 1:
-            msg(f"  {count} out of {coubs.count} ({self.coubs[0].link})")
-        else:
-            msg(f"  {count} out of {coubs.count}")
-
-    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-    def list_errors(self, err_type):
-        """Print the amount of (specific) errors that occurred within a batch."""
-        err_list = {
-            'unavailable': [c for c in self.coubs if c.unavailable],
-            'exists': [c for c in self.coubs if c.exists],
-            'corrupted': [c for c in self.coubs if c.corrupted],
-        }
-        err_info = {
-            'unavailable': "unavailable",
-            'exists': "already downloaded",
-            'corrupted': "failed to download properly",
-        }
-
-        amount = len(err_list[err_type])
-        if not amount:
-            return
-
-        if self.size == 1:
-            err(f"Coub {err_info[err_type]}!")
-        else:
-            err(f"{amount} coub(s) {err_info[err_type]}!")
-
-    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-    async def parse(self):
-        """Gather parsing tasks (and execute them asynchronously if possible)."""
-        if aio:
-            tout = aiohttp.ClientTimeout(total=None)
-            conn = aiohttp.TCPConnector(limit=opts.connect)
-            async with aiohttp.ClientSession(timeout=tout, connector=conn) as session:
-                tasks = [c.parse_json(session) for c in self.coubs]
-                await asyncio.gather(*tasks, return_exceptions=False)
-        else:
-            for c in self.coubs:
-                await c.parse_json()
-
-    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-    async def download(self):
-        """Download all available and requested coub streams."""
-        to_download = [c for c in self.coubs if not c.erroneous()]
-        video = [(c.v_link, c.v_name) for c in to_download if c.v_name]
-        audio = [(c.a_link, c.a_name) for c in to_download if c.a_name]
-        streams = video + audio
-
-        if aio:
-            tout = aiohttp.ClientTimeout(total=None)
-            conn = aiohttp.TCPConnector(limit=opts.connect)
-            async with aiohttp.ClientSession(timeout=tout, connector=conn) as session:
-                tasks = [save_stream(s[0], s[1], session) for s in streams]
-                await asyncio.gather(*tasks, return_exceptions=False)
-        else:
-            for s in streams:
-                await save_stream(s[0], s[1])
-
-    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-    def process(self):
-        """Process all coubs within a batch."""
-        global count, done
-
-        # Preprocessing stage
-        count += self.size
-        self.print_progress()
+    async def process(self, session=None):
+        """Process a single coub."""
+        msg(f"Downloading... {self.link}")
         # 1st existence check
         # Handles default naming scheme and archive usage
-        for c in self.coubs:
-            c.check_existence()
+        self.check_existence()
 
-        asyncio.run(self.parse())
+        await self.parse(session)
 
         # 2nd existence check
         # Handles custom names exclusively (slower since API request necessary)
         if opts.out_format:
-            for c in self.coubs:
-                c.check_existence()
-        self.list_errors(err_type='unavailable')
-        self.list_errors(err_type='exists')
+            c.check_existence()
 
         # Download
-        asyncio.run(self.download())
+        await self.download(session)
 
         # Postprocessing stage
-        for c in self.coubs:
-            c.check_integrity()
-        self.list_errors(err_type='corrupted')
-        for c in self.coubs:
-            if not (opts.v_only or opts.a_only):
-                c.merge()
-            if opts.archive_file:
-                c.archive()
-            if opts.preview:
-                c.preview()
+        self.check_integrity()
+        if not (opts.v_only or opts.a_only):
+            self.merge()
+        if opts.archive_file:
+            self.archive()
+        if opts.preview:
+            self.preview()
 
-            done += 1
+        msg(f"Finished {self.link}!")
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # Functions
@@ -736,9 +659,6 @@ Common options:
 
 Download options:
   --connections N        raise max. number of connections (def: {opts.connect})
-  --batch N              how many coubs to process per batch (def: {opts.batch})
-                           N > 1: enable asynchronous download
-                           N = 0: process all coubs in a single batch
   --limit-num LIMIT      limit max. number of downloaded coubs
   --sort ORDER           specify download order for channels, tags, etc.
                            '--sort help' for all supported values
@@ -895,7 +815,6 @@ def parse_cli():
         "-r", "--repeat",
         "-d", "--duration",
         "--connections",
-        "--batch",
         "--limit-num",
         "--sort",
         "--max-video",
@@ -968,8 +887,6 @@ def parse_cli():
             # Download options
             elif opt in ("--connections",):
                 opts.connect = int(arg)
-            elif opt in ("--batch",):
-                opts.batch = int(arg)
             elif opt in ("--limit-num",):
                 opts.max_coubs = int(arg)
             elif opt in ("--sort",):
@@ -1052,9 +969,6 @@ def check_options():
     elif opts.connect <= 0:
         err("--connections must be greater than 0!")
         sys.exit(err_stat['opt'])
-    elif opts.batch < 0:
-        err("--batch can't be negative!")
-        sys.exit(err_stat['opt'])
 
     if opts.dur:
         command = [
@@ -1108,10 +1022,6 @@ def check_options():
         err(f"Invalid sort order ('{opts.sort}')!\n")
         usage_sort()
         sys.exit(err_stat['opt'])
-
-    # Only warn the user
-    if not aio and opts.batch != 1:
-        err("Warning: Usage of aiohttp recommended for batch size >1!")
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -1415,6 +1325,22 @@ def valid_stream(path):
     return True
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+async def process(links):
+    """Call the process function of all parsed coubs."""
+    coubs = [Coub(l) for l in links]
+
+    if aio:
+        tout = aiohttp.ClientTimeout(total=None)
+        conn = aiohttp.TCPConnector(limit=opts.connect)
+        async with aiohttp.ClientSession(timeout=tout, connector=conn) as session:
+            tasks = [c.process(session) for c in coubs]
+            await asyncio.gather(*tasks)
+    else:
+        tasks = [c.process() for c in coubs]
+        await asyncio.gather(*tasks)
+
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # Main Function
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -1431,20 +1357,7 @@ def main():
 
     msg("\n### Download Coubs ###\n")
 
-    if not opts.batch:
-        batch_size = coubs.count
-    else:
-        batch_size = opts.batch
-
-    while coubs.parsed:
-        if batch_size != 1 and len(coubs.parsed) == batch_size+1:
-            batch = CoubBuffer(coubs.parsed)
-            del coubs.parsed[:]
-        else:
-            batch = CoubBuffer(coubs.parsed[:batch_size])
-            del coubs.parsed[:batch_size]
-
-        batch.process()
+    asyncio.run(process(coubs.parsed), debug=False)
 
     msg("\n### Finished ###\n")
 
