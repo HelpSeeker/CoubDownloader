@@ -1226,6 +1226,10 @@ def stream_lists(resp_json):
     video = []
     audio = []
 
+    # In case Coub returns "error: Coub not found"
+    if 'error' in resp_json:
+        return ([], [])
+
     # Special treatment for shared video
     if opts.share:
         version = resp_json['file_versions']['share']['default']
