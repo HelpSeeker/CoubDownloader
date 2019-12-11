@@ -78,9 +78,6 @@ class Options:
     # 1 -> one coub at a time
     batch = 1
 
-    # Pause between batches (in sec)
-    sleep_dur = None
-
     # Limit how many coubs can be downloaded during one script invocation
     max_coubs = None
 
@@ -742,7 +739,6 @@ Download options:
   --batch N              how many coubs to process per batch (def: {opts.batch})
                            N > 1: enable asynchronous download
                            N = 0: process all coubs in a single batch
-  --sleep TIME           pause the script for TIME seconds after each batch
   --limit-num LIMIT      limit max. number of downloaded coubs
   --sort ORDER           specify download order for channels, tags, etc.
                            '--sort help' for all supported values
@@ -900,7 +896,6 @@ def parse_cli():
         "-d", "--duration",
         "--connections",
         "--batch",
-        "--sleep",
         "--limit-num",
         "--sort",
         "--max-video",
@@ -975,8 +970,6 @@ def parse_cli():
                 opts.connect = int(arg)
             elif opt in ("--batch",):
                 opts.batch = int(arg)
-            elif opt in ("--sleep",):
-                opts.sleep_dur = float(arg)
             elif opt in ("--limit-num",):
                 opts.max_coubs = int(arg)
             elif opt in ("--sort",):
@@ -1452,9 +1445,6 @@ def main():
             del coubs.parsed[:batch_size]
 
         batch.process()
-
-        if opts.sleep_dur and coubs.parsed:
-            time.sleep(opts.sleep_dur)
 
     msg("\n### Finished ###\n")
 
