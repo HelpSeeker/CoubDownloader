@@ -5,7 +5,6 @@ import json
 import os
 import subprocess
 import sys
-import time
 
 from fnmatch import fnmatch
 from math import ceil
