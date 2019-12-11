@@ -599,7 +599,7 @@ class Coub():
         # 2nd existence check
         # Handles custom names exclusively (slower since API request necessary)
         if opts.out_format:
-            c.check_existence()
+            self.check_existence()
 
         # Download
         await self.download(session)
