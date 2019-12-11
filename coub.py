@@ -160,7 +160,6 @@ class CoubInputData:
 
     parsed = []
     # This keeps track of the initial size of parsed for progress messages
-    # Necessary as each coub buffer in main() will decimate parsed further
     count = 0
 
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -588,7 +587,8 @@ class Coub():
 
     async def process(self, session=None):
         """Process a single coub."""
-        msg(f"Downloading... {self.link}")
+        global count, done
+
         # 1st existence check
         # Handles default naming scheme and archive usage
         self.check_existence()
@@ -612,7 +612,18 @@ class Coub():
         if opts.preview:
             self.preview()
 
-        msg(f"Finished {self.link}!")
+        # Log status after processing
+        count += 1
+        if self.unavailable:
+            err(f"  [{count}/{user_input.count}] {self.link} ... unavailable")
+        elif self.corrupted:
+            err(f"  [{count}/{user_input.count}] {self.link} ... failed to download")
+        elif self.exists:
+            done += 1
+            msg(f"  [{count}/{user_input.count}] {self.link} ... exists")
+        else:
+            done += 1
+            msg(f"  [{count}/{user_input.count}] {self.link} ... finished")
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # Functions
