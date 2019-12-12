@@ -264,8 +264,16 @@ class CoubInputData:
         template = get_request_template(url_type, url)
 
         # Initial API call in order to get the page count
-        with urlopen(template) as resp:
-            resp_json = json.loads(resp.read())
+        # Also acts as a crude check for invalid input and no connection
+        try:
+            with urlopen(template) as resp:
+                resp_json = json.loads(resp.read())
+        except urllib.error.HTTPError:
+            err(f"\nInvalid {url_type} ('{url}')!")
+            return
+        except urllib.error.URLError:
+            err("\nUnable to connect to coub.com! Please check your connection.")
+            sys.exit(err_stat['run'])
 
         total_pages = resp_json['total_pages']
         # tag/hot section/category timeline redirects pages >99 to page 1
@@ -295,7 +303,7 @@ class CoubInputData:
             conn = aiohttp.TCPConnector(limit=opts.connect)
             async with aiohttp.ClientSession(timeout=tout, connector=conn) as session:
                 tasks = [self.parse_page(req, session) for req in requests]
-                await asyncio.gather(*tasks, return_exceptions=False)
+                await asyncio.gather(*tasks)
         else:
             for i in range(pages):
                 msg(f"  {i+1} out of {total_pages} pages")
@@ -423,18 +431,22 @@ class Coub():
         if self.erroneous():
             return
 
-        try:
-            if aio:
+        if aio:
+            try:
                 async with session.get(self.req) as resp:
                     resp_json = await resp.read()
                     resp_json = json.loads(resp_json)
-            else:
+            except aiohttp.client_exceptions.ClientConnectorError:
+                self.unavailable = True
+                return
+        else:
+            try:
                 with urlopen(self.req) as resp:
                     resp_json = resp.read()
                     resp_json = json.loads(resp_json)
-        except:
-            self.unavailable = True
-            return
+            except (urllib.error.HTTPError, urllib.error.URLError):
+                self.unavailable = True
+                return
 
         v_list, a_list = stream_lists(resp_json)
         if v_list:
@@ -1322,13 +1334,16 @@ def stream_lists(resp_json):
 async def save_stream(link, path, session=None):
     """Download a single media stream."""
     if aio:
-        async with session.get(link) as stream:
-            with open(path, "wb") as f:
-                while True:
-                    chunk = await stream.content.read(1024)
-                    if not chunk:
-                        break
-                    f.write(chunk)
+        try:
+            async with session.get(link) as stream:
+                with open(path, "wb") as f:
+                    while True:
+                        chunk = await stream.content.read(1024)
+                        if not chunk:
+                            break
+                        f.write(chunk)
+        except aiohttp.client_exceptions.ClientConnectorError:
+            return
     else:
         try:
             with urlopen(link) as stream, open(path, "wb") as f:
@@ -1337,7 +1352,7 @@ async def save_stream(link, path, session=None):
                     if not chunk:
                         break
                     f.write(chunk)
-        except urllib.error.HTTPError:
+        except (urllib.error.HTTPError, urllib.error.URLError):
             return
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
