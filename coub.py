@@ -1390,9 +1390,14 @@ async def process(coubs):
     if aio:
         tout = aiohttp.ClientTimeout(total=None)
         conn = aiohttp.TCPConnector(limit=opts.connect)
-        async with aiohttp.ClientSession(timeout=tout, connector=conn) as session:
-            tasks = [c.process(session) for c in coubs]
-            await asyncio.gather(*tasks)
+        try:
+            async with aiohttp.ClientSession(timeout=tout, connector=conn) as session:
+                tasks = [c.process(session) for c in coubs]
+                await asyncio.gather(*tasks)
+        except aiohttp.client_exceptions.ClientError:
+            err("\nLost connection to coub.com! Please check your connection.")
+            clean(coubs)
+            sys.exit(err_stat['run'])
     else:
         for c in coubs:
             await c.process()
