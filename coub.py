@@ -33,6 +33,15 @@ err_stat = {
     'int': 5,
 }
 
+# ANSI Escape codes (for colored output)
+# https://en.wikipedia.org/wiki/ANSI_escape_code#Colors
+color = {
+    'red': '\033[91m',
+    'green': '\033[92m',
+    'yellow': '\033[93m',
+    'reset': '\033[0m',
+}
+
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # Classes
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -622,15 +631,19 @@ class Coub():
         # Log status after processing
         count += 1
         if self.unavailable:
-            err(f"  [{count}/{user_input.count}] {self.link} ... unavailable")
+            err(f"  [{count}/{user_input.count}] {self.link} ... "
+                f"{color['red']}unavailable{color['reset']}")
         elif self.corrupted:
-            err(f"  [{count}/{user_input.count}] {self.link} ... failed to download")
+            err(f"  [{count}/{user_input.count}] {self.link} ... "
+                f"{color['red']}failed to download{color['reset']}")
         elif self.exists:
             done += 1
-            msg(f"  [{count}/{user_input.count}] {self.link} ... exists")
+            msg(f"  [{count}/{user_input.count}] {self.link} ... "
+                f"{color['yellow']}exists{color['reset']}")
         else:
             done += 1
-            msg(f"  [{count}/{user_input.count}] {self.link} ... finished")
+            msg(f"  [{count}/{user_input.count}] {self.link} ... "
+                f"{color['green']}finished{color['reset']}")
 
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
