@@ -51,10 +51,6 @@ Common options:
 
 Download options:
   --connections N        raise max. number of connections (def: 25)
-  --batch N              how many coubs to process per batch (def: 1)
-                           N > 1: enable asynchronous download
-                           N = 0: process all coubs in a single batch
-  --sleep TIME           pause the script for TIME seconds before each download
   --limit-num LIMIT      limit max. number of downloaded coubs
   --sort ORDER           specify download order for channels, tags, etc.
                            '--sort help' for all supported values
@@ -264,10 +260,10 @@ Coub started to massively overhaul their database and API. Of course those chang
 - [x] Add shared option (video+audio already combined)
 - [x] Download coubs from the hot section
 - [x] Download coubs from categories
-- [x] Asynchronous stream download
+- [x] Asynchronous coub processing
 - [x] Asynchronous timeline parsing
-- [x] Asynchronous coub parsing
 - [x] Detect stream corruption (incl. old Coub storage method)
+- [x] Workspace cleanup (incomplete coubs) after user interrupt 
 
 ## Changes since switching to Coub's API (previously used youtube-dl)
 
