@@ -1394,8 +1394,8 @@ async def process(coubs):
             tasks = [c.process(session) for c in coubs]
             await asyncio.gather(*tasks)
     else:
-        tasks = [c.process() for c in coubs]
-        await asyncio.gather(*tasks)
+        for c in coubs:
+            await c.process()
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
