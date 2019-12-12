@@ -375,6 +375,8 @@ class Coub():
         self.exists = False
         self.corrupted = False
 
+        self.done = False
+
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
     def erroneous(self):
@@ -607,6 +609,11 @@ class Coub():
         self.check_integrity()
         if not (opts.v_only or opts.a_only):
             self.merge()
+
+        # Success should be logged as soon as possible to avoid deletion
+        # of valid streams with special format options (e.g. --video-only)
+        self.done = True
+
         if opts.archive_file:
             self.archive()
         if opts.preview:
@@ -624,6 +631,15 @@ class Coub():
         else:
             done += 1
             msg(f"  [{count}/{user_input.count}] {self.link} ... finished")
+
+    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+    def delete(self):
+        """Delete any leftover streams."""
+        if self.v_name and os.path.exists(self.v_name):
+            os.remove(self.v_name)
+        if self.a_name and os.path.exists(self.a_name):
+            os.remove(self.a_name)
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # Functions
@@ -1340,10 +1356,8 @@ def valid_stream(path):
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-async def process(links):
+async def process(coubs):
     """Call the process function of all parsed coubs."""
-    coubs = [Coub(l) for l in links]
-
     if aio:
         tout = aiohttp.ClientTimeout(total=None)
         conn = aiohttp.TCPConnector(limit=opts.connect)
@@ -1353,6 +1367,13 @@ async def process(links):
     else:
         tasks = [c.process() for c in coubs]
         await asyncio.gather(*tasks)
+
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+def clean(coubs):
+    """Clean workspace by deleteing unfinished coubs."""
+    for c in [c for c in coubs if not c.done]:
+        c.delete()
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # Main Function
@@ -1371,7 +1392,12 @@ def main():
 
     msg("\n### Download Coubs ###\n")
 
-    asyncio.run(process(user_input.parsed), debug=False)
+    coubs = [Coub(l) for l in user_input.parsed]
+
+    try:
+        asyncio.run(process(coubs), debug=False)
+    finally:
+        clean(coubs)
 
     msg("\n### Finished ###\n")
 
@@ -1385,7 +1411,7 @@ if __name__ == '__main__':
     try:
         main()
     except KeyboardInterrupt:
-        err("User Interrupt!")
+        err("\nUser Interrupt!")
         sys.exit(err_stat['int'])
 
     # Indicate failure if not all input coubs exist after execution
