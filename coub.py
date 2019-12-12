@@ -630,19 +630,20 @@ class Coub():
 
         # Log status after processing
         count += 1
+        progress = f"  [{count: >{len(str(user_input.count))}}/{user_input.count}]"
         if self.unavailable:
-            err(f"  [{count}/{user_input.count}] {self.link} ... "
+            err(f"  {progress} {self.link: <30} ... "
                 f"{color['red']}unavailable{color['reset']}")
         elif self.corrupted:
-            err(f"  [{count}/{user_input.count}] {self.link} ... "
+            err(f"  {progress} {self.link: <30} ... "
                 f"{color['red']}failed to download{color['reset']}")
         elif self.exists:
             done += 1
-            msg(f"  [{count}/{user_input.count}] {self.link} ... "
+            msg(f"  {progress} {self.link: <30} ... "
                 f"{color['yellow']}exists{color['reset']}")
         else:
             done += 1
-            msg(f"  [{count}/{user_input.count}] {self.link} ... "
+            msg(f"  {progress} {self.link: <30} ... "
                 f"{color['green']}finished{color['reset']}")
 
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
