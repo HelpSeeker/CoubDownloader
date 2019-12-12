@@ -642,7 +642,7 @@ class Coub():
 
         # Log status after processing
         count += 1
-        progress = f"  [{count: >{len(str(user_input.count))}}/{user_input.count}]"
+        progress = f"[{count: >{len(str(user_input.count))}}/{user_input.count}]"
         if self.unavailable:
             err(f"  {progress} {self.link: <30} ... "
                 f"{color['red']}unavailable{color['reset']}")
