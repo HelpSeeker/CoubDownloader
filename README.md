@@ -107,6 +107,10 @@ Output:
 
 * [aiohttp](https://aiohttp.readthedocs.io/en/stable/)
 
+**Optional for colorized terminal output on Windows:**
+
+* [colorama](https://github.com/tartley/colorama)
+
 ## Input
 
 #### Links
@@ -115,7 +119,7 @@ The simplest form of input is a direct link to a coub. Only strings that contain
 
 #### Lists
 
-A list is a simple text file containing one or more coub links. Links must be separated by a white space, tab or new line. Like before only strings that contain `coub.com/view/` will get parsed as coub links.
+A list is a normal text file containing one or more coub links. Links must be separated by a white space, tab or new line. Like before only strings that contain `coub.com/view/` will get parsed as coub links.
 
 Example:
 
@@ -127,7 +131,7 @@ https://coub.com/view/444444
 https://coub.com/view/555555 https://coub.com/view/666666 https://coub.com/view/777777
 ```
 
-`--write-list` can be used to parse links, lists, channels and tags and output all found coub links into a list for later usage.
+`--write-list` can be used to parse links, lists, channels, tags, etc. and output all found coub links into a list for later usage.
 
 #### Channels
 
@@ -228,7 +232,7 @@ Now AAC audio will be completely ignored and the script only serves MP3 audio (l
 
 ### 'share' videos
 
-Another special new option is `--share`. Coub now offers a video version primarily targeted at people, who want to share coubs. These videos already contain both video (~720p, sometimes ~360p) and audio (AAC@128Kbps CBR) and don't require further muxing. Videos downloaded with `--share` come as MP4.
+Another special new option is `--share`. Coub now offers a video version primarily targeted at people, who want to share coubs. These videos already contain both video (~1280px width, sometimes ~360px) and audio (AAC@128Kbps CBR) and don't require further muxing. Videos downloaded with `--share` come as MP4.
 
 ***
 
@@ -264,6 +268,7 @@ Coub started to massively overhaul their database and API. Of course those chang
 - [x] Asynchronous timeline parsing
 - [x] Detect stream corruption (incl. old Coub storage method)
 - [x] Workspace cleanup (incomplete coubs) after user interrupt 
+- [x] Colorized terminal output
 
 ## Changes since switching to Coub's API (previously used youtube-dl)
 
