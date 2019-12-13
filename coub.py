@@ -19,6 +19,20 @@ try:
 except ModuleNotFoundError:
     aio = False
 
+# ANSI escape codes don't work on Windows, unless the user jumps through
+# additional hoops (either by using 3rd-party software or enabling VT100
+# emulation with Windows 10)
+# colorama solves this issue by converting ANSI escape codes into the
+# appropriate win32 calls (only on Windows)
+# If colorama isn't available, disable colorized output on Windows
+colors = True
+try:
+    import colorama
+    colorama.init()
+except ModuleNotFoundError:
+    if os.name == "nt":
+        colors = False
+
 # Error codes
 # 1 -> missing required software
 # 2 -> invalid user-specified option
@@ -33,14 +47,25 @@ err_stat = {
     'int': 5,
 }
 
-# ANSI Escape codes (for colored output)
-# https://en.wikipedia.org/wiki/ANSI_escape_code#Colors
-color = {
-    'red': '\033[91m',
-    'green': '\033[92m',
-    'yellow': '\033[93m',
-    'reset': '\033[0m',
-}
+class Colors:
+    """Store ANSI escape codes for colorized output."""
+
+    # https://en.wikipedia.org/wiki/ANSI_escape_code#Colors
+    ERROR = '\033[31m'      # red
+    WARNING = '\033[33m'    # yellow
+    SUCCESS = '\033[32m'    # green
+    RESET = '\033[0m'
+
+    def disable(self):
+        """Disable colorized output by removing escape codes."""
+        self.ERROR = ''
+        self.SUCCESS = ''
+        self.WARNING = ''
+        self.RESET = ''
+
+fgcolors = Colors()
+if not colors:
+    fgcolors.disable()
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # Classes
@@ -269,7 +294,7 @@ class CoubInputData:
             with urlopen(template) as resp:
                 resp_json = json.loads(resp.read())
         except urllib.error.HTTPError:
-            err(f"\nInvalid {url_type} ('{url}')!")
+            err(f"\nInvalid {url_type} ('{url}')!", color=fgcolors.WARNING)
             return
         except urllib.error.URLError:
             err("\nUnable to connect to coub.com! Please check your connection.")
@@ -347,11 +372,12 @@ class CoubInputData:
             asyncio.run(self.parse_timeline("hot", "https://coub.com/hot"))
 
         if not self.parsed:
-            err("\nError: No coub links specified!")
+            err("\nNo coub links specified!", color=fgcolors.WARNING)
             sys.exit(err_stat['opt'])
 
         if opts.max_coubs and len(self.parsed) >= opts.max_coubs:
-            msg(f"\nDownload limit ({opts.max_coubs}) reached!")
+            msg(f"\nDownload limit ({opts.max_coubs}) reached!",
+                color=fgcolors.WARNING)
 
         msg("\nResults:")
         msg(f"  {len(self.parsed)} input link(s)")
@@ -362,7 +388,8 @@ class CoubInputData:
             with open(opts.out_file, "a") as f:
                 for link in self.parsed:
                     print(link, file=f)
-            msg(f"\nParsed coubs written to '{opts.out_file}'!")
+            msg(f"\nParsed coubs written to '{opts.out_file}'!",
+                color=fgcolors.SUCCESS)
             sys.exit(0)
 
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -604,7 +631,7 @@ class Coub():
             subprocess.check_call(command, stdout=subprocess.DEVNULL, \
                                            stderr=subprocess.DEVNULL)
         except (subprocess.CalledProcessError, FileNotFoundError):
-            err("Warning: Preview command failed!")
+            err("Warning: Preview command failed!", color=fgcolors.WARNING)
 
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -644,19 +671,19 @@ class Coub():
         count += 1
         progress = f"[{count: >{len(str(user_input.count))}}/{user_input.count}]"
         if self.unavailable:
-            err(f"  {progress} {self.link: <30} ... "
-                f"{color['red']}unavailable{color['reset']}")
+            err(f"  {progress} {self.link: <30} ... ", color=fgcolors.RESET, end="")
+            err("unavailable")
         elif self.corrupted:
-            err(f"  {progress} {self.link: <30} ... "
-                f"{color['red']}failed to download{color['reset']}")
+            err(f"  {progress} {self.link: <30} ... ", color=fgcolors.RESET, end="")
+            err("failed to download")
         elif self.exists:
             done += 1
-            msg(f"  {progress} {self.link: <30} ... "
-                f"{color['yellow']}exists{color['reset']}")
+            msg(f"  {progress} {self.link: <30} ... ", end="")
+            msg("exists", color=fgcolors.WARNING)
         else:
             done += 1
-            msg(f"  {progress} {self.link: <30} ... "
-                f"{color['green']}finished{color['reset']}")
+            msg(f"  {progress} {self.link: <30} ... ", end="")
+            msg("finished", color=fgcolors.SUCCESS)
 
     # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -671,14 +698,18 @@ class Coub():
 # Functions
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-def err(*args, **kwargs):
+def err(*args, color=fgcolors.ERROR, **kwargs):
     """Print to stderr."""
+    sys.stderr.write(color)
     print(*args, file=sys.stderr, **kwargs)
+    sys.stderr.write(fgcolors.RESET)
 
-def msg(*args, **kwargs):
+def msg(*args, color=fgcolors.RESET, **kwargs):
     """Print to stdout based on verbosity level."""
     if opts.verbosity >= 1:
+        sys.stdout.write(color)
         print(*args, **kwargs)
+        sys.stdout.write(fgcolors.RESET)
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -899,7 +930,7 @@ def parse_cli():
                 if os.path.exists(arg):
                     user_input.lists.append(os.path.abspath(arg))
                 else:
-                    err(f"'{arg}' is not a valid list!")
+                    err(f"'{arg}' is not a valid list!", color=fgcolors.WARNING)
             elif opt in ("-c", "--channel"):
                 user_input.channels.append(arg.strip("/"))
             elif opt in ("-t", "--tag"):
@@ -915,7 +946,7 @@ def parse_cli():
                 elif check_category(arg.strip("/")):
                     user_input.categories.append(arg.strip("/"))
                 else:
-                    err(f"'{arg}' is not a valid category!")
+                    err(f"'{arg}' is not a valid category!", color=fgcolors.WARNING)
             # Common options
             elif opt in ("-h", "--help"):
                 usage()
@@ -998,11 +1029,13 @@ def parse_cli():
             # Unknown options
             elif fnmatch(opt, "-*"):
                 err(f"Unknown flag '{opt}'!")
-                err(f"Try '{os.path.basename(sys.argv[0])} --help' for more information.")
+                err(f"Try '{os.path.basename(sys.argv[0])} "
+                    "--help' for more information.", color=fgcolors.RESET)
                 sys.exit(err_stat['opt'])
             else:
                 err(f"'{opt}' is neither an option nor a coub link!")
-                err(f"Try '{os.path.basename(sys.argv[0])} --help' for more information.")
+                err(f"Try '{os.path.basename(sys.argv[0])} "
+                    "--help' for more information.", color=fgcolors.RESET)
                 sys.exit(err_stat['opt'])
         except ValueError:
             err(f"Invalid {opt} ('{arg}')!")
@@ -1032,8 +1065,10 @@ def check_options():
         try:
             subprocess.check_call(command)
         except subprocess.CalledProcessError:
-            err("Invalid duration! For the supported syntax see:")
-            err("https://ffmpeg.org/ffmpeg-utils.html#time-duration-syntax")
+            err("Invalid duration!")
+            err("For the supported syntax see:", color=fgcolors.RESET)
+            err("https://ffmpeg.org/ffmpeg-utils.html#time-duration-syntax",
+                color=fgcolors.RESET)
             sys.exit(err_stat['opt'])
 
     if opts.a_only and opts.v_only:
@@ -1157,7 +1192,8 @@ def get_name(req_json, c_id):
         f.close()
         os.remove(name)
     except OSError:
-        err(f"Error: Filename invalid or too long! Falling back to '{c_id}'")
+        err(f"Error: Filename invalid or too long! Falling back to '{c_id}'",
+            color=fgcolors.WARNING)
         name = c_id
 
     return name
@@ -1445,7 +1481,7 @@ if __name__ == '__main__':
     try:
         main()
     except KeyboardInterrupt:
-        err("\nUser Interrupt!")
+        err("\nUser Interrupt!", color=fgcolors.WARNING)
         sys.exit(err_stat['int'])
 
     # Indicate failure if not all input coubs exist after execution
