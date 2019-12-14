@@ -33,21 +33,20 @@ except ModuleNotFoundError:
     if os.name == "nt":
         colors = False
 
-# Error codes
-# 1 -> missing required software
-# 2 -> invalid user-specified option
-# 3 -> misc. runtime error
-# 4 -> not all input coubs exist after execution (i.e. some downloads failed)
-# 5 -> termination was requested mid-way by the user (i.e. Ctrl+C)
-# 6 -> connection either couldn't be established or was lost
-err_stat = {
-    'dep': 1,
-    'opt': 2,
-    'run': 3,
-    'down': 4,
-    'int': 5,
-    'conn': 6,
-}
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# Global constants
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+class ExitCodes:
+    """Store exit codes for non-successful execution."""
+
+    DEP = 1         # missing required software
+    OPT = 2         # invalid user-specified option
+    RUN = 3         # misc. runtime error
+    DOWN = 4        # failed to download all input links (existence == success)
+    INT = 5         # early termination was requested by the user (i.e. Ctrl+C)
+    CONN = 6        # connection either couldn't be established or was lost
+
 
 class Colors:
     """Store ANSI escape codes for colorized output."""
@@ -60,12 +59,18 @@ class Colors:
 
     def disable(self):
         """Disable colorized output by removing escape codes."""
+        # I'm not going to stop addressing these attributes as constants, just
+        # because Windows thinks it needs to be special
         self.ERROR = ''
         self.SUCCESS = ''
         self.WARNING = ''
         self.RESET = ''
 
+
+# Create objects to hold constants
+status = ExitCodes()
 fgcolors = Colors()
+
 if not colors:
     fgcolors.disable()
 
@@ -308,7 +313,7 @@ class CoubInputData:
             return
         except urllib.error.URLError:
             err("\nUnable to connect to coub.com! Please check your connection.")
-            sys.exit(err_stat['conn'])
+            sys.exit(status.CONN)
 
         total_pages = resp_json['total_pages']
         # tag/hot section/category timeline redirects pages >99 to page 1
@@ -383,7 +388,7 @@ class CoubInputData:
 
         if not self.parsed:
             err("\nNo coub links specified!", color=fgcolors.WARNING)
-            sys.exit(err_stat['opt'])
+            sys.exit(status.OPT)
 
         if opts.max_coubs and len(self.parsed) >= opts.max_coubs:
             msg(f"\nDownload limit ({opts.max_coubs}) reached!",
@@ -884,7 +889,7 @@ def check_prereq():
                                    stderr=subprocess.DEVNULL)
     except FileNotFoundError:
         err("Error: FFmpeg not found!")
-        sys.exit(err_stat['dep'])
+        sys.exit(status.DEP)
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -925,7 +930,7 @@ def parse_cli():
                 arg = sys.argv[pos+1]
             except IndexError:
                 err(f"Missing value for '{opt}'!")
-                sys.exit(err_stat['opt'])
+                sys.exit(status.OPT)
 
             pos += 2
         else:
@@ -1042,15 +1047,15 @@ def parse_cli():
                 err(f"Unknown flag '{opt}'!")
                 err(f"Try '{os.path.basename(sys.argv[0])} "
                     "--help' for more information.", color=fgcolors.RESET)
-                sys.exit(err_stat['opt'])
+                sys.exit(status.OPT)
             else:
                 err(f"'{opt}' is neither an option nor a coub link!")
                 err(f"Try '{os.path.basename(sys.argv[0])} "
                     "--help' for more information.", color=fgcolors.RESET)
-                sys.exit(err_stat['opt'])
+                sys.exit(status.OPT)
         except ValueError:
             err(f"Invalid {opt} ('{arg}')!")
-            sys.exit(err_stat['opt'])
+            sys.exit(status.OPT)
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -1058,13 +1063,13 @@ def check_options():
     """Test the user input (command line) for its validity."""
     if opts.repeat <= 0:
         err("-r/--repeat must be greater than 0!")
-        sys.exit(err_stat['opt'])
+        sys.exit(status.OPT)
     elif opts.max_coubs is not None and opts.max_coubs <= 0:
         err("--limit-num must be greater than 0!")
-        sys.exit(err_stat['opt'])
+        sys.exit(status.OPT)
     elif opts.connect <= 0:
         err("--connections must be greater than 0!")
-        sys.exit(err_stat['opt'])
+        sys.exit(status.OPT)
 
     if opts.dur:
         command = [
@@ -1080,17 +1085,17 @@ def check_options():
             err("For the supported syntax see:", color=fgcolors.RESET)
             err("https://ffmpeg.org/ffmpeg-utils.html#time-duration-syntax",
                 color=fgcolors.RESET)
-            sys.exit(err_stat['opt'])
+            sys.exit(status.OPT)
 
     if opts.a_only and opts.v_only:
         err("--audio-only and --video-only are mutually exclusive!")
-        sys.exit(err_stat['opt'])
+        sys.exit(status.OPT)
     elif not opts.recoubs and opts.only_recoubs:
         err("--no-recoubs and --only-recoubs are mutually exclusive!")
-        sys.exit(err_stat['opt'])
+        sys.exit(status.OPT)
     elif opts.share and (opts.v_only or opts.a_only):
         err("--share and --video-/audio-only are mutually exclusive!")
-        sys.exit(err_stat['opt'])
+        sys.exit(status.OPT)
 
     v_formats = {
         'med': 0,
@@ -1099,13 +1104,13 @@ def check_options():
     }
     if opts.v_max not in v_formats:
         err(f"Invalid value for --max-video ('{opts.v_max}')!")
-        sys.exit(err_stat['opt'])
+        sys.exit(status.OPT)
     elif opts.v_min not in v_formats:
         err(f"Invalid value for --min-video ('{opts.v_min}')!")
-        sys.exit(err_stat['opt'])
+        sys.exit(status.OPT)
     elif v_formats[opts.v_min] > v_formats[opts.v_max]:
         err("Quality of --min-quality greater than --max-quality!")
-        sys.exit(err_stat['opt'])
+        sys.exit(status.OPT)
 
     # Not really necessary to check as invalid values get ignored anyway
     # But it helps to catch typos
@@ -1119,7 +1124,7 @@ def check_options():
     if opts.sort and opts.sort not in allowed_sort:
         err(f"Invalid sort order ('{opts.sort}')!\n")
         usage_sort()
-        sys.exit(err_stat['opt'])
+        sys.exit(status.OPT)
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -1148,7 +1153,7 @@ def get_request_template(url_type, url):
         template += "?"
     else:
         err("Error: Unknown input type in get_request_template()!")
-        sys.exit(err_stat['run'])
+        sys.exit(status.RUN)
 
     template += f"per_page={opts.coubs_per_page}"
 
@@ -1459,7 +1464,7 @@ def attempt_process(coubs, level=0):
     if -1 < opts.retries < level:
         err("Ran out of connection retries! Please check your connection.")
         clean(coubs)
-        sys.exit(err_stat['conn'])
+        sys.exit(status.CONN)
 
     if level > 0:
         err(f"Retrying... ({level} of "
@@ -1511,9 +1516,9 @@ if __name__ == '__main__':
         main()
     except KeyboardInterrupt:
         err("\nUser Interrupt!", color=fgcolors.WARNING)
-        sys.exit(err_stat['int'])
+        sys.exit(status.INT)
 
     # Indicate failure if not all input coubs exist after execution
     if done < count:
-        sys.exit(err_stat['down'])
+        sys.exit(status.DOWN)
     sys.exit(0)
