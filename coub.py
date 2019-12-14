@@ -196,6 +196,7 @@ class Options:
     coubs_per_page = 25       # allowed: 1-25
     tag_sep = "_"
 
+
 class CoubInputData:
     """Store and parse all user-defined input sources."""
 
@@ -211,8 +212,6 @@ class CoubInputData:
     # This keeps track of the initial size of parsed for progress messages
     count = 0
 
-    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
     def parse_links(self):
         """Parse the coub links given directly via the command line."""
         for link in self.links:
@@ -223,8 +222,6 @@ class CoubInputData:
         if self.links:
             msg("\nReading command line:")
             msg(f"  {len(self.links)} link(s) found")
-
-    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
     def parse_lists(self):
         """Parse the coub links provided in list form (i.e. external file)."""
@@ -246,8 +243,6 @@ class CoubInputData:
                 self.parsed.append(link)
 
             msg(f"  {len(content)} link(s) found")
-
-    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
     async def parse_page(self, req, session=None):
         """Request a single timeline page and parse its content."""
@@ -281,8 +276,6 @@ class CoubInputData:
                 continue
 
             self.parsed.append(f"https://coub.com/view/{c_id}")
-
-    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
     async def parse_timeline(self, url_type, url):
         """
@@ -346,8 +339,6 @@ class CoubInputData:
                 msg(f"  {i+1} out of {total_pages} pages")
                 await self.parse_page(requests[i])
 
-    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
     def find_dupes(self):
         """Find and remove duplicates from the parsed coub link list."""
         dupes = 0
@@ -365,8 +356,6 @@ class CoubInputData:
                 last = self.parsed[i]
 
         return dupes
-
-    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
     def parse_input(self):
         """Handle the parsing process of all provided input sources."""
@@ -404,13 +393,10 @@ class CoubInputData:
                 color=fgcolors.SUCCESS)
             sys.exit(0)
 
-    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
     def update_count(self):
         """Keep track of the initial number of parsed links."""
         self.count = len(self.parsed)
 
-# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 class Coub():
     """Store all relevant infos and methods to process a single coub."""
@@ -433,13 +419,9 @@ class Coub():
 
         self.done = False
 
-    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
     def erroneous(self):
         """Test if any errors occurred for the coub."""
         return bool(self.unavailable or self.exists or self.corrupted)
-
-    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
     def check_existence(self):
         """Test if the coub already exists or is present in the archive."""
@@ -462,8 +444,6 @@ class Coub():
 
         if old_file and not overwrite(old_file):
             self.exists = True
-
-    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
     async def parse(self, session=None):
         """Get all necessary coub infos from the Coub API."""
@@ -504,8 +484,6 @@ class Coub():
             a_ext = self.a_link.split(".")[-1]
             self.a_name = f"{self.name}.{a_ext}"
 
-    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
     async def download(self, session=None):
         """Download all requested streams."""
         if self.erroneous():
@@ -519,8 +497,6 @@ class Coub():
 
         tasks = [save_stream(s[0], s[1], session) for s in streams]
         await asyncio.gather(*tasks)
-
-    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
     def check_integrity(self):
         """Test if a coub was downloaded successfully (e.g. no corruption)."""
@@ -550,8 +526,6 @@ class Coub():
 
             self.corrupted = True
             return
-
-    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
     def merge(self):
         """Mux the separate video/audio streams with FFmpeg."""
@@ -591,8 +565,6 @@ class Coub():
             os.remove(self.v_name)
             os.remove(self.a_name)
 
-    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
     def in_archive(self):
         """Test if a coub's ID is present in the archive file."""
         if not os.path.exists(opts.archive_file):
@@ -606,8 +578,6 @@ class Coub():
 
         return False
 
-    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
     def archive(self):
         """Log a coub's ID in the archive file."""
         # This return also prevents users from creating new archive files
@@ -617,8 +587,6 @@ class Coub():
 
         with open(opts.archive_file, "a") as f:
             print(self.id, file=f)
-
-    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
     def preview(self):
         """Play a coub with the user provided command."""
@@ -640,8 +608,6 @@ class Coub():
                                            stderr=subprocess.DEVNULL)
         except (subprocess.CalledProcessError, FileNotFoundError):
             err("Warning: Preview command failed!", color=fgcolors.WARNING)
-
-    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
     async def process(self, session=None):
         """Process a single coub."""
@@ -693,14 +659,13 @@ class Coub():
             msg(f"  {progress} {self.link: <30} ... ", end="")
             msg("finished", color=fgcolors.SUCCESS)
 
-    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
     def delete(self):
         """Delete any leftover streams."""
         if self.v_name and os.path.exists(self.v_name):
             os.remove(self.v_name)
         if self.a_name and os.path.exists(self.a_name):
             os.remove(self.a_name)
+
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # Functions
@@ -712,6 +677,7 @@ def err(*args, color=fgcolors.ERROR, **kwargs):
     print(*args, file=sys.stderr, **kwargs)
     sys.stderr.write(fgcolors.RESET)
 
+
 def msg(*args, color=fgcolors.RESET, **kwargs):
     """Print to stdout based on verbosity level."""
     if opts.verbosity >= 1:
@@ -719,7 +685,6 @@ def msg(*args, color=fgcolors.RESET, **kwargs):
         print(*args, **kwargs)
         sys.stdout.write(fgcolors.RESET)
 
-# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 def usage():
     """Print the help text."""
@@ -798,7 +763,6 @@ Output:
     Other strings will be interpreted literally.
     This option has no influence on the file extension.""")
 
-# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 def usage_sort():
     """Print supported values for --sort."""
@@ -815,7 +779,6 @@ Hot section:
 Categories:
   likes_count, views_count, newest_popular""")
 
-# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 def usage_category():
     """Print supported values for --category."""
@@ -845,7 +808,6 @@ Special categories:
   random
   coub_of_the_day""")
 
-# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 def check_category(cat):
     """Test given category for its validity."""
@@ -877,7 +839,6 @@ def check_category(cat):
 
     return bool(cat in allowed_cat)
 
-# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 def check_prereq():
     """Test if all required 3rd-party tools are installed."""
@@ -888,7 +849,6 @@ def check_prereq():
         err("Error: FFmpeg not found!")
         sys.exit(status.DEP)
 
-# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 def check_connection():
     """Check if user can connect to coub.com."""
@@ -898,7 +858,6 @@ def check_connection():
         err("Unable to connect to coub.com! Please check your connection.")
         sys.exit(status.CONN)
 
-# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 def parse_cli():
     """Parse the command line."""
@@ -1064,7 +1023,6 @@ def parse_cli():
             err(f"Invalid {opt} ('{arg}')!")
             sys.exit(status.OPT)
 
-# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 def check_options():
     """Test the user input (command line) for its validity."""
@@ -1133,7 +1091,6 @@ def check_options():
         usage_sort()
         sys.exit(status.OPT)
 
-# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 def get_request_template(url_type, url):
     """Assemble template URL (Coub API) for timeline requests."""
@@ -1171,7 +1128,6 @@ def get_request_template(url_type, url):
 
     return template
 
-# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 def resolve_paths():
     """Change into (and create) the destination directory."""
@@ -1179,7 +1135,6 @@ def resolve_paths():
         os.mkdir(opts.path)
     os.chdir(opts.path)
 
-# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 def get_name(req_json, c_id):
     """Assemble final output name of a given coub."""
@@ -1221,7 +1176,6 @@ def get_name(req_json, c_id):
 
     return name
 
-# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 def exists(name):
     """Test if a video with the given name and requested extension exists."""
@@ -1245,7 +1199,6 @@ def exists(name):
 
     return None
 
-# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 def overwrite(name):
     """Prompt the user if they want to overwrite an existing coub."""
@@ -1269,7 +1222,6 @@ def overwrite(name):
             if answer == "2":
                 return False
 
-# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 def stream_lists(resp_json):
     """Return all the available video/audio streams of the given coub."""
@@ -1388,7 +1340,6 @@ def stream_lists(resp_json):
 
     return (video, audio)
 
-# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 async def save_stream(link, path, session=None):
     """Download a single media stream."""
@@ -1411,7 +1362,6 @@ async def save_stream(link, path, session=None):
         except (urllib.error.HTTPError, urllib.error.URLError):
             return
 
-# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 def valid_stream(path):
     """Test a given stream for eventual corruption with a test remux (FFmpeg)."""
@@ -1439,7 +1389,6 @@ def valid_stream(path):
 
     return True
 
-# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 async def process(coubs):
     """Call the process function of all parsed coubs."""
@@ -1457,14 +1406,12 @@ async def process(coubs):
         for c in coubs:
             await c.process()
 
-# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 def clean(coubs):
     """Clean workspace by deleteing unfinished coubs."""
     for c in [c for c in coubs if not c.done]:
         c.delete()
 
-# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 def attempt_process(coubs, level=0):
     """Attempt to run the process function."""
@@ -1486,6 +1433,7 @@ def attempt_process(coubs, level=0):
         coubs = [c for c in coubs if not c.done]
         level += 1
         attempt_process(coubs, level)
+
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # Main Function
@@ -1513,6 +1461,7 @@ def main():
         clean(coubs)
 
     msg("\n### Finished ###\n")
+
 
 # Execute main function
 if __name__ == '__main__':
