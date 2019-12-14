@@ -39,12 +39,14 @@ except ModuleNotFoundError:
 # 3 -> misc. runtime error
 # 4 -> not all input coubs exist after execution (i.e. some downloads failed)
 # 5 -> termination was requested mid-way by the user (i.e. Ctrl+C)
+# 6 -> connection either couldn't be established or was lost
 err_stat = {
     'dep': 1,
     'opt': 2,
     'run': 3,
     'down': 4,
     'int': 5,
+    'conn': 6,
 }
 
 class Colors:
@@ -104,6 +106,14 @@ class Options:
     # There's also no benefit in higher values, if your connection is already
     # fully utilized
     connect = 25
+
+    # How often to retry download when connection is lost
+    # >0 -> retry the specified number of times
+    #  0 -> don't retry
+    # <0 -> retry indefinitely
+    # Retries happen through recursion, so the max. number is theoretically
+    # limited to 1000 retries (although Python's limit could be raised as well)
+    retries = 5
 
     # Limit how many coubs can be downloaded during one script invocation
     max_coubs = None
@@ -298,7 +308,7 @@ class CoubInputData:
             return
         except urllib.error.URLError:
             err("\nUnable to connect to coub.com! Please check your connection.")
-            sys.exit(err_stat['run'])
+            sys.exit(err_stat['conn'])
 
         total_pages = resp_json['total_pages']
         # tag/hot section/category timeline redirects pages >99 to page 1
@@ -459,13 +469,9 @@ class Coub():
             return
 
         if aio:
-            try:
-                async with session.get(self.req) as resp:
-                    resp_json = await resp.read()
-                    resp_json = json.loads(resp_json)
-            except aiohttp.client_exceptions.ClientConnectorError:
-                self.unavailable = True
-                return
+            async with session.get(self.req) as resp:
+                resp_json = await resp.read()
+                resp_json = json.loads(resp_json)
         else:
             try:
                 with urlopen(self.req) as resp:
@@ -741,7 +747,9 @@ Common options:
   -d, --duration TIME    specify max. coub duration (FFmpeg syntax)
 
 Download options:
-  --connections N        raise max. number of connections (def: {opts.connect})
+  --connections N        max. number of connections (def: {opts.connect})
+  --retries N            number of retries when connection is lost (def: {opts.retries})
+                           0 to disable, <0 to retry indefinitely
   --limit-num LIMIT      limit max. number of downloaded coubs
   --sort ORDER           specify download order for channels, tags, etc.
                            '--sort help' for all supported values
@@ -898,6 +906,7 @@ def parse_cli():
         "-r", "--repeat",
         "-d", "--duration",
         "--connections",
+        "--retries",
         "--limit-num",
         "--sort",
         "--max-video",
@@ -970,6 +979,8 @@ def parse_cli():
             # Download options
             elif opt in ("--connections",):
                 opts.connect = int(arg)
+            elif opt in ("--retries",):
+                opts.retries = int(arg)
             elif opt in ("--limit-num",):
                 opts.max_coubs = int(arg)
             elif opt in ("--sort",):
@@ -1370,16 +1381,13 @@ def stream_lists(resp_json):
 async def save_stream(link, path, session=None):
     """Download a single media stream."""
     if aio:
-        try:
-            async with session.get(link) as stream:
-                with open(path, "wb") as f:
-                    while True:
-                        chunk = await stream.content.read(1024)
-                        if not chunk:
-                            break
-                        f.write(chunk)
-        except aiohttp.client_exceptions.ClientConnectorError:
-            return
+        async with session.get(link) as stream:
+            with open(path, "wb") as f:
+                while True:
+                    chunk = await stream.content.read(1024)
+                    if not chunk:
+                        break
+                    f.write(chunk)
     else:
         try:
             with urlopen(link) as stream, open(path, "wb") as f:
@@ -1430,10 +1438,9 @@ async def process(coubs):
             async with aiohttp.ClientSession(timeout=tout, connector=conn) as session:
                 tasks = [c.process(session) for c in coubs]
                 await asyncio.gather(*tasks)
-        except aiohttp.client_exceptions.ClientError:
-            err("\nLost connection to coub.com! Please check your connection.")
-            clean(coubs)
-            sys.exit(err_stat['run'])
+        except aiohttp.ClientConnectionError:
+            err("\nLost connection to coub.com!")
+            raise
     else:
         for c in coubs:
             await c.process()
@@ -1444,6 +1451,28 @@ def clean(coubs):
     """Clean workspace by deleteing unfinished coubs."""
     for c in [c for c in coubs if not c.done]:
         c.delete()
+
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+def attempt_process(coubs, level=0):
+    """Attempt to run the process function."""
+    if -1 < opts.retries < level:
+        err("Ran out of connection retries! Please check your connection.")
+        clean(coubs)
+        sys.exit(err_stat['conn'])
+
+    if level > 0:
+        err(f"Retrying... ({level} of "
+            f"{opts.retries if opts.retries > 0 else 'Inf'} attempts)",
+            color=fgcolors.WARNING)
+
+    try:
+        asyncio.run(process(coubs), debug=False)
+    except aiohttp.ClientConnectionError:
+        # Reduce the list of coubs to only those yet to finish
+        coubs = [c for c in coubs if not c.done]
+        level += 1
+        attempt_process(coubs, level)
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # Main Function
@@ -1465,7 +1494,7 @@ def main():
     coubs = [Coub(l) for l in user_input.parsed]
 
     try:
-        asyncio.run(process(coubs), debug=False)
+        attempt_process(coubs)
     finally:
         clean(coubs)
 
