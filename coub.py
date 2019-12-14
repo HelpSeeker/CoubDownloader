@@ -311,9 +311,6 @@ class CoubInputData:
         except urllib.error.HTTPError:
             err(f"\nInvalid {url_type} ('{url}')!", color=fgcolors.WARNING)
             return
-        except urllib.error.URLError:
-            err("\nUnable to connect to coub.com! Please check your connection.")
-            sys.exit(status.CONN)
 
         total_pages = resp_json['total_pages']
         # tag/hot section/category timeline redirects pages >99 to page 1
@@ -890,6 +887,16 @@ def check_prereq():
     except FileNotFoundError:
         err("Error: FFmpeg not found!")
         sys.exit(status.DEP)
+
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+def check_connection():
+    """Check if user can connect to coub.com."""
+    try:
+        urlopen("https://coub.com/")
+    except urllib.error.URLError:
+        err("Unable to connect to coub.com! Please check your connection.")
+        sys.exit(status.CONN)
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -1474,6 +1481,7 @@ def attempt_process(coubs, level=0):
     try:
         asyncio.run(process(coubs), debug=False)
     except aiohttp.ClientConnectionError:
+        check_connection()
         # Reduce the list of coubs to only those yet to finish
         coubs = [c for c in coubs if not c.done]
         level += 1
@@ -1486,6 +1494,7 @@ def attempt_process(coubs, level=0):
 def main():
     """Download all requested coubs."""
     check_prereq()
+    check_connection()
     parse_cli()
     check_options()
     resolve_paths()
