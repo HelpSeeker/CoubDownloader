@@ -6,6 +6,7 @@ CoubDownloader is a simple script to download videos (called coubs) from [Coub](
 
 1. [Usage](https://github.com/HelpSeeker/CoubDownloader#usage)  
 2. [Requirements](https://github.com/HelpSeeker/CoubDownloader#requirements)  
+2.1 [Optional](https://github.com/HelpSeeker/CoubDownloader#optional)  
 3. [Input](https://github.com/HelpSeeker/CoubDownloader#input)  
 3.1. [Links](https://github.com/HelpSeeker/CoubDownloader#links)  
 3.2. [Lists](https://github.com/HelpSeeker/CoubDownloader#lists)  
@@ -51,6 +52,8 @@ Common options:
 
 Download options:
   --connections N        raise max. number of connections (def: 25)
+  --retries N            number of retries when connection is lost (def: 5)
+                           0 to disable, <0 to retry indefinitely
   --limit-num LIMIT      limit max. number of downloaded coubs
   --sort ORDER           specify download order for channels, tags, etc.
                            '--sort help' for all supported values
@@ -103,13 +106,10 @@ Output:
 * Python >= 3.7
 * [FFmpeg](https://www.ffmpeg.org/)
 
-**Optional for asynchronous downloads (recommended):**
+### Optional
 
-* [aiohttp](https://aiohttp.readthedocs.io/en/stable/)
-
-**Optional for colorized terminal output on Windows:**
-
-* [colorama](https://github.com/tartley/colorama)
+* [aiohttp](https://aiohttp.readthedocs.io/en/stable/) for asynchronous execution **(recommended)**
+* [colorama](https://github.com/tartley/colorama) for colorized terminal output on Windows
 
 ## Input
 
@@ -161,9 +161,9 @@ Please note that URLs mustn't include a special sort order (e.g. https://coub.co
 
 Input gets parsed in the following order:
 
-* Links  
-* Lists  
-* Channels  
+* Links
+* Lists
+* Channels
 * Tags
 * Searches
 * Categories
@@ -269,25 +269,23 @@ Coub started to massively overhaul their database and API. Of course those chang
 - [x] Detect stream corruption (incl. old Coub storage method)
 - [x] Workspace cleanup (incomplete coubs) after user interrupt 
 - [x] Colorized terminal output
+- [x] Download retries
 
 ## Changes since switching to Coub's API (previously used youtube-dl)
 
 - [x] Download all coubs from a channel
-- [x] Download all recoubs from a channel  
-- [x] Limit number of downloaded coubs  
+- [x] Download all recoubs from a channel
+- [x] Limit number of downloaded coubs
 - [x] Wait x seconds between downloads
 - [x] ~~Limit download speed~~ (was only possible in the Bash version)
-- [x] Download all coubs with a certain tag  
-- [x] Check for the existence of a coub before downloading  
+- [x] Download all coubs with a certain tag
+- [x] Check for the existence of a coub before downloading
 - [x] Specify max. coub duration (FFmpeg syntax) 
-- [x] Keep track of already downloaded coubs  
+- [x] Keep track of already downloaded coubs
 - [x] Export parsed coub links (from channels or tags) to a file for later usage
-- [x] Different verbosity levels   
+- [x] Different verbosity levels
 - [x] Choose download order for channels and tags
 - [x] Custom output formatting
 - [x] Download all coubs from a search query
 - [x] Choose what video/audio quality to download
 - [x] ~~Download videos for mobile devices to avoid watermarks~~ (not possible anymore)
-- [ ] Download stories*  
-
-*Story support will be more difficult to implement, as Coub's API doesn't provide any related endpoint. It will require conventional scraping, after JS execution with a headless browser.
