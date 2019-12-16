@@ -51,7 +51,7 @@ Common options:
   -d, --duration TIME    specify max. coub duration (FFmpeg syntax)
 
 Download options:
-  --connections N        raise max. number of connections (def: 25)
+  --connections N        max. number of connections (def: 25)
   --retries N            number of retries when connection is lost (def: 5)
                            0 to disable, <0 to retry indefinitely
   --limit-num LIMIT      limit max. number of downloaded coubs
