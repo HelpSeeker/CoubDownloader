@@ -5,7 +5,6 @@ import json
 import os
 import subprocess
 import sys
-import time
 
 from fnmatch import fnmatch
 from math import ceil
@@ -20,19 +19,60 @@ try:
 except ModuleNotFoundError:
     aio = False
 
-# Error codes
-# 1 -> missing required software
-# 2 -> invalid user-specified option
-# 3 -> misc. runtime error
-# 4 -> not all input coubs exist after execution (i.e. some downloads failed)
-# 5 -> termination was requested mid-way by the user (i.e. Ctrl+C)
-err_stat = {
-    'dep': 1,
-    'opt': 2,
-    'run': 3,
-    'down': 4,
-    'int': 5,
-}
+# ANSI escape codes don't work on Windows, unless the user jumps through
+# additional hoops (either by using 3rd-party software or enabling VT100
+# emulation with Windows 10)
+# colorama solves this issue by converting ANSI escape codes into the
+# appropriate win32 calls (only on Windows)
+# If colorama isn't available, disable colorized output on Windows
+colors = True
+try:
+    import colorama
+    colorama.init()
+except ModuleNotFoundError:
+    if os.name == "nt":
+        colors = False
+
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# Global constants
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+class ExitCodes:
+    """Store exit codes for non-successful execution."""
+
+    DEP = 1         # missing required software
+    OPT = 2         # invalid user-specified option
+    RUN = 3         # misc. runtime error
+    DOWN = 4        # failed to download all input links (existence == success)
+    INT = 5         # early termination was requested by the user (i.e. Ctrl+C)
+    CONN = 6        # connection either couldn't be established or was lost
+
+
+class Colors:
+    """Store ANSI escape codes for colorized output."""
+
+    # https://en.wikipedia.org/wiki/ANSI_escape_code#Colors
+    ERROR = '\033[31m'      # red
+    WARNING = '\033[33m'    # yellow
+    SUCCESS = '\033[32m'    # green
+    RESET = '\033[0m'
+
+    def disable(self):
+        """Disable colorized output by removing escape codes."""
+        # I'm not going to stop addressing these attributes as constants, just
+        # because Windows thinks it needs to be special
+        self.ERROR = ''
+        self.SUCCESS = ''
+        self.WARNING = ''
+        self.RESET = ''
+
+
+# Create objects to hold constants
+status = ExitCodes()
+fgcolors = Colors()
+
+if not colors:
+    fgcolors.disable()
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # Classes
@@ -72,14 +112,13 @@ class Options:
     # fully utilized
     connect = 25
 
-    # No. of coubs to process per batch
-    # Bigger batches make better use of asynchronous parsing/download
-    # 0 -> single batch for all coubs
-    # 1 -> one coub at a time
-    batch = 1
-
-    # Pause between batches (in sec)
-    sleep_dur = None
+    # How often to retry download when connection is lost
+    # >0 -> retry the specified number of times
+    #  0 -> don't retry
+    # <0 -> retry indefinitely
+    # Retries happen through recursion, so the max. number is theoretically
+    # limited to 1000 retries (although Python's limit could be raised as well)
+    retries = 5
 
     # Limit how many coubs can be downloaded during one script invocation
     max_coubs = None
@@ -157,6 +196,7 @@ class Options:
     coubs_per_page = 25       # allowed: 1-25
     tag_sep = "_"
 
+
 class CoubInputData:
     """Store and parse all user-defined input sources."""
 
@@ -170,10 +210,7 @@ class CoubInputData:
 
     parsed = []
     # This keeps track of the initial size of parsed for progress messages
-    # Necessary as each coub buffer in main() will decimate parsed further
     count = 0
-
-    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
     def parse_links(self):
         """Parse the coub links given directly via the command line."""
@@ -185,8 +222,6 @@ class CoubInputData:
         if self.links:
             msg("\nReading command line:")
             msg(f"  {len(self.links)} link(s) found")
-
-    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
     def parse_lists(self):
         """Parse the coub links provided in list form (i.e. external file)."""
@@ -208,8 +243,6 @@ class CoubInputData:
                 self.parsed.append(link)
 
             msg(f"  {len(content)} link(s) found")
-
-    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
     async def parse_page(self, req, session=None):
         """Request a single timeline page and parse its content."""
@@ -244,8 +277,6 @@ class CoubInputData:
 
             self.parsed.append(f"https://coub.com/view/{c_id}")
 
-    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
     async def parse_timeline(self, url_type, url):
         """
         Parse the coub links from tags, channels, etc.
@@ -266,8 +297,13 @@ class CoubInputData:
         template = get_request_template(url_type, url)
 
         # Initial API call in order to get the page count
-        with urlopen(template) as resp:
-            resp_json = json.loads(resp.read())
+        # Also acts as a crude check for invalid input and no connection
+        try:
+            with urlopen(template) as resp:
+                resp_json = json.loads(resp.read())
+        except urllib.error.HTTPError:
+            err(f"\nInvalid {url_type} ('{url}')!", color=fgcolors.WARNING)
+            return
 
         total_pages = resp_json['total_pages']
         # tag/hot section/category timeline redirects pages >99 to page 1
@@ -297,13 +333,11 @@ class CoubInputData:
             conn = aiohttp.TCPConnector(limit=opts.connect)
             async with aiohttp.ClientSession(timeout=tout, connector=conn) as session:
                 tasks = [self.parse_page(req, session) for req in requests]
-                await asyncio.gather(*tasks, return_exceptions=False)
+                await asyncio.gather(*tasks)
         else:
             for i in range(pages):
                 msg(f"  {i+1} out of {total_pages} pages")
                 await self.parse_page(requests[i])
-
-    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
     def find_dupes(self):
         """Find and remove duplicates from the parsed coub link list."""
@@ -323,8 +357,6 @@ class CoubInputData:
 
         return dupes
 
-    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
     def parse_input(self):
         """Handle the parsing process of all provided input sources."""
         self.parse_links()
@@ -341,11 +373,12 @@ class CoubInputData:
             asyncio.run(self.parse_timeline("hot", "https://coub.com/hot"))
 
         if not self.parsed:
-            err("\nError: No coub links specified!")
-            sys.exit(err_stat['opt'])
+            err("\nNo coub links specified!", color=fgcolors.WARNING)
+            sys.exit(status.OPT)
 
         if opts.max_coubs and len(self.parsed) >= opts.max_coubs:
-            msg(f"\nDownload limit ({opts.max_coubs}) reached!")
+            msg(f"\nDownload limit ({opts.max_coubs}) reached!",
+                color=fgcolors.WARNING)
 
         msg("\nResults:")
         msg(f"  {len(self.parsed)} input link(s)")
@@ -356,16 +389,14 @@ class CoubInputData:
             with open(opts.out_file, "a") as f:
                 for link in self.parsed:
                     print(link, file=f)
-            msg(f"\nParsed coubs written to '{opts.out_file}'!")
+            msg(f"\nParsed coubs written to '{opts.out_file}'!",
+                color=fgcolors.SUCCESS)
             sys.exit(0)
-
-    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
     def update_count(self):
         """Keep track of the initial number of parsed links."""
         self.count = len(self.parsed)
 
-# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 class Coub():
     """Store all relevant infos and methods to process a single coub."""
@@ -386,13 +417,11 @@ class Coub():
         self.exists = False
         self.corrupted = False
 
-    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+        self.done = False
 
     def erroneous(self):
         """Test if any errors occurred for the coub."""
         return bool(self.unavailable or self.exists or self.corrupted)
-
-    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
     def check_existence(self):
         """Test if the coub already exists or is present in the archive."""
@@ -416,25 +445,23 @@ class Coub():
         if old_file and not overwrite(old_file):
             self.exists = True
 
-    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-    async def parse_json(self, session=None):
+    async def parse(self, session=None):
         """Get all necessary coub infos from the Coub API."""
         if self.erroneous():
             return
 
-        try:
-            if aio:
-                async with session.get(self.req) as resp:
-                    resp_json = await resp.read()
-                    resp_json = json.loads(resp_json)
-            else:
+        if aio:
+            async with session.get(self.req) as resp:
+                resp_json = await resp.read()
+                resp_json = json.loads(resp_json)
+        else:
+            try:
                 with urlopen(self.req) as resp:
                     resp_json = resp.read()
                     resp_json = json.loads(resp_json)
-        except:
-            self.unavailable = True
-            return
+            except (urllib.error.HTTPError, urllib.error.URLError):
+                self.unavailable = True
+                return
 
         v_list, a_list = stream_lists(resp_json)
         if v_list:
@@ -457,7 +484,19 @@ class Coub():
             a_ext = self.a_link.split(".")[-1]
             self.a_name = f"{self.name}.{a_ext}"
 
-    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    async def download(self, session=None):
+        """Download all requested streams."""
+        if self.erroneous():
+            return
+
+        streams = []
+        if self.v_name:
+            streams.append((self.v_link, self.v_name))
+        if self.a_name:
+            streams.append((self.a_link, self.a_name))
+
+        tasks = [save_stream(s[0], s[1], session) for s in streams]
+        await asyncio.gather(*tasks)
 
     def check_integrity(self):
         """Test if a coub was downloaded successfully (e.g. no corruption)."""
@@ -487,8 +526,6 @@ class Coub():
 
             self.corrupted = True
             return
-
-    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
     def merge(self):
         """Mux the separate video/audio streams with FFmpeg."""
@@ -528,8 +565,6 @@ class Coub():
             os.remove(self.v_name)
             os.remove(self.a_name)
 
-    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
     def in_archive(self):
         """Test if a coub's ID is present in the archive file."""
         if not os.path.exists(opts.archive_file):
@@ -543,8 +578,6 @@ class Coub():
 
         return False
 
-    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
     def archive(self):
         """Log a coub's ID in the archive file."""
         # This return also prevents users from creating new archive files
@@ -554,8 +587,6 @@ class Coub():
 
         with open(opts.archive_file, "a") as f:
             print(self.id, file=f)
-
-    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
     def preview(self):
         """Play a coub with the user provided command."""
@@ -576,139 +607,86 @@ class Coub():
             subprocess.check_call(command, stdout=subprocess.DEVNULL, \
                                            stderr=subprocess.DEVNULL)
         except (subprocess.CalledProcessError, FileNotFoundError):
-            err("Warning: Preview command failed!")
+            err("Warning: Preview command failed!", color=fgcolors.WARNING)
 
-# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-class CoubBuffer():
-    """Process several coubs together in batches."""
-
-    def __init__(self, parsed):
-        """Initialize buffer with the given list."""
-        self.coubs = [Coub(link) for link in parsed]
-        self.size = len(self.coubs)
-
-    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-    def print_progress(self):
-        """Print the current progress."""
-        if self.size == 1:
-            msg(f"  {count} out of {coubs.count} ({self.coubs[0].link})")
-        else:
-            msg(f"  {count} out of {coubs.count}")
-
-    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-    def list_errors(self, err_type):
-        """Print the amount of (specific) errors that occurred within a batch."""
-        err_list = {
-            'unavailable': [c for c in self.coubs if c.unavailable],
-            'exists': [c for c in self.coubs if c.exists],
-            'corrupted': [c for c in self.coubs if c.corrupted],
-        }
-        err_info = {
-            'unavailable': "unavailable",
-            'exists': "already downloaded",
-            'corrupted': "failed to download properly",
-        }
-
-        amount = len(err_list[err_type])
-        if not amount:
-            return
-
-        if self.size == 1:
-            err(f"Coub {err_info[err_type]}!")
-        else:
-            err(f"{amount} coub(s) {err_info[err_type]}!")
-
-    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-    async def parse(self):
-        """Gather parsing tasks (and execute them asynchronously if possible)."""
-        if aio:
-            tout = aiohttp.ClientTimeout(total=None)
-            conn = aiohttp.TCPConnector(limit=opts.connect)
-            async with aiohttp.ClientSession(timeout=tout, connector=conn) as session:
-                tasks = [c.parse_json(session) for c in self.coubs]
-                await asyncio.gather(*tasks, return_exceptions=False)
-        else:
-            for c in self.coubs:
-                await c.parse_json()
-
-    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-    async def download(self):
-        """Download all available and requested coub streams."""
-        to_download = [c for c in self.coubs if not c.erroneous()]
-        video = [(c.v_link, c.v_name) for c in to_download if c.v_name]
-        audio = [(c.a_link, c.a_name) for c in to_download if c.a_name]
-        streams = video + audio
-
-        if aio:
-            tout = aiohttp.ClientTimeout(total=None)
-            conn = aiohttp.TCPConnector(limit=opts.connect)
-            async with aiohttp.ClientSession(timeout=tout, connector=conn) as session:
-                tasks = [save_stream(s[0], s[1], session) for s in streams]
-                await asyncio.gather(*tasks, return_exceptions=False)
-        else:
-            for s in streams:
-                await save_stream(s[0], s[1])
-
-    # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-    def process(self):
-        """Process all coubs within a batch."""
+    async def process(self, session=None):
+        """Process a single coub."""
         global count, done
 
-        # Preprocessing stage
-        count += self.size
-        self.print_progress()
         # 1st existence check
         # Handles default naming scheme and archive usage
-        for c in self.coubs:
-            c.check_existence()
+        self.check_existence()
 
-        asyncio.run(self.parse())
+        await self.parse(session)
 
         # 2nd existence check
         # Handles custom names exclusively (slower since API request necessary)
         if opts.out_format:
-            for c in self.coubs:
-                c.check_existence()
-        self.list_errors(err_type='unavailable')
-        self.list_errors(err_type='exists')
+            self.check_existence()
 
         # Download
-        asyncio.run(self.download())
+        await self.download(session)
 
         # Postprocessing stage
-        for c in self.coubs:
-            c.check_integrity()
-        self.list_errors(err_type='corrupted')
-        for c in self.coubs:
-            if not (opts.v_only or opts.a_only):
-                c.merge()
-            if opts.archive_file:
-                c.archive()
-            if opts.preview:
-                c.preview()
+        self.check_integrity()
+        if not (opts.v_only or opts.a_only):
+            self.merge()
 
+        # Success should be logged as soon as possible to avoid deletion
+        # of valid streams with special format options (e.g. --video-only)
+        self.done = True
+
+        if opts.archive_file:
+            self.archive()
+        if opts.preview:
+            self.preview()
+
+        # Log status after processing
+        count += 1
+        progress = f"[{count: >{len(str(user_input.count))}}/{user_input.count}]"
+        if self.unavailable:
+            err(f"  {progress} {self.link: <30} ... ", color=fgcolors.RESET, end="")
+            err("unavailable")
+        elif self.corrupted:
+            err(f"  {progress} {self.link: <30} ... ", color=fgcolors.RESET, end="")
+            err("failed to download")
+        elif self.exists:
             done += 1
+            msg(f"  {progress} {self.link: <30} ... ", end="")
+            msg("exists", color=fgcolors.WARNING)
+        else:
+            done += 1
+            msg(f"  {progress} {self.link: <30} ... ", end="")
+            msg("finished", color=fgcolors.SUCCESS)
+
+    def delete(self):
+        """Delete any leftover streams."""
+        if self.v_name and os.path.exists(self.v_name):
+            os.remove(self.v_name)
+        if self.a_name and os.path.exists(self.a_name):
+            os.remove(self.a_name)
+
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # Functions
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-def err(*args, **kwargs):
+def err(*args, color=fgcolors.ERROR, **kwargs):
     """Print to stderr."""
+    sys.stderr.write(color)
     print(*args, file=sys.stderr, **kwargs)
+    sys.stderr.write(fgcolors.RESET)
+    sys.stdout.write(fgcolors.RESET)
 
-def msg(*args, **kwargs):
+
+def msg(*args, color=fgcolors.RESET, **kwargs):
     """Print to stdout based on verbosity level."""
     if opts.verbosity >= 1:
+        sys.stdout.write(color)
         print(*args, **kwargs)
+        sys.stderr.write(fgcolors.RESET)
+        sys.stdout.write(fgcolors.RESET)
 
-# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 def usage():
     """Print the help text."""
@@ -738,11 +716,9 @@ Common options:
   -d, --duration TIME    specify max. coub duration (FFmpeg syntax)
 
 Download options:
-  --connections N        raise max. number of connections (def: {opts.connect})
-  --batch N              how many coubs to process per batch (def: {opts.batch})
-                           N > 1: enable asynchronous download
-                           N = 0: process all coubs in a single batch
-  --sleep TIME           pause the script for TIME seconds after each batch
+  --connections N        max. number of connections (def: {opts.connect})
+  --retries N            number of retries when connection is lost (def: {opts.retries})
+                           0 to disable, <0 to retry indefinitely
   --limit-num LIMIT      limit max. number of downloaded coubs
   --sort ORDER           specify download order for channels, tags, etc.
                            '--sort help' for all supported values
@@ -789,7 +765,6 @@ Output:
     Other strings will be interpreted literally.
     This option has no influence on the file extension.""")
 
-# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 def usage_sort():
     """Print supported values for --sort."""
@@ -806,7 +781,6 @@ Hot section:
 Categories:
   likes_count, views_count, newest_popular""")
 
-# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 def usage_category():
     """Print supported values for --category."""
@@ -836,7 +810,6 @@ Special categories:
   random
   coub_of_the_day""")
 
-# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 def check_category(cat):
     """Test given category for its validity."""
@@ -868,7 +841,6 @@ def check_category(cat):
 
     return bool(cat in allowed_cat)
 
-# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 def check_prereq():
     """Test if all required 3rd-party tools are installed."""
@@ -877,13 +849,21 @@ def check_prereq():
                                    stderr=subprocess.DEVNULL)
     except FileNotFoundError:
         err("Error: FFmpeg not found!")
-        sys.exit(err_stat['dep'])
+        sys.exit(status.DEP)
 
-# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+def check_connection():
+    """Check if user can connect to coub.com."""
+    try:
+        urlopen("https://coub.com/")
+    except urllib.error.URLError:
+        err("Unable to connect to coub.com! Please check your connection.")
+        sys.exit(status.CONN)
+
 
 def parse_cli():
     """Parse the command line."""
-    global opts, coubs
+    global opts, user_input
 
     if not sys.argv[1:]:
         usage()
@@ -899,8 +879,7 @@ def parse_cli():
         "-r", "--repeat",
         "-d", "--duration",
         "--connections",
-        "--batch",
-        "--sleep",
+        "--retries",
         "--limit-num",
         "--sort",
         "--max-video",
@@ -919,7 +898,7 @@ def parse_cli():
                 arg = sys.argv[pos+1]
             except IndexError:
                 err(f"Missing value for '{opt}'!")
-                sys.exit(err_stat['opt'])
+                sys.exit(status.OPT)
 
             pos += 2
         else:
@@ -928,28 +907,28 @@ def parse_cli():
         try:
             # Input
             if fnmatch(opt, "*coub.com/view/*"):
-                coubs.links.append(opt.strip("/"))
+                user_input.links.append(opt.strip("/"))
             elif opt in ("-l", "--list"):
                 if os.path.exists(arg):
-                    coubs.lists.append(os.path.abspath(arg))
+                    user_input.lists.append(os.path.abspath(arg))
                 else:
-                    err(f"'{arg}' is not a valid list!")
+                    err(f"'{arg}' is not a valid list!", color=fgcolors.WARNING)
             elif opt in ("-c", "--channel"):
-                coubs.channels.append(arg.strip("/"))
+                user_input.channels.append(arg.strip("/"))
             elif opt in ("-t", "--tag"):
-                coubs.tags.append(arg.strip("/"))
+                user_input.tags.append(arg.strip("/"))
             elif opt in ("-e", "--search"):
-                coubs.searches.append(arg.strip("/"))
+                user_input.searches.append(arg.strip("/"))
             elif opt in ("--hot",):
-                coubs.hot = True
+                user_input.hot = True
             elif opt in ("--category",):
                 if arg == "help":
                     usage_category()
                     sys.exit(0)
                 elif check_category(arg.strip("/")):
-                    coubs.categories.append(arg.strip("/"))
+                    user_input.categories.append(arg.strip("/"))
                 else:
-                    err(f"'{arg}' is not a valid category!")
+                    err(f"'{arg}' is not a valid category!", color=fgcolors.WARNING)
             # Common options
             elif opt in ("-h", "--help"):
                 usage()
@@ -973,10 +952,8 @@ def parse_cli():
             # Download options
             elif opt in ("--connections",):
                 opts.connect = int(arg)
-            elif opt in ("--batch",):
-                opts.batch = int(arg)
-            elif opt in ("--sleep",):
-                opts.sleep_dur = float(arg)
+            elif opt in ("--retries",):
+                opts.retries = int(arg)
             elif opt in ("--limit-num",):
                 opts.max_coubs = int(arg)
             elif opt in ("--sort",):
@@ -1036,32 +1013,30 @@ def parse_cli():
             # Unknown options
             elif fnmatch(opt, "-*"):
                 err(f"Unknown flag '{opt}'!")
-                err(f"Try '{os.path.basename(sys.argv[0])} --help' for more information.")
-                sys.exit(err_stat['opt'])
+                err(f"Try '{os.path.basename(sys.argv[0])} "
+                    "--help' for more information.", color=fgcolors.RESET)
+                sys.exit(status.OPT)
             else:
                 err(f"'{opt}' is neither an option nor a coub link!")
-                err(f"Try '{os.path.basename(sys.argv[0])} --help' for more information.")
-                sys.exit(err_stat['opt'])
+                err(f"Try '{os.path.basename(sys.argv[0])} "
+                    "--help' for more information.", color=fgcolors.RESET)
+                sys.exit(status.OPT)
         except ValueError:
             err(f"Invalid {opt} ('{arg}')!")
-            sys.exit(err_stat['opt'])
+            sys.exit(status.OPT)
 
-# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 def check_options():
     """Test the user input (command line) for its validity."""
     if opts.repeat <= 0:
         err("-r/--repeat must be greater than 0!")
-        sys.exit(err_stat['opt'])
+        sys.exit(status.OPT)
     elif opts.max_coubs is not None and opts.max_coubs <= 0:
         err("--limit-num must be greater than 0!")
-        sys.exit(err_stat['opt'])
+        sys.exit(status.OPT)
     elif opts.connect <= 0:
         err("--connections must be greater than 0!")
-        sys.exit(err_stat['opt'])
-    elif opts.batch < 0:
-        err("--batch can't be negative!")
-        sys.exit(err_stat['opt'])
+        sys.exit(status.OPT)
 
     if opts.dur:
         command = [
@@ -1073,19 +1048,21 @@ def check_options():
         try:
             subprocess.check_call(command)
         except subprocess.CalledProcessError:
-            err("Invalid duration! For the supported syntax see:")
-            err("https://ffmpeg.org/ffmpeg-utils.html#time-duration-syntax")
-            sys.exit(err_stat['opt'])
+            err("Invalid duration!")
+            err("For the supported syntax see:", color=fgcolors.RESET)
+            err("https://ffmpeg.org/ffmpeg-utils.html#time-duration-syntax",
+                color=fgcolors.RESET)
+            sys.exit(status.OPT)
 
     if opts.a_only and opts.v_only:
         err("--audio-only and --video-only are mutually exclusive!")
-        sys.exit(err_stat['opt'])
+        sys.exit(status.OPT)
     elif not opts.recoubs and opts.only_recoubs:
         err("--no-recoubs and --only-recoubs are mutually exclusive!")
-        sys.exit(err_stat['opt'])
+        sys.exit(status.OPT)
     elif opts.share and (opts.v_only or opts.a_only):
         err("--share and --video-/audio-only are mutually exclusive!")
-        sys.exit(err_stat['opt'])
+        sys.exit(status.OPT)
 
     v_formats = {
         'med': 0,
@@ -1094,13 +1071,13 @@ def check_options():
     }
     if opts.v_max not in v_formats:
         err(f"Invalid value for --max-video ('{opts.v_max}')!")
-        sys.exit(err_stat['opt'])
+        sys.exit(status.OPT)
     elif opts.v_min not in v_formats:
         err(f"Invalid value for --min-video ('{opts.v_min}')!")
-        sys.exit(err_stat['opt'])
+        sys.exit(status.OPT)
     elif v_formats[opts.v_min] > v_formats[opts.v_max]:
         err("Quality of --min-quality greater than --max-quality!")
-        sys.exit(err_stat['opt'])
+        sys.exit(status.OPT)
 
     # Not really necessary to check as invalid values get ignored anyway
     # But it helps to catch typos
@@ -1112,15 +1089,11 @@ def check_options():
         "newest",
     ]
     if opts.sort and opts.sort not in allowed_sort:
-        err(f"Invalid sort order ('{opts.sort}')!\n")
-        usage_sort()
-        sys.exit(err_stat['opt'])
+        err(f"Invalid sort order ('{opts.sort}')!")
+        err(f"Try '{os.path.basename(sys.argv[0])} --sort help' "
+            "for more information.", color=fgcolors.RESET)
+        sys.exit(status.OPT)
 
-    # Only warn the user
-    if not aio and opts.batch != 1:
-        err("Warning: Usage of aiohttp recommended for batch size >1!")
-
-# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 def get_request_template(url_type, url):
     """Assemble template URL (Coub API) for timeline requests."""
@@ -1147,7 +1120,7 @@ def get_request_template(url_type, url):
         template += "?"
     else:
         err("Error: Unknown input type in get_request_template()!")
-        sys.exit(err_stat['run'])
+        sys.exit(status.RUN)
 
     template += f"per_page={opts.coubs_per_page}"
 
@@ -1158,7 +1131,6 @@ def get_request_template(url_type, url):
 
     return template
 
-# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 def resolve_paths():
     """Change into (and create) the destination directory."""
@@ -1166,7 +1138,6 @@ def resolve_paths():
         os.mkdir(opts.path)
     os.chdir(opts.path)
 
-# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 def get_name(req_json, c_id):
     """Assemble final output name of a given coub."""
@@ -1202,12 +1173,12 @@ def get_name(req_json, c_id):
         f.close()
         os.remove(name)
     except OSError:
-        err(f"Error: Filename invalid or too long! Falling back to '{c_id}'")
+        err(f"Error: Filename invalid or too long! Falling back to '{c_id}'",
+            color=fgcolors.WARNING)
         name = c_id
 
     return name
 
-# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 def exists(name):
     """Test if a video with the given name and requested extension exists."""
@@ -1231,7 +1202,6 @@ def exists(name):
 
     return None
 
-# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 def overwrite(name):
     """Prompt the user if they want to overwrite an existing coub."""
@@ -1255,7 +1225,6 @@ def overwrite(name):
             if answer == "2":
                 return False
 
-# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 def stream_lists(resp_json):
     """Return all the available video/audio streams of the given coub."""
@@ -1312,6 +1281,10 @@ def stream_lists(resp_json):
 
     video = []
     audio = []
+
+    # In case Coub returns "error: Coub not found"
+    if 'error' in resp_json:
+        return ([], [])
 
     # Special treatment for shared video
     if opts.share:
@@ -1370,7 +1343,6 @@ def stream_lists(resp_json):
 
     return (video, audio)
 
-# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 async def save_stream(link, path, session=None):
     """Download a single media stream."""
@@ -1390,10 +1362,9 @@ async def save_stream(link, path, session=None):
                     if not chunk:
                         break
                     f.write(chunk)
-        except urllib.error.HTTPError:
+        except (urllib.error.HTTPError, urllib.error.URLError):
             return
 
-# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 def valid_stream(path):
     """Test a given stream for eventual corruption with a test remux (FFmpeg)."""
@@ -1421,6 +1392,52 @@ def valid_stream(path):
 
     return True
 
+
+async def process(coubs):
+    """Call the process function of all parsed coubs."""
+    if aio:
+        tout = aiohttp.ClientTimeout(total=None)
+        conn = aiohttp.TCPConnector(limit=opts.connect)
+        try:
+            async with aiohttp.ClientSession(timeout=tout, connector=conn) as session:
+                tasks = [c.process(session) for c in coubs]
+                await asyncio.gather(*tasks)
+        except aiohttp.ClientConnectionError:
+            err("\nLost connection to coub.com!")
+            raise
+    else:
+        for c in coubs:
+            await c.process()
+
+
+def clean(coubs):
+    """Clean workspace by deleteing unfinished coubs."""
+    for c in [c for c in coubs if not c.done]:
+        c.delete()
+
+
+def attempt_process(coubs, level=0):
+    """Attempt to run the process function."""
+    if -1 < opts.retries < level:
+        err("Ran out of connection retries! Please check your connection.")
+        clean(coubs)
+        sys.exit(status.CONN)
+
+    if level > 0:
+        err(f"Retrying... ({level} of "
+            f"{opts.retries if opts.retries > 0 else 'Inf'} attempts)",
+            color=fgcolors.WARNING)
+
+    try:
+        asyncio.run(process(coubs), debug=False)
+    except aiohttp.ClientConnectionError:
+        check_connection()
+        # Reduce the list of coubs to only those yet to finish
+        coubs = [c for c in coubs if not c.done]
+        level += 1
+        attempt_process(coubs, level)
+
+
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # Main Function
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -1428,50 +1445,41 @@ def valid_stream(path):
 def main():
     """Download all requested coubs."""
     check_prereq()
+    check_connection()
     parse_cli()
     check_options()
     resolve_paths()
 
     msg("\n### Parse Input ###")
-    coubs.parse_input()
-    coubs.update_count()
+    user_input.parse_input()
+    user_input.update_count()
 
     msg("\n### Download Coubs ###\n")
 
-    if not opts.batch:
-        batch_size = coubs.count
-    else:
-        batch_size = opts.batch
+    coubs = [Coub(l) for l in user_input.parsed]
 
-    while coubs.parsed:
-        if batch_size != 1 and len(coubs.parsed) == batch_size+1:
-            batch = CoubBuffer(coubs.parsed)
-            del coubs.parsed[:]
-        else:
-            batch = CoubBuffer(coubs.parsed[:batch_size])
-            del coubs.parsed[:batch_size]
-
-        batch.process()
-
-        if opts.sleep_dur and coubs.parsed:
-            time.sleep(opts.sleep_dur)
+    try:
+        attempt_process(coubs)
+    finally:
+        clean(coubs)
 
     msg("\n### Finished ###\n")
+
 
 # Execute main function
 if __name__ == '__main__':
     opts = Options()
-    coubs = CoubInputData()
+    user_input = CoubInputData()
     count = 0
     done = 0
 
     try:
         main()
     except KeyboardInterrupt:
-        err("User Interrupt!")
-        sys.exit(err_stat['int'])
+        err("\nUser Interrupt!", color=fgcolors.WARNING)
+        sys.exit(status.INT)
 
     # Indicate failure if not all input coubs exist after execution
     if done < count:
-        sys.exit(err_stat['down'])
+        sys.exit(status.DOWN)
     sys.exit(0)
