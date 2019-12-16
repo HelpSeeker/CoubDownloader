@@ -297,7 +297,7 @@ class CoubInputData:
         template = get_request_template(url_type, url)
 
         # Initial API call in order to get the page count
-        # Also acts as a crude check for invalid input and no connection
+        # Also acts as a check for invalid input
         try:
             with urlopen(template) as resp:
                 resp_json = json.loads(resp.read())
