@@ -1087,8 +1087,9 @@ def check_options():
         "newest",
     ]
     if opts.sort and opts.sort not in allowed_sort:
-        err(f"Invalid sort order ('{opts.sort}')!\n")
-        usage_sort()
+        err(f"Invalid sort order ('{opts.sort}')!")
+        err(f"Try '{os.path.basename(sys.argv[0])} --sort help' "
+            "for more information.", color=fgcolors.RESET)
         sys.exit(status.OPT)
 
 
