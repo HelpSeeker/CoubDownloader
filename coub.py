@@ -676,6 +676,7 @@ def err(*args, color=fgcolors.ERROR, **kwargs):
     sys.stderr.write(color)
     print(*args, file=sys.stderr, **kwargs)
     sys.stderr.write(fgcolors.RESET)
+    sys.stdout.write(fgcolors.RESET)
 
 
 def msg(*args, color=fgcolors.RESET, **kwargs):
@@ -683,6 +684,7 @@ def msg(*args, color=fgcolors.RESET, **kwargs):
     if opts.verbosity >= 1:
         sys.stdout.write(color)
         print(*args, **kwargs)
+        sys.stderr.write(fgcolors.RESET)
         sys.stdout.write(fgcolors.RESET)
 
 
