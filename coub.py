@@ -197,16 +197,84 @@ class Options:
     tag_sep = "_"
 
 
+class ParsableTimeline:
+    """Store timeline-related data important for later parsing."""
+
+    supported_types = [
+        "channel",
+        "tag",
+        "search",
+        "category",
+        "hot",
+    ]
+
+    def __init__(self, url, url_type):
+        """Initialize timeline object."""
+        self.valid = True
+        self.pages = 0
+        self.url = url
+        if url_type in self.supported_types:
+            self.type = url_type
+        else:
+            err("Error: Tried to initialize timeline with unsupported type!")
+            sys.exit(status.RUN)
+
+        self.get_request_template()
+
+    def get_request_template(self):
+        """Assemble template URL for API request."""
+        template = "https://coub.com/api/v2"
+
+        if self.type in ("channel", "tag", "category"):
+            t_id = self.url.split("/")[-1]
+        elif self.type in ("search",):
+            t_id = self.url.split("=")[-1]
+
+        if self.type in ("tag", "search"):
+            t_id = urlquote(t_id)
+
+        if self.type in ("channel", "tag"):
+            template = f"{template}/timeline/{self.type}/{t_id}?"
+        elif self.type in ("search",):
+            template = f"{template}/search/coubs?q={t_id}&"
+        elif self.type in ("category",):
+            template = f"{template}/timeline/explore/{t_id}?"
+        elif self.type == "hot":
+            template = f"{template}/timeline/hot?"
+
+        template = f"{template}per_page={opts.coubs_per_page}"
+
+        # Different timeline types support different values
+        # Invalid values get ignored though, so no need for further checks
+        if opts.sort:
+            template = f"{template}&order_by={opts.sort}"
+
+        self.template = template
+
+    def get_page_count(self):
+        """Contact API once to get page count and check timeline validity."""
+        try:
+            with urlopen(self.template) as resp:
+                resp_json = json.loads(resp.read())
+        except urllib.error.HTTPError:
+            err(f"\nInvalid {self.type} ('{self.url}')!",
+                color=fgcolors.WARNING)
+            self.valid = False
+            return
+
+        self.pages = resp_json['total_pages']
+        # tag/hot section/category timeline redirects pages >99 to page 1
+        # other timelines work like intended
+        if self.type in ("tag", "hot", "category") and self.pages > 99:
+            self.pages = 99
+
+
 class CoubInputData:
     """Store and parse all user-defined input sources."""
 
     links = []
     lists = []
-    channels = []
-    tags = []
-    searches = []
-    categories = []
-    hot = False
+    timelines = []
 
     parsed = []
     # This keeps track of the initial size of parsed for progress messages
@@ -277,41 +345,17 @@ class CoubInputData:
 
             self.parsed.append(f"https://coub.com/view/{c_id}")
 
-    async def parse_timeline(self, url_type, url):
+    async def parse_timeline(self, timeline):
         """
         Parse the coub links from tags, channels, etc.
 
         The Coub API refers to the list of coubs from a tag, channel,
         category, etc. as a timeline.
-
-        Currently supported timelines:
-          -) channels
-          -) tags
-          -) coub searches
-          -) categories
-          -) 'hot' section (i.e. popular coubs)
         """
         if opts.max_coubs and len(self.parsed) >= opts.max_coubs:
             return
 
-        template = get_request_template(url_type, url)
-
-        # Initial API call in order to get the page count
-        # Also acts as a check for invalid input
-        try:
-            with urlopen(template) as resp:
-                resp_json = json.loads(resp.read())
-        except urllib.error.HTTPError:
-            err(f"\nInvalid {url_type} ('{url}')!", color=fgcolors.WARNING)
-            return
-
-        total_pages = resp_json['total_pages']
-        # tag/hot section/category timeline redirects pages >99 to page 1
-        # other timelines work like intended
-        if url_type in ("tag", "hot", "category") and total_pages > 99:
-            total_pages = 99
-
-        pages = total_pages
+        pages = timeline.pages
 
         # Limit max. number of requested pages
         # Necessary as self.parse_page() returns when limit
@@ -322,12 +366,12 @@ class CoubInputData:
             if pages > max_pages:
                 pages = max_pages
 
-        requests = [f"{template}&page={p}" for p in range(1, pages+1)]
+        requests = [f"{timeline.template}&page={p}" for p in range(1, pages+1)]
 
-        msg(f"\nDownloading {url_type} info ({url}):")
+        msg(f"\nDownloading {timeline.type} info ({timeline.url}):")
 
         if aio:
-            msg(f"  {pages} out of {total_pages} pages")
+            msg(f"  {pages} out of {timeline.pages} pages")
 
             tout = aiohttp.ClientTimeout(total=None)
             conn = aiohttp.TCPConnector(limit=opts.connect)
@@ -336,7 +380,7 @@ class CoubInputData:
                 await asyncio.gather(*tasks)
         else:
             for i in range(pages):
-                msg(f"  {i+1} out of {total_pages} pages")
+                msg(f"  {i+1} out of {timeline.pages} pages")
                 await self.parse_page(requests[i])
 
     def find_dupes(self):
@@ -361,16 +405,10 @@ class CoubInputData:
         """Handle the parsing process of all provided input sources."""
         self.parse_links()
         self.parse_lists()
-        for c in self.channels:
-            asyncio.run(self.parse_timeline("channel", c))
-        for t in self.tags:
-            asyncio.run(self.parse_timeline("tag", t))
-        for s in self.searches:
-            asyncio.run(self.parse_timeline("search", s))
-        for c in self.categories:
-            asyncio.run(self.parse_timeline("category", c))
-        if self.hot:
-            asyncio.run(self.parse_timeline("hot", "https://coub.com/hot"))
+        for t in self.timelines:
+            t.get_page_count()
+            if t.valid:
+                asyncio.run(self.parse_timeline(t))
 
         if not self.parsed:
             err("\nNo coub links specified!", color=fgcolors.WARNING)
@@ -914,19 +952,24 @@ def parse_cli():
                 else:
                     err(f"'{arg}' is not a valid list!", color=fgcolors.WARNING)
             elif opt in ("-c", "--channel"):
-                user_input.channels.append(arg.strip("/"))
+                timeline = ParsableTimeline(arg.strip("/"), "channel")
+                user_input.timelines.append(timeline)
             elif opt in ("-t", "--tag"):
-                user_input.tags.append(arg.strip("/"))
+                timeline = ParsableTimeline(arg.strip("/"), "tag")
+                user_input.timelines.append(timeline)
             elif opt in ("-e", "--search"):
-                user_input.searches.append(arg.strip("/"))
+                timeline = ParsableTimeline(arg.strip("/"), "search")
+                user_input.timelines.append(timeline)
             elif opt in ("--hot",):
-                user_input.hot = True
+                timeline = ParsableTimeline("https://coub.com/hot", "hot")
+                user_input.timelines.append(timeline)
             elif opt in ("--category",):
                 if arg == "help":
                     usage_category()
                     sys.exit(0)
                 elif check_category(arg.strip("/")):
-                    user_input.categories.append(arg.strip("/"))
+                    timeline = ParsableTimeline(arg.strip("/"), "category")
+                    user_input.timelines.append(timeline)
                 else:
                     err(f"'{arg}' is not a valid category!", color=fgcolors.WARNING)
             # Common options
@@ -1093,43 +1136,6 @@ def check_options():
         err(f"Try '{os.path.basename(sys.argv[0])} --sort help' "
             "for more information.", color=fgcolors.RESET)
         sys.exit(status.OPT)
-
-
-def get_request_template(url_type, url):
-    """Assemble template URL (Coub API) for timeline requests."""
-    if url_type == "channel":
-        channel = url.split("/")[-1]
-        template = "https://coub.com/api/v2/timeline/channel/" + channel
-        template += "?"
-    elif url_type == "tag":
-        tag = url.split("/")[-1]
-        tag = urlquote(tag)
-        template = "https://coub.com/api/v2/timeline/tag/" + tag
-        template += "?"
-    elif url_type == "search":
-        search = url.split("=")[-1]
-        search = urlquote(search)
-        template = "https://coub.com/api/v2/search/coubs?q=" + search
-        template += "&"
-    elif url_type == "category":
-        cat = url.split("/")[-1]
-        template = "https://coub.com/api/v2/timeline/explore/" + cat
-        template += "?"
-    elif url_type == "hot":
-        template = "https://coub.com/api/v2/timeline/hot"
-        template += "?"
-    else:
-        err("Error: Unknown input type in get_request_template()!")
-        sys.exit(status.RUN)
-
-    template += f"per_page={opts.coubs_per_page}"
-
-    # Different timeline types support different values
-    # Invalid values get ignored though, so no need for further checks
-    if opts.sort:
-        template += f"&order_by={opts.sort}"
-
-    return template
 
 
 def resolve_paths():
