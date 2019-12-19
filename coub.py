@@ -804,72 +804,9 @@ Output:
     This option has no influence on the file extension.""")
 
 
-def usage_sort():
-    """Print supported values for --sort."""
-    print("""Supported sort values:
-
-Channels:
-  likes_count, views_count, newest_popular
-Tags:
-  likes_count, views_count, newest_popular, oldest
-Searches:
-  likes_count, views_count, newest_popular, oldest, newest
-Hot section:
-  likes_count, views_count, newest_popular, oldest
-Categories:
-  likes_count, views_count, newest_popular""")
-
-
-def usage_category():
-    """Print supported values for --category."""
-    print("""Supported categories:
-
-Communities:
-  animals-pets
-  anime
-  art
-  cars
-  cartoons
-  celebrity
-  dance
-  fashion
-  gaming
-  mashup
-  movies
-  music
-  nature-travel
-  news
-  nsfw
-  science-technology
-  sports
-
-Special categories:
-  newest
-  random
-  coub_of_the_day""")
-
-
 def check_category(cat):
     """Test given category for its validity."""
     allowed_cat = [
-        "animals-pets",
-        "anime",
-        "art",
-        "cars",
-        "cartoons",
-        "celebrity",
-        "dance",
-        "fashion",
-        "gaming",
-        "mashup",
-        "movies",
-        "music",
-        "nature-travel",
-        "news",
-        "nsfw",
-        "science-technology",
-        "sports",
-        # Special categories
         "newest",
         "random",
         "coub_of_the_day",
