@@ -1368,10 +1368,10 @@ def attempt_process(coubs, level=0):
 def main():
     """Download all requested coubs."""
     check_prereq()
-    check_connection()
     parse_cli()
     check_options()
     resolve_paths()
+    check_connection()
 
     msg("\n### Parse Input ###")
     user_input.parse_input()
