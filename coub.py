@@ -740,7 +740,6 @@ Input:
   -e, --search TERM      download search results for the given term
   --hot                  download coubs from the 'Hot' section
   --category CATEGORY    download coubs from a certain category
-                           '--category help' for all supported values
 
 Common options:
   -h, --help             show this help
@@ -802,19 +801,6 @@ Output:
 
     Other strings will be interpreted literally.
     This option has no influence on the file extension.""")
-
-
-def check_category(cat):
-    """Test given category for its validity."""
-    allowed_cat = [
-        "newest",
-        "random",
-        "coub_of_the_day",
-    ]
-
-    cat = cat.split("/")[-1]
-
-    return bool(cat in allowed_cat)
 
 
 def check_prereq():
@@ -901,14 +887,8 @@ def parse_cli():
                 timeline = ParsableTimeline("https://coub.com/hot", "hot")
                 user_input.timelines.append(timeline)
             elif opt in ("--category",):
-                if arg == "help":
-                    usage_category()
-                    sys.exit(0)
-                elif check_category(arg.strip("/")):
-                    timeline = ParsableTimeline(arg.strip("/"), "category")
-                    user_input.timelines.append(timeline)
-                else:
-                    err(f"'{arg}' is not a valid category!", color=fgcolors.WARNING)
+                timeline = ParsableTimeline(arg.strip("/"), "category")
+                user_input.timelines.append(timeline)
             # Common options
             elif opt in ("-h", "--help"):
                 usage()
