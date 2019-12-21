@@ -180,7 +180,7 @@ class Options:
     #   %id%        - coub ID (identifier in the URL)
     #   %title%     - coub title
     #   %creation%  - creation date/time
-    #   %category%  - coub category
+    #   %community% - coub community
     #   %channel%   - channel title
     #   %tags%      - all tags (separated by tag_sep, see below)
     # All other strings are interpreted literally.
@@ -201,7 +201,7 @@ class ParsableTimeline:
         "channel",
         "tag",
         "search",
-        "category",
+        "community",
     ]
 
     def __init__(self, url, url_type):
@@ -221,7 +221,7 @@ class ParsableTimeline:
         """Assemble template URL for API request."""
         template = "https://coub.com/api/v2"
 
-        if self.type in ("channel", "tag", "category"):
+        if self.type in ("channel", "tag", "community"):
             t_id = self.url.split("/")[-1]
         elif self.type in ("search",):
             t_id = self.url.split("=")[-1]
@@ -233,8 +233,10 @@ class ParsableTimeline:
             template = f"{template}/timeline/{self.type}/{t_id}?"
         elif self.type in ("search",):
             template = f"{template}/search/coubs?q={t_id}&"
-        elif self.type in ("category",):
-            template = f"{template}/timeline/explore/{t_id}?"
+        elif self.type in ("community",):
+            # Communities use most popular (on a monthly basis) as default sort
+            # I rather use newest first for now
+            template = f"{template}/timeline/community/{t_id}/fresh?"
 
         template = f"{template}per_page={opts.coubs_per_page}"
 
@@ -257,9 +259,9 @@ class ParsableTimeline:
             return
 
         self.pages = resp_json['total_pages']
-        # tag/category timeline redirects pages >99 to page 1
+        # tag/community timeline redirects pages >99 to page 1
         # other timelines work like intended
-        if self.type in ("tag", "category") and self.pages > 99:
+        if self.type in ("tag", "community") and self.pages > 99:
             self.pages = 99
 
 
@@ -282,6 +284,8 @@ class CoubInputData:
             self.timelines.append(ParsableTimeline(link, "tag"))
         elif fnmatch(link, "*coub.com/search*"):
             self.timelines.append(ParsableTimeline(link, "search"))
+        elif fnmatch(link, "*coub.com/community/*"):
+            self.timelines.append(ParsableTimeline(link, "community"))
         # Unfortunately channel URLs don't have any special characteristics
         # Many yet unsupported URLs (communities, etc.) will be matched as
         # a channel for now
@@ -362,7 +366,7 @@ class CoubInputData:
         Parse the coub links from tags, channels, etc.
 
         The Coub API refers to the list of coubs from a tag, channel,
-        category, etc. as a timeline.
+        community, etc. as a timeline.
         """
         if opts.max_coubs and len(self.parsed) >= opts.max_coubs:
             return
@@ -750,7 +754,7 @@ Input:
   -c, --channel CHANNEL  download coubs from a channel
   -t, --tag TAG          download coubs with the specified tag
   -e, --search TERM      download search results for the given term
-  --category CATEGORY    download coubs from a certain category
+  --community COMMUNITY  download coubs from a certain community
 
 Common options:
   -h, --help             show this help
@@ -804,7 +808,7 @@ Output:
       %id%        - coub ID (identifier in the URL)
       %title%     - coub title
       %creation%  - creation date/time
-      %category%  - coub category
+      %community% - coub community
       %channel%   - channel title
       %tags%      - all tags (separated by {opts.tag_sep})
 
@@ -844,7 +848,7 @@ def parse_cli():
         "-c", "--channel",
         "-t", "--tag",
         "-e", "--search",
-        "--category",
+        "--community",
         "-p", "--path",
         "-r", "--repeat",
         "-d", "--duration",
@@ -891,8 +895,8 @@ def parse_cli():
             elif opt in ("-e", "--search"):
                 timeline = ParsableTimeline(arg.strip("/"), "search")
                 user_input.timelines.append(timeline)
-            elif opt in ("--category",):
-                timeline = ParsableTimeline(arg.strip("/"), "category")
+            elif opt in ("--community",):
+                timeline = ParsableTimeline(arg.strip("/"), "community")
                 user_input.timelines.append(timeline)
             # Common options
             elif opt in ("-h", "--help"):
@@ -1052,11 +1056,11 @@ def get_name(req_json, c_id):
     name = name.replace("%title%", req_json['title'])
     name = name.replace("%creation%", req_json['created_at'])
     name = name.replace("%channel%", req_json['channel']['title'])
-    # Coubs don't necessarily have a category
+    # Coubs don't necessarily belong to a community (although it's rare)
     try:
-        name = name.replace("%category%", req_json['categories'][0]['permalink'])
+        name = name.replace("%community%", req_json['communities'][0]['permalink'])
     except (KeyError, TypeError, IndexError):
-        name = name.replace("%category%", "")
+        name = name.replace("%community%", "")
 
     tags = ""
     for t in req_json['tags']:
