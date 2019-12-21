@@ -202,7 +202,6 @@ class ParsableTimeline:
         "tag",
         "search",
         "category",
-        "hot",
     ]
 
     def __init__(self, url, url_type):
@@ -236,8 +235,6 @@ class ParsableTimeline:
             template = f"{template}/search/coubs?q={t_id}&"
         elif self.type in ("category",):
             template = f"{template}/timeline/explore/{t_id}?"
-        elif self.type == "hot":
-            template = f"{template}/timeline/hot?"
 
         template = f"{template}per_page={opts.coubs_per_page}"
 
@@ -260,9 +257,9 @@ class ParsableTimeline:
             return
 
         self.pages = resp_json['total_pages']
-        # tag/hot section/category timeline redirects pages >99 to page 1
+        # tag/category timeline redirects pages >99 to page 1
         # other timelines work like intended
-        if self.type in ("tag", "hot", "category") and self.pages > 99:
+        if self.type in ("tag", "category") and self.pages > 99:
             self.pages = 99
 
 
@@ -753,7 +750,6 @@ Input:
   -c, --channel CHANNEL  download coubs from a channel
   -t, --tag TAG          download coubs with the specified tag
   -e, --search TERM      download search results for the given term
-  --hot                  download coubs from the 'Hot' section
   --category CATEGORY    download coubs from a certain category
 
 Common options:
@@ -894,9 +890,6 @@ def parse_cli():
                 user_input.timelines.append(timeline)
             elif opt in ("-e", "--search"):
                 timeline = ParsableTimeline(arg.strip("/"), "search")
-                user_input.timelines.append(timeline)
-            elif opt in ("--hot",):
-                timeline = ParsableTimeline("https://coub.com/hot", "hot")
                 user_input.timelines.append(timeline)
             elif opt in ("--category",):
                 timeline = ParsableTimeline(arg.strip("/"), "category")
