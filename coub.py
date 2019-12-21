@@ -289,7 +289,7 @@ class ParsableTimeline:
         if self.sort in methods:
             template = f"{template}&order_by={self.sort}"
         else:
-            err(f"\nInvalid channel sort order '{self.sort}' ({self.url})!",
+            err(f"\nInvalid tag sort order '{self.sort}' ({self.url})!",
                 color=fgcolors.WARNING)
             self.valid = False
 
