@@ -123,9 +123,6 @@ class Options:
     # Limit how many coubs can be downloaded during one script invocation
     max_coubs = None
 
-    # Default sort order
-    sort = None
-
     # What video/audio quality to download
     #   0 -> worst quality
     #  -1 -> best quality
@@ -246,8 +243,8 @@ class ParsableTimeline:
 
         # Different timeline types support different values
         # Invalid values get ignored though, so no need for further checks
-        if opts.sort:
-            template = f"{template}&order_by={opts.sort}"
+        #if opts.sort:
+        #    template = f"{template}&order_by={opts.sort}"
 
         self.template = template
 
@@ -757,8 +754,6 @@ Download options:
   --retries N            number of retries when connection is lost (def: {opts.retries})
                            0 to disable, <0 to retry indefinitely
   --limit-num LIMIT      limit max. number of downloaded coubs
-  --sort ORDER           specify download order for channels, tags, etc.
-                           '--sort help' for all supported values
 
 Format selection:
   --bestvideo            download best available video quality (def)
@@ -842,7 +837,6 @@ def parse_cli():
         "--connections",
         "--retries",
         "--limit-num",
-        "--sort",
         "--max-video",
         "--min-video",
         "--preview",
@@ -916,12 +910,6 @@ def parse_cli():
                 opts.retries = int(arg)
             elif opt in ("--limit-num",):
                 opts.max_coubs = int(arg)
-            elif opt in ("--sort",):
-                if arg == "help":
-                    usage_sort()
-                    sys.exit(0)
-                else:
-                    opts.sort = arg
             # Format selection
             elif opt in ("--bestvideo",):
                 opts.v_quality = -1
@@ -1037,21 +1025,6 @@ def check_options():
         sys.exit(status.OPT)
     elif v_formats[opts.v_min] > v_formats[opts.v_max]:
         err("Quality of --min-quality greater than --max-quality!")
-        sys.exit(status.OPT)
-
-    # Not really necessary to check as invalid values get ignored anyway
-    # But it helps to catch typos
-    allowed_sort = [
-        "likes_count",
-        "views_count",
-        "newest_popular",
-        "oldest",
-        "newest",
-    ]
-    if opts.sort and opts.sort not in allowed_sort:
-        err(f"Invalid sort order ('{opts.sort}')!")
-        err(f"Try '{os.path.basename(sys.argv[0])} --sort help' "
-            "for more information.", color=fgcolors.RESET)
         sys.exit(status.OPT)
 
 
