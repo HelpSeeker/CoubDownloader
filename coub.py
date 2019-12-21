@@ -238,6 +238,12 @@ class ParsableTimeline:
             # I rather use newest first for now
             template = f"{template}/timeline/community/{t_id}/fresh?"
 
+        if self.type in ("channel",):
+            if not opts.recoubs:
+                template = f"{template}type=simples&"
+            elif opts.only_recoubs:
+                template = f"{template}type=recoubs&"
+
         template = f"{template}per_page={opts.coubs_per_page}"
 
         # Different timeline types support different values
@@ -344,20 +350,9 @@ class CoubInputData:
                 return
 
             if c['recoub_to']:
-                # Recoubs have both recoub_to/permalink and permalink
-                # Therefore opts.recoubs can't be used in the prior if
-                if not opts.recoubs:
-                    continue
-                c_info = c['recoub_to']
+                c_id = c['recoub_to']['permalink']
             else:
-                if opts.only_recoubs:
-                    continue
-                c_info = c
-
-            if 'permalink' in c_info:
                 c_id = c['permalink']
-            else:
-                continue
 
             self.parsed.append(f"https://coub.com/view/{c_id}")
 
