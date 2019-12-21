@@ -277,6 +277,24 @@ class CoubInputData:
     # This keeps track of the initial size of parsed for progress messages
     count = 0
 
+    def map_input(self, link):
+        """Detect input link type."""
+        if fnmatch(link, "*coub.com/view/*"):
+            self.links.append(link)
+        elif fnmatch(link, "*coub.com/tags/*"):
+            self.timelines.append(ParsableTimeline(link, "tag"))
+        elif fnmatch(link, "*coub.com/search*"):
+            self.timelines.append(ParsableTimeline(link, "search"))
+        # Unfortunately channel URLs don't have any special characteristics
+        # Many yet unsupported URLs (communities, etc.) will be matched as
+        # a channel for now
+        elif fnmatch(link, "*coub.com*"):
+            self.timelines.append(ParsableTimeline(link, "channel"))
+        elif os.path.exists(link):
+            self.lists.append(os.path.abspath(link))
+        else:
+            err(f"'{link}' is not a valid input!", color=fgcolors.WARNING)
+
     def parse_links(self):
         """Parse the coub links given directly via the command line."""
         for link in self.links:
@@ -861,8 +879,8 @@ def parse_cli():
 
         try:
             # Input
-            if fnmatch(opt, "*coub.com/view/*"):
-                user_input.links.append(opt.strip("/"))
+            if not fnmatch(opt, "-*"):
+                user_input.map_input(opt.strip("/"))
             elif opt in ("-l", "--list"):
                 if os.path.exists(arg):
                     user_input.lists.append(os.path.abspath(arg))
@@ -959,13 +977,8 @@ def parse_cli():
                 if arg != "%id%":
                     opts.out_format = arg
             # Unknown options
-            elif fnmatch(opt, "-*"):
-                err(f"Unknown flag '{opt}'!")
-                err(f"Try '{os.path.basename(sys.argv[0])} "
-                    "--help' for more information.", color=fgcolors.RESET)
-                sys.exit(status.OPT)
             else:
-                err(f"'{opt}' is neither an option nor a coub link!")
+                err(f"Unknown flag '{opt}'!")
                 err(f"Try '{os.path.basename(sys.argv[0])} "
                     "--help' for more information.", color=fgcolors.RESET)
                 sys.exit(status.OPT)
