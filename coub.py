@@ -151,12 +151,6 @@ class Options:
     # Leads to shorter videos, also no further quality selection
     share = False
 
-    # Download reposts during channel downloads
-    recoubs = True
-
-    # ONLY download reposts during channel downloads
-    only_recoubs = False
-
     # Preview a downloaded coub with the given command
     # Keyboard shortcuts may not work for CLI audio players
     preview = False
@@ -193,6 +187,13 @@ class Options:
     coubs_per_page = 25       # allowed: 1-25
     tag_sep = "_"
 
+    default_sort = {
+        'channel': "recoubs",  # recoubs, no-recoubs, only-recoubs
+        'tag': None,
+        'search': None,
+        'community': None,
+    }
+
 
 class ParsableTimeline:
     """Store timeline-related data important for later parsing."""
@@ -209,48 +210,66 @@ class ParsableTimeline:
         self.valid = True
         self.pages = 0
         self.template = ""
-        self.url = url
+
         if url_type in self.supported_types:
             self.type = url_type
         else:
             err("Error: Tried to initialize timeline with unsupported type!")
             sys.exit(status.RUN)
 
+        try:
+            self.url, self.sort = url.split("#")
+        except ValueError:
+            self.url = url
+            self.sort = opts.default_sort[self.type]
+
     def get_request_template(self):
-        """Assemble template URL for API request."""
-        template = "https://coub.com/api/v2"
+        """Assign template URL for API request based on input type."""
+        if self.type == "channel":
+            self.template = self.channel_template()
+        else:
+            template = "https://coub.com/api/v2"
 
-        if self.type in ("channel", "tag", "community"):
-            t_id = self.url.split("/")[-1]
-        elif self.type in ("search",):
-            t_id = self.url.split("=")[-1]
+            if self.type in ("tag", "community"):
+                t_id = self.url.split("/")[-1]
+            elif self.type in ("search",):
+                t_id = self.url.split("=")[-1]
 
-        if self.type in ("tag", "search"):
-            t_id = urlquote(t_id)
+            if self.type in ("tag", "search"):
+                t_id = urlquote(t_id)
 
-        if self.type in ("channel", "tag"):
-            template = f"{template}/timeline/{self.type}/{t_id}?"
-        elif self.type in ("search",):
-            template = f"{template}/search/coubs?q={t_id}&"
-        elif self.type in ("community",):
-            # Communities use most popular (on a monthly basis) as default sort
-            # I rather use newest first for now
-            template = f"{template}/timeline/community/{t_id}/fresh?"
+            if self.type in ("tag",):
+                template = f"{template}/timeline/{self.type}/{t_id}?"
+            elif self.type in ("search",):
+                template = f"{template}/search/coubs?q={t_id}&"
+            elif self.type in ("community",):
+                # Communities use most popular (on a monthly basis) as default sort
+                # I rather use newest first for now
+                template = f"{template}/timeline/community/{t_id}/fresh?"
 
-        if self.type in ("channel",):
-            if not opts.recoubs:
-                template = f"{template}type=simples&"
-            elif opts.only_recoubs:
-                template = f"{template}type=recoubs&"
+            self.template = f"{template}per_page={opts.coubs_per_page}"
 
-        template = f"{template}per_page={opts.coubs_per_page}"
+    def channel_template(self):
+        """Return API request template for channel timelines."""
+        methods = {
+            'recoubs': None,
+            'no-recoubs': "simples",
+            'only-recoubs': "recoubs",
+        }
 
-        # Different timeline types support different values
-        # Invalid values get ignored though, so no need for further checks
-        #if opts.sort:
-        #    template = f"{template}&order_by={opts.sort}"
+        t_id = self.url.split("/")[-1]
+        template = f"https://coub.com/api/v2/timeline/channel/{t_id}"
+        template = f"{template}?per_page={opts.coubs_per_page}"
 
-        self.template = template
+        if self.sort not in methods:
+            err(f"\nInvalid channel sort order '{self.sort}' ({self.url})!",
+                color=fgcolors.WARNING)
+            self.valid = False
+            return template
+        if methods[self.sort]:
+            template = f"{template}&type={methods[self.sort]}"
+
+        return template
 
     def get_page_count(self):
         """Contact API once to get page count and check timeline validity."""
@@ -781,11 +800,6 @@ Format selection:
   --aac-strict           only download AAC audio (never MP3)
   --share                download 'share' video (shorter and includes audio)
 
-Channel options:
-  --recoubs              include recoubs during channel downloads (def)
-  --no-recoubs           exclude recoubs during channel downloads
-  --only-recoubs         only download recoubs during channel downloads
-
 Preview options:
   --preview COMMAND      play finished coub via the given command
   --no-preview           explicitly disable coub preview
@@ -939,13 +953,6 @@ def parse_cli():
                 opts.aac = 3
             elif opt in ("--share",):
                 opts.share = True
-            # Channel options
-            elif opt in ("--recoubs",):
-                opts.recoubs = True
-            elif opt in ("--no-recoubs",):
-                opts.recoubs = False
-            elif opt in ("--only-recoubs",):
-                opts.only_recoubs = True
             # Preview options
             elif opt in ("--preview",):
                 opts.preview = True
@@ -1009,9 +1016,6 @@ def check_options():
 
     if opts.a_only and opts.v_only:
         err("--audio-only and --video-only are mutually exclusive!")
-        sys.exit(status.OPT)
-    elif not opts.recoubs and opts.only_recoubs:
-        err("--no-recoubs and --only-recoubs are mutually exclusive!")
         sys.exit(status.OPT)
     elif opts.share and (opts.v_only or opts.a_only):
         err("--share and --video-/audio-only are mutually exclusive!")
