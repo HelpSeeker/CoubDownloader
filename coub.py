@@ -151,6 +151,12 @@ class Options:
     # Leads to shorter videos, also no further quality selection
     share = False
 
+    # Download reposts during channel downloads
+    recoubs = True
+
+    # ONLY download reposts during channel downloads
+    only_recoubs = False
+
     # Preview a downloaded coub with the given command
     # Keyboard shortcuts may not work for CLI audio players
     preview = False
@@ -188,7 +194,7 @@ class Options:
     tag_sep = "_"
 
     default_sort = {
-        'channel': "recoubs",  # recoubs, no-recoubs, only-recoubs
+        'channel': "newest",  # newest, likes_count, views_count, oldest, random
         'tag': None,
         'search': None,
         'community': None,
@@ -251,23 +257,23 @@ class ParsableTimeline:
 
     def channel_template(self):
         """Return API request template for channel timelines."""
-        methods = {
-            'recoubs': None,
-            'no-recoubs': "simples",
-            'only-recoubs': "recoubs",
-        }
+        methods = ["newest", "likes_count", "views_count", "oldest", "random"]
 
         t_id = self.url.split("/")[-1]
         template = f"https://coub.com/api/v2/timeline/channel/{t_id}"
         template = f"{template}?per_page={opts.coubs_per_page}"
 
-        if self.sort not in methods:
+        if not opts.recoubs:
+            template = f"{template}&type=simples"
+        elif opts.only_recoubs:
+            template = f"{template}&type=recoubs"
+
+        if self.sort in methods:
+            template = f"{template}&order_by={self.sort}"
+        else:
             err(f"\nInvalid channel sort order '{self.sort}' ({self.url})!",
                 color=fgcolors.WARNING)
             self.valid = False
-            return template
-        if methods[self.sort]:
-            template = f"{template}&type={methods[self.sort]}"
 
         return template
 
@@ -800,6 +806,11 @@ Format selection:
   --aac-strict           only download AAC audio (never MP3)
   --share                download 'share' video (shorter and includes audio)
 
+Channel options:
+  --recoubs              include recoubs during channel downloads (def)
+  --no-recoubs           exclude recoubs during channel downloads
+  --only-recoubs         only download recoubs during channel downloads
+
 Preview options:
   --preview COMMAND      play finished coub via the given command
   --no-preview           explicitly disable coub preview
@@ -953,6 +964,13 @@ def parse_cli():
                 opts.aac = 3
             elif opt in ("--share",):
                 opts.share = True
+            # Channel options
+            elif opt in ("--recoubs",):
+                opts.recoubs = True
+            elif opt in ("--no-recoubs",):
+                opts.recoubs = False
+            elif opt in ("--only-recoubs",):
+                opts.only_recoubs = True
             # Preview options
             elif opt in ("--preview",):
                 opts.preview = True
@@ -1016,6 +1034,9 @@ def check_options():
 
     if opts.a_only and opts.v_only:
         err("--audio-only and --video-only are mutually exclusive!")
+        sys.exit(status.OPT)
+    elif not opts.recoubs and opts.only_recoubs:
+        err("--no-recoubs and --only-recoubs are mutually exclusive!")
         sys.exit(status.OPT)
     elif opts.share and (opts.v_only or opts.a_only):
         err("--share and --video-/audio-only are mutually exclusive!")
