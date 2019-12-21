@@ -194,8 +194,8 @@ class Options:
     tag_sep = "_"
 
     default_sort = {
-        'channel': "newest",  # newest, likes_count, views_count, oldest, random
-        'tag': None,
+        'channel': "newest",      # newest, likes_count, views_count, oldest, random
+        'tag': "newest_popular",  # newest_popular, likes_count, views_count, newest
         'search': None,
         'community': None,
     }
@@ -233,20 +233,20 @@ class ParsableTimeline:
         """Assign template URL for API request based on input type."""
         if self.type == "channel":
             self.template = self.channel_template()
+        elif self.type == "tag":
+            self.template = self.tag_template()
         else:
             template = "https://coub.com/api/v2"
 
-            if self.type in ("tag", "community"):
+            if self.type in ("community",):
                 t_id = self.url.split("/")[-1]
             elif self.type in ("search",):
                 t_id = self.url.split("=")[-1]
 
-            if self.type in ("tag", "search"):
+            if self.type in ("search",):
                 t_id = urlquote(t_id)
 
-            if self.type in ("tag",):
-                template = f"{template}/timeline/{self.type}/{t_id}?"
-            elif self.type in ("search",):
+            if self.type in ("search",):
                 template = f"{template}/search/coubs?q={t_id}&"
             elif self.type in ("community",):
                 # Communities use most popular (on a monthly basis) as default sort
@@ -267,6 +267,24 @@ class ParsableTimeline:
             template = f"{template}&type=simples"
         elif opts.only_recoubs:
             template = f"{template}&type=recoubs"
+
+        if self.sort in methods:
+            template = f"{template}&order_by={self.sort}"
+        else:
+            err(f"\nInvalid channel sort order '{self.sort}' ({self.url})!",
+                color=fgcolors.WARNING)
+            self.valid = False
+
+        return template
+
+    def tag_template(self):
+        """Return API request template for tag timelines."""
+        methods = ["newest_popular", "likes_count", "views_count", "newest"]
+
+        t_id = self.url.split("/")[-1]
+        t_id = urlquote(t_id)
+        template = f"https://coub.com/api/v2/timeline/tag/{t_id}"
+        template = f"{template}?per_page={opts.coubs_per_page}"
 
         if self.sort in methods:
             template = f"{template}&order_by={self.sort}"
