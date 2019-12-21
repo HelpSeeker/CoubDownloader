@@ -208,14 +208,13 @@ class ParsableTimeline:
         """Initialize timeline object."""
         self.valid = True
         self.pages = 0
+        self.template = ""
         self.url = url
         if url_type in self.supported_types:
             self.type = url_type
         else:
             err("Error: Tried to initialize timeline with unsupported type!")
             sys.exit(status.RUN)
-
-        self.get_request_template()
 
     def get_request_template(self):
         """Assemble template URL for API request."""
@@ -417,6 +416,7 @@ class CoubInputData:
         self.parse_links()
         self.parse_lists()
         for t in self.timelines:
+            t.get_request_template()
             t.get_page_count()
             if t.valid:
                 asyncio.run(self.parse_timeline(t))
