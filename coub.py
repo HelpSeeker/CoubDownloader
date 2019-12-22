@@ -196,7 +196,7 @@ class Options:
     default_sort = {
         'channel': "newest",      # newest, likes_count, views_count, oldest, random
         'tag': "newest_popular",  # newest_popular, likes_count, views_count, newest
-        'search': None,
+        'search': "relevance",    # relevance, likes_count, views_count, newest
         'community': None,
     }
 
@@ -235,20 +235,15 @@ class ParsableTimeline:
             self.template = self.channel_template()
         elif self.type == "tag":
             self.template = self.tag_template()
+        elif self.type == "search":
+            self.template = self.search_template()
         else:
             template = "https://coub.com/api/v2"
 
             if self.type in ("community",):
                 t_id = self.url.split("/")[-1]
-            elif self.type in ("search",):
-                t_id = self.url.split("=")[-1]
 
-            if self.type in ("search",):
-                t_id = urlquote(t_id)
-
-            if self.type in ("search",):
-                template = f"{template}/search/coubs?q={t_id}&"
-            elif self.type in ("community",):
+            if self.type in ("community",):
                 # Communities use most popular (on a monthly basis) as default sort
                 # I rather use newest first for now
                 template = f"{template}/timeline/community/{t_id}/fresh?"
@@ -292,6 +287,26 @@ class ParsableTimeline:
             err(f"\nInvalid tag sort order '{self.sort}' ({self.url})!",
                 color=fgcolors.WARNING)
             self.valid = False
+
+        return template
+
+    def search_template(self):
+        """Return API request template for coub searches."""
+        methods = ["relevance", "likes_count", "views_count", "newest"]
+
+        t_id = self.url.split("=")[-1]
+        t_id = urlquote(t_id)
+        template = f"https://coub.com/api/v2/search/coubs?q={t_id}"
+        template = f"{template}&per_page={opts.coubs_per_page}"
+
+        if self.sort not in methods:
+            err(f"\nInvalid search sort order '{self.sort}' ({self.url})!",
+                color=fgcolors.WARNING)
+            self.valid = False
+        # The default tab on coub.com is labelled "Relevance", but the
+        # default sort order is actually no sort order
+        elif self.sort != "relevance":
+            template = f"{template}&order_by={self.sort}"
 
         return template
 
