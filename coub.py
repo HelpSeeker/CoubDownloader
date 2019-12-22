@@ -197,7 +197,9 @@ class Options:
         'channel': "newest",      # newest, likes_count, views_count, oldest, random
         'tag': "newest_popular",  # newest_popular, likes_count, views_count, newest
         'search': "relevance",    # relevance, likes_count, views_count, newest
-        'community': None,
+        'community': "fresh",     # daily, weekly, monthly, quarter, half (hot section)
+                                  # rising, fresh, likes_count, views_count (other tabs)
+                                  # random (seperate button on the side)
     }
 
 
@@ -237,18 +239,8 @@ class ParsableTimeline:
             self.template = self.tag_template()
         elif self.type == "search":
             self.template = self.search_template()
-        else:
-            template = "https://coub.com/api/v2"
-
-            if self.type in ("community",):
-                t_id = self.url.split("/")[-1]
-
-            if self.type in ("community",):
-                # Communities use most popular (on a monthly basis) as default sort
-                # I rather use newest first for now
-                template = f"{template}/timeline/community/{t_id}/fresh?"
-
-            self.template = f"{template}per_page={opts.coubs_per_page}"
+        elif self.type == "community":
+            self.template = self.community_template()
 
     def channel_template(self):
         """Return API request template for channel timelines."""
@@ -307,6 +299,39 @@ class ParsableTimeline:
         # default sort order is actually no sort order
         elif self.sort != "relevance":
             template = f"{template}&order_by={self.sort}"
+
+        return template
+
+    def community_template(self):
+        """Return API request template for community timelines."""
+        methods = [
+            "daily",
+            "weekly",
+            "monthly",
+            "quarter",
+            "half",
+            "rising",
+            "fresh",
+            "likes_count",
+            "views_count",
+            "random",
+        ]
+
+        t_id = self.url.split("/")[-1]
+        template = f"https://coub.com/api/v2/timeline/community/{t_id}"
+
+        if self.sort not in methods:
+            err(f"\nInvalid community sort order '{self.sort}' ({self.url})!",
+                color=fgcolors.WARNING)
+            self.valid = False
+        elif self.sort in ("likes_count", "views_count"):
+            template = f"{template}/fresh?order_by={self.sort}&"
+        elif self.sort == "random":
+            template = f"https://coub.com/api/v2/timeline/random/{t_id}?"
+        else:
+            template = f"{template}/{self.sort}?"
+
+        template = f"{template}per_page={opts.coubs_per_page}"
 
         return template
 
