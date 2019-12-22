@@ -193,13 +193,24 @@ class Options:
     coubs_per_page = 25       # allowed: 1-25
     tag_sep = "_"
 
+    # Default sort order for various input types
+    #
+    # Channels:     most_recent, most_liked, most_viewed, oldest, random
+    # Tags:         popular, top, views_count, fresh
+    # Searches:     relevance, top, views_count, most_recent
+    # Communities:  hot_daily, hot_weekly, hot_monthly, hot_quarterly, hot_six_months
+    #               rising, fresh, top, views_count, random
+    #
+    # Coub's own defaults are:
+    #   Channel:    most_recent
+    #   Tags:       popular
+    #   Search:     relevance
+    #   Community:  hot_monthly
     default_sort = {
-        'channel': "newest",      # newest, likes_count, views_count, oldest, random
-        'tag': "newest_popular",  # newest_popular, likes_count, views_count, newest
-        'search': "relevance",    # relevance, likes_count, views_count, newest
-        'community': "fresh",     # daily, weekly, monthly, quarter, half (hot section)
-                                  # rising, fresh, likes_count, views_count (other tabs)
-                                  # random (seperate button on the side)
+        'channel': "most_recent",
+        'tag': "popular",
+        'search': "relevance",
+        'community': "hot_monthly",
     }
 
 
@@ -244,7 +255,13 @@ class ParsableTimeline:
 
     def channel_template(self):
         """Return API request template for channel timelines."""
-        methods = ["newest", "likes_count", "views_count", "oldest", "random"]
+        methods = {
+            'most_recent': "newest",
+            'most_liked': "likes_count",
+            'most_viewed': "views_count",
+            'oldest': "oldest",
+            'random': "random",
+        }
 
         t_id = self.url.split("/")[-1]
         template = f"https://coub.com/api/v2/timeline/channel/{t_id}"
@@ -256,7 +273,7 @@ class ParsableTimeline:
             template = f"{template}&type=recoubs"
 
         if self.sort in methods:
-            template = f"{template}&order_by={self.sort}"
+            template = f"{template}&order_by={methods[self.sort]}"
         else:
             err(f"\nInvalid channel sort order '{self.sort}' ({self.url})!",
                 color=fgcolors.WARNING)
@@ -266,7 +283,12 @@ class ParsableTimeline:
 
     def tag_template(self):
         """Return API request template for tag timelines."""
-        methods = ["newest_popular", "likes_count", "views_count", "newest"]
+        methods = {
+            'popular': "newest_popular",
+            'top': "likes_count",
+            'views_count': "views_count",
+            'fresh': "newest"
+        }
 
         t_id = self.url.split("/")[-1]
         t_id = urlquote(t_id)
@@ -274,7 +296,7 @@ class ParsableTimeline:
         template = f"{template}?per_page={opts.coubs_per_page}"
 
         if self.sort in methods:
-            template = f"{template}&order_by={self.sort}"
+            template = f"{template}&order_by={methods[self.sort]}"
         else:
             err(f"\nInvalid tag sort order '{self.sort}' ({self.url})!",
                 color=fgcolors.WARNING)
@@ -284,7 +306,12 @@ class ParsableTimeline:
 
     def search_template(self):
         """Return API request template for coub searches."""
-        methods = ["relevance", "likes_count", "views_count", "newest"]
+        methods = {
+            'relevance': None,
+            'top': "likes_count",
+            'views_count': "views_count",
+            'most_recent': "newest"
+        }
 
         t_id = self.url.split("=")[-1]
         t_id = urlquote(t_id)
@@ -298,24 +325,24 @@ class ParsableTimeline:
         # The default tab on coub.com is labelled "Relevance", but the
         # default sort order is actually no sort order
         elif self.sort != "relevance":
-            template = f"{template}&order_by={self.sort}"
+            template = f"{template}&order_by={methods[self.sort]}"
 
         return template
 
     def community_template(self):
         """Return API request template for community timelines."""
-        methods = [
-            "daily",
-            "weekly",
-            "monthly",
-            "quarter",
-            "half",
-            "rising",
-            "fresh",
-            "likes_count",
-            "views_count",
-            "random",
-        ]
+        methods = {
+            'hot_daily': "daily",
+            'hot_weekly': "weekly",
+            'hot_monthly': "monthly",
+            'hot_quarterly': "quarter",
+            'hot_six_months': "half",
+            'rising': "rising",
+            'fresh': "fresh",
+            'top': "likes_count",
+            'views_count': "views_count",
+            'random': "random",
+        }
 
         t_id = self.url.split("/")[-1]
         template = f"https://coub.com/api/v2/timeline/community/{t_id}"
@@ -324,12 +351,12 @@ class ParsableTimeline:
             err(f"\nInvalid community sort order '{self.sort}' ({self.url})!",
                 color=fgcolors.WARNING)
             self.valid = False
-        elif self.sort in ("likes_count", "views_count"):
-            template = f"{template}/fresh?order_by={self.sort}&"
+        elif self.sort in ("top", "views_count"):
+            template = f"{template}/fresh?order_by={methods[self.sort]}&"
         elif self.sort == "random":
             template = f"https://coub.com/api/v2/timeline/random/{t_id}?"
         else:
-            template = f"{template}/{self.sort}?"
+            template = f"{template}/{methods[self.sort]}?"
 
         template = f"{template}per_page={opts.coubs_per_page}"
 
