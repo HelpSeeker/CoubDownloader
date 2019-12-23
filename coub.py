@@ -200,17 +200,21 @@ class Options:
     # Searches:     relevance, top, views_count, most_recent
     # Communities:  hot_daily, hot_weekly, hot_monthly, hot_quarterly, hot_six_months
     #               rising, fresh, top, views_count, random
+    # Hot section:  hot_daily, hot_weekly, hot_monthly, hot_quarterly, hot_six_months
+    #               rising, fresh
     #
     # Coub's own defaults are:
     #   Channel:    most_recent
     #   Tags:       popular
     #   Search:     relevance
     #   Community:  hot_monthly
+    #   Hot:        hot_monthly
     default_sort = {
         'channel': "most_recent",
         'tag': "popular",
         'search': "relevance",
         'community': "hot_monthly",
+        'hot': "hot_monthly",
     }
 
 
@@ -222,6 +226,7 @@ class ParsableTimeline:
         "tag",
         "search",
         "community",
+        "hot",
     ]
 
     def __init__(self, url, url_type):
@@ -242,6 +247,11 @@ class ParsableTimeline:
             self.url = url
             self.sort = opts.default_sort[self.type]
 
+        # This is only done for cosmetic reasons if the hot timeline gets
+        # initialized with its command line option
+        if self.type == "hot" and fnmatch(self.url, "-*"):
+            self.url = "https://coub.com/hot"
+
     def get_request_template(self):
         """Assign template URL for API request based on input type."""
         if self.type == "channel":
@@ -252,6 +262,8 @@ class ParsableTimeline:
             self.template = self.search_template()
         elif self.type == "community":
             self.template = self.community_template()
+        elif self.type == "hot":
+            self.template = self.hot_template()
 
     def channel_template(self):
         """Return API request template for channel timelines."""
@@ -362,6 +374,31 @@ class ParsableTimeline:
 
         return template
 
+    def hot_template(self):
+        """Return API request template for Coub's hot section."""
+        methods = {
+            'hot_daily': "daily",
+            'hot_weekly': "weekly",
+            'hot_monthly': "monthly",
+            'hot_quarterly': "quarter",
+            'hot_six_months': "half",
+            'rising': "rising",
+            'fresh': "fresh",
+        }
+
+        template = "https://coub.com/api/v2/timeline/subscriptions"
+
+        if self.sort in methods:
+            template = f"{template}/{methods[self.sort]}"
+        else:
+            err(f"\nInvalid hot section sort order '{self.sort}'!",
+                color=fgcolors.WARNING)
+            self.valid = False
+
+        template = f"{template}?per_page={opts.coubs_per_page}"
+
+        return template
+
     def get_page_count(self):
         """Contact API once to get page count and check timeline validity."""
         try:
@@ -401,6 +438,9 @@ class CoubInputData:
             self.timelines.append(ParsableTimeline(link, "search"))
         elif fnmatch(link, "*coub.com/community/*"):
             self.timelines.append(ParsableTimeline(link, "community"))
+        elif fnmatch(link, "*coub.com") or fnmatch(link, "*coub.com#*") \
+            or fnmatch(link, "*coub.com/hot*"):
+            self.timelines.append(ParsableTimeline(link, "hot"))
         # Unfortunately channel URLs don't have any special characteristics
         # Many yet unsupported URLs (communities, etc.) will be matched as
         # a channel for now
@@ -860,6 +900,7 @@ Input:
   -t, --tag TAG          download coubs with the specified tag
   -e, --search TERM      download search results for the given term
   --community COMMUNITY  download coubs from a certain community
+  --hot                  download coubs from the 'hot' section
 
 Common options:
   -h, --help             show this help
@@ -1002,6 +1043,11 @@ def parse_cli():
                 user_input.timelines.append(timeline)
             elif opt in ("--community",):
                 timeline = ParsableTimeline(arg.strip("/"), "community")
+                user_input.timelines.append(timeline)
+            # Hot section selection doesn't have an argument, so the option
+            # itself can come with a sort order attached
+            elif fnmatch(opt, "--hot*"):
+                timeline = ParsableTimeline(opt, "hot")
                 user_input.timelines.append(timeline)
             # Common options
             elif opt in ("-h", "--help"):
