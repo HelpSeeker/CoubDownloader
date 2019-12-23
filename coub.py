@@ -401,6 +401,9 @@ class ParsableTimeline:
 
     def get_page_count(self):
         """Contact API once to get page count and check timeline validity."""
+        if not self.valid:
+            return
+
         try:
             with urlopen(self.template) as resp:
                 resp_json = json.loads(resp.read())
