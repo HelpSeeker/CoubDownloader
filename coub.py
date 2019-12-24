@@ -462,12 +462,16 @@ class CoubInputData:
             msg(f"  {len(self.links)} link(s) found")
 
     def parse_lists(self):
-        """Parse the coub links provided in list form (i.e. external file)."""
+        """Parse coub links provided in via an external text file."""
         for l in self.lists:
             msg(f"\nReading input list ({l}):")
 
-            with open(l, "r") as f:
-                content = f.read()
+            try:
+                with open(l, "r") as f:
+                    content = f.read()
+            except (OSError, UnicodeError):
+                err(f"'{l}' is not a valid list!", color=fgcolors.WARNING)
+                continue
 
             # Replace tabs and spaces with newlines
             # Emulates default wordsplitting in Bash
@@ -475,12 +479,13 @@ class CoubInputData:
             content = content.replace(" ", "\n")
             content = content.splitlines()
 
-            for link in content:
+            links = [line for line in content if "https://coub.com/view/" in line]
+            for link in links:
                 if opts.max_coubs and len(self.parsed) >= opts.max_coubs:
                     break
                 self.parsed.append(link)
 
-            msg(f"  {len(content)} link(s) found")
+            msg(f"  {len(links)} link{'s' if len(links) != 1 else ''} found")
 
     async def parse_page(self, req, session=None):
         """Request a single timeline page and parse its content."""
