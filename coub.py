@@ -433,26 +433,22 @@ class CoubInputData:
 
     def map_input(self, link):
         """Detect input link type."""
-        if fnmatch(link, "*coub.com/view/*"):
+        if "https://coub.com/view/" in link:
             self.links.append(link)
-        elif fnmatch(link, "*coub.com/tags/*"):
+        elif "https://coub.com/tags/" in link:
             self.timelines.append(ParsableTimeline(link, "tag"))
-        elif fnmatch(link, "*coub.com/search*"):
+        elif "https://coub.com/search?" in link:
             self.timelines.append(ParsableTimeline(link, "search"))
-        elif fnmatch(link, "*coub.com/community/*"):
+        elif "https://coub.com/community/" in link:
             self.timelines.append(ParsableTimeline(link, "community"))
-        elif fnmatch(link, "*coub.com") or fnmatch(link, "*coub.com#*") \
-            or fnmatch(link, "*coub.com/hot*"):
+        elif fnmatch(link, "https://coub.com#*") or \
+             fnmatch(link, "https://coub.com/hot*") or \
+             link == "https://coub.com":
             self.timelines.append(ParsableTimeline(link, "hot"))
         # Unfortunately channel URLs don't have any special characteristics
-        # Many yet unsupported URLs (communities, etc.) will be matched as
-        # a channel for now
-        elif fnmatch(link, "*coub.com*"):
-            self.timelines.append(ParsableTimeline(link, "channel"))
-        elif os.path.exists(link):
-            self.lists.append(os.path.abspath(link))
+        # and are basically the fallthrough link type
         else:
-            err(f"'{link}' is not a valid input!", color=fgcolors.WARNING)
+            self.timelines.append(ParsableTimeline(link, "channel"))
 
     def parse_links(self):
         """Parse the coub links given directly via the command line."""
@@ -984,6 +980,89 @@ def check_connection():
         sys.exit(status.CONN)
 
 
+def normalize_link(link):
+    """Format link to guarantee strict adherence to https://coub.com/<info>#<sort>"""
+    to_replace = {
+        'tag': {
+            '/likes': "top",
+            '/views': "views_count",
+            '/fresh': "fresh"
+        },
+        'search': {
+            '/likes': "top",
+            '/views': "views_count",
+            '/fresh': "most_recent",
+        },
+        'community': {
+            '/rising': "rising",
+            '/fresh': "fresh",
+            '/top': "top",
+            '/views': "views_count",
+            '/random': "random",
+        }
+    }
+
+    try:
+        link, sort = link.split("#")
+    except ValueError:
+        sort = None
+
+    info = link.rpartition("coub.com")[2]
+    info = info.strip("/")
+
+    if "tags/" in info:
+        for r in to_replace['tag']:
+            parts = info.partition(r)
+            if parts[1]:
+                if not sort:
+                    sort = to_replace['tag'][r]
+                info = parts[0]
+    # If search is followed by ?q= then it shouldn't have any suffixes anyway
+    elif "search/" in info:
+        for r in to_replace['search']:
+            parts = info.partition(r)
+            if parts[1]:
+                if not sort:
+                    sort = to_replace['search'][r]
+                info = f"{parts[0]}{parts[2]}"
+    elif "community/" in info:
+        for r in to_replace['community']:
+            parts = info.partition(r)
+            if parts[1]:
+                if not sort:
+                    sort = to_replace['community'][r]
+                info = parts[0]
+    # These are the 2 special cases for the hot section
+    elif info == "rising":
+        if not sort:
+            sort = "rising"
+        info = ""
+    elif info == "fresh":
+        if not sort:
+            sort = "fresh"
+        info = ""
+
+    # Suffixes that reach this point are not supported (e.g. /coubs, /stories)
+    # or just wrong, so strip any leftovers
+    if "/" in info:
+        parts = info.split("/")
+        if parts[0] in ["view", "tags", "community"]:
+            limit = 2
+        else:
+            limit = 1
+        if len(parts) > limit:
+            info = "/".join(parts[:limit])
+
+    if info:
+        normalized = f"https://coub.com/{info}"
+    else:
+        normalized = "https://coub.com"
+    if sort:
+        normalized = f"{normalized}#{sort}"
+
+    return normalized
+
+
 def parse_cli():
     """Parse the command line."""
     global opts, user_input
@@ -1029,23 +1108,29 @@ def parse_cli():
         try:
             # Input
             if not fnmatch(opt, "-*"):
-                user_input.map_input(opt.strip("/"))
+                # Categorize existing paths as lists
+                # Otherwise they would be forced into a coub link like form
+                # which obviously leads to garbled nonsense
+                if os.path.exists(opt):
+                    user_input.lists.append(os.path.abspath(opt))
+                else:
+                    user_input.map_input(normalize_link(opt))
             elif opt in ("-l", "--list"):
                 if os.path.exists(arg):
                     user_input.lists.append(os.path.abspath(arg))
                 else:
                     err(f"'{arg}' is not a valid list!", color=fgcolors.WARNING)
             elif opt in ("-c", "--channel"):
-                timeline = ParsableTimeline(arg.strip("/"), "channel")
+                timeline = ParsableTimeline(arg, "channel")
                 user_input.timelines.append(timeline)
             elif opt in ("-t", "--tag"):
-                timeline = ParsableTimeline(arg.strip("/"), "tag")
+                timeline = ParsableTimeline(arg, "tag")
                 user_input.timelines.append(timeline)
             elif opt in ("-e", "--search"):
-                timeline = ParsableTimeline(arg.strip("/"), "search")
+                timeline = ParsableTimeline(arg, "search")
                 user_input.timelines.append(timeline)
             elif opt in ("--community",):
-                timeline = ParsableTimeline(arg.strip("/"), "community")
+                timeline = ParsableTimeline(arg, "community")
                 user_input.timelines.append(timeline)
             # Hot section selection doesn't have an argument, so the option
             # itself can come with a sort order attached
