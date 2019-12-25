@@ -462,7 +462,7 @@ class CoubInputData:
 
         if self.links:
             msg("\nReading command line:")
-            msg(f"  {len(self.links)} link(s) found")
+            msg(f"  {len(self.links)} link{'s' if len(self.links) != 1 else ''} found")
 
     def parse_lists(self):
         """Parse coub links provided in via an external text file."""
@@ -587,10 +587,15 @@ class CoubInputData:
             msg(f"\nDownload limit ({opts.max_coubs}) reached!",
                 color=fgcolors.WARNING)
 
-        msg("\nResults:")
-        msg(f"  {len(self.parsed)} input link(s)")
-        msg(f"  {self.find_dupes()} duplicates")
-        msg(f"  {len(self.parsed)} output link(s)")
+        dupes = self.find_dupes()
+        if dupes:
+            msg("\nResults:")
+            msg(f"  {len(self.parsed)} input link{'s' if len(self.parsed) != 1 else ''}")
+            msg(f"  {dupes} duplicate{'s' if dupes != 1 else ''}")
+            msg(f"  {len(self.parsed)} final link{'s' if len(self.parsed) != 1 else ''}")
+        else:
+            msg("\nResults:")
+            msg(f"  {len(self.parsed)} link{'s' if len(self.parsed) != 1 else ''}")
 
         if opts.out_file:
             with open(opts.out_file, "a") as f:
