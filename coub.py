@@ -907,7 +907,7 @@ Input:
   -c, --channel CHANNEL  download coubs from a channel
   -t, --tag TAG          download coubs with the specified tag
   -e, --search TERM      download search results for the given term
-  --community COMMUNITY  download coubs from a certain community
+  -m, --community COMM.  download coubs from a certain community
   --hot                  download coubs from the 'hot' section
 
 Common options:
@@ -1087,7 +1087,7 @@ def parse_cli():
         "-c", "--channel",
         "-t", "--tag",
         "-e", "--search",
-        "--community",
+        "-m", "--community",
         "-p", "--path",
         "-r", "--repeat",
         "-d", "--duration",
@@ -1146,7 +1146,7 @@ def parse_cli():
                     err(f"{opt} doesn't support URL input!", color=fgcolors.WARNING)
                 else:
                     user_input.timelines.append(ParsableTimeline("search", arg))
-            elif opt in ("--community",):
+            elif opt in ("-m", "--community",):
                 if "coub.com" in arg:
                     err(f"{opt} doesn't support URL input!", color=fgcolors.WARNING)
                 else:
