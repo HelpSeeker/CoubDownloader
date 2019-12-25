@@ -1107,10 +1107,11 @@ def parse_cli():
         "-o", "--output",
     ]
 
+    only_input = False
     pos = 1
     while pos < len(sys.argv):
         opt = sys.argv[pos]
-        if opt in with_arg:
+        if opt in with_arg and not only_input:
             try:
                 arg = sys.argv[pos+1]
             except IndexError:
@@ -1123,7 +1124,7 @@ def parse_cli():
 
         try:
             # Input
-            if not fnmatch(opt, "-*"):
+            if only_input or not fnmatch(opt, "-*"):
                 # Categorize existing paths as lists
                 # Otherwise they would be forced into a coub link like form
                 # which obviously leads to garbled nonsense
@@ -1240,6 +1241,8 @@ def parse_cli():
                 # So simply don't assign the argument if it's only %id%
                 if arg != "%id%":
                     opts.out_format = arg
+            elif opt in ("--",):
+                only_input = True
             # Unknown options
             else:
                 err(f"Unknown flag '{opt}'!")
