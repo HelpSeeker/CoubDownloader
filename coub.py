@@ -902,13 +902,17 @@ def usage():
 Usage: {os.path.basename(sys.argv[0])} [OPTIONS] INPUT [INPUT]...
 
 Input:
-  LINK                   download specified coubs
-  -l, --list LIST        read coub links from a text file
-  -c, --channel CHANNEL  download coubs from a channel
+  URL                    download coub(s) from the given URL
+  -i, --id ID            download a single coub
+  -l, --list PATH        read coub links from a text file
+  -c, --channel NAME     download coubs from a channel
   -t, --tag TAG          download coubs with the specified tag
   -e, --search TERM      download search results for the given term
-  -m, --community COMM.  download coubs from a certain community
+  -m, --community NAME   download coubs from a community
   --hot                  download coubs from the 'hot' section
+
+    Input options do NOT support full URLs.
+    URLs should be provided without an input option.
 
 Common options:
   -h, --help             show this help
@@ -1083,6 +1087,7 @@ def parse_cli():
         sys.exit(0)
 
     with_arg = [
+        "-i", "--id",
         "-l", "--list",
         "-c", "--channel",
         "-t", "--tag",
@@ -1126,6 +1131,11 @@ def parse_cli():
                     user_input.lists.append(os.path.abspath(opt))
                 else:
                     user_input.map_input(normalize_link(opt))
+            elif opt in ("-i", "--id"):
+                if "coub.com" in arg:
+                    err(f"{opt} doesn't support URL input!", color=fgcolors.WARNING)
+                else:
+                    user_input.links.append(f"https://coub.com/view/{arg}")
             elif opt in ("-l", "--list"):
                 if os.path.exists(arg):
                     user_input.lists.append(os.path.abspath(arg))
