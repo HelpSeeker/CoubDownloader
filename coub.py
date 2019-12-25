@@ -430,28 +430,36 @@ class CoubInputData:
     # This keeps track of the initial size of parsed for progress messages
     count = 0
 
+    def append_timeline(self, to_add):
+        """Append timelines if they don't already exist."""
+        for t in self.timelines:
+            if (t.type, t.id, t.sort) == (to_add.type, to_add.id, to_add.sort):
+                return
+
+        self.timelines.append(to_add)
+
     def map_input(self, link):
         """Detect input link type."""
         if "https://coub.com/view/" in link:
             self.links.append(link)
         elif "https://coub.com/tags/" in link:
             t_id = link.partition("https://coub.com/tags/")[2]
-            self.timelines.append(ParsableTimeline("tag", t_id))
+            self.append_timeline(ParsableTimeline("tag", t_id))
         elif "https://coub.com/search?q=" in link:
             t_id = link.partition("https://coub.com/search?q=")[2]
-            self.timelines.append(ParsableTimeline("search", t_id))
+            self.append_timeline(ParsableTimeline("search", t_id))
         elif "https://coub.com/community/" in link:
             t_id = link.partition("https://coub.com/community/")[2]
-            self.timelines.append(ParsableTimeline("community", t_id))
+            self.append_timeline(ParsableTimeline("community", t_id))
         elif fnmatch(link, "https://coub.com#*") or \
              fnmatch(link, "https://coub.com/hot*") or \
              link == "https://coub.com":
-            self.timelines.append(ParsableTimeline("hot", link))
+            self.append_timeline(ParsableTimeline("hot", link))
         # Unfortunately channel URLs don't have any special characteristics
         # and are basically the fallthrough link type
         else:
             t_id = link.partition("https://coub.com/")[2]
-            self.timelines.append(ParsableTimeline("channel", t_id))
+            self.append_timeline(ParsableTimeline("channel", t_id))
 
     def parse_links(self):
         """Parse the coub links given directly via the command line."""
@@ -1151,26 +1159,26 @@ def parse_cli():
                 if "coub.com" in arg:
                     err(f"{opt} doesn't support URL input!", color=fgcolors.WARNING)
                 else:
-                    user_input.timelines.append(ParsableTimeline("channel", arg))
+                    user_input.append_timeline(ParsableTimeline("channel", arg))
             elif opt in ("-t", "--tag"):
                 if "coub.com" in arg:
                     err(f"{opt} doesn't support URL input!", color=fgcolors.WARNING)
                 else:
-                    user_input.timelines.append(ParsableTimeline("tag", arg))
+                    user_input.append_timeline(ParsableTimeline("tag", arg))
             elif opt in ("-e", "--search"):
                 if "coub.com" in arg:
                     err(f"{opt} doesn't support URL input!", color=fgcolors.WARNING)
                 else:
-                    user_input.timelines.append(ParsableTimeline("search", arg))
+                    user_input.append_timeline(ParsableTimeline("search", arg))
             elif opt in ("-m", "--community",):
                 if "coub.com" in arg:
                     err(f"{opt} doesn't support URL input!", color=fgcolors.WARNING)
                 else:
-                    user_input.timelines.append(ParsableTimeline("community", arg))
+                    user_input.append_timeline(ParsableTimeline("community", arg))
             # Hot section selection doesn't have an argument, so the option
             # itself can come with a sort order attached
             elif fnmatch(opt, "--hot*"):
-                user_input.timelines.append(ParsableTimeline("hot", opt))
+                user_input.append_timeline(ParsableTimeline("hot", opt))
             # Common options
             elif opt in ("-h", "--help"):
                 usage()
