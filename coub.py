@@ -1132,22 +1132,29 @@ def parse_cli():
                 else:
                     err(f"'{arg}' is not a valid list!", color=fgcolors.WARNING)
             elif opt in ("-c", "--channel"):
-                timeline = ParsableTimeline("channel", arg)
-                user_input.timelines.append(timeline)
+                if "coub.com" in arg:
+                    err(f"{opt} doesn't support URL input!", color=fgcolors.WARNING)
+                else:
+                    user_input.timelines.append(ParsableTimeline("channel", arg))
             elif opt in ("-t", "--tag"):
-                timeline = ParsableTimeline("tag", arg)
-                user_input.timelines.append(timeline)
+                if "coub.com" in arg:
+                    err(f"{opt} doesn't support URL input!", color=fgcolors.WARNING)
+                else:
+                    user_input.timelines.append(ParsableTimeline("tag", arg))
             elif opt in ("-e", "--search"):
-                timeline = ParsableTimeline("search", arg)
-                user_input.timelines.append(timeline)
+                if "coub.com" in arg:
+                    err(f"{opt} doesn't support URL input!", color=fgcolors.WARNING)
+                else:
+                    user_input.timelines.append(ParsableTimeline("search", arg))
             elif opt in ("--community",):
-                timeline = ParsableTimeline("community", arg)
-                user_input.timelines.append(timeline)
+                if "coub.com" in arg:
+                    err(f"{opt} doesn't support URL input!", color=fgcolors.WARNING)
+                else:
+                    user_input.timelines.append(ParsableTimeline("community", arg))
             # Hot section selection doesn't have an argument, so the option
             # itself can come with a sort order attached
             elif fnmatch(opt, "--hot*"):
-                timeline = ParsableTimeline("hot", opt)
-                user_input.timelines.append(timeline)
+                user_input.timelines.append(ParsableTimeline("hot", opt))
             # Common options
             elif opt in ("-h", "--help"):
                 usage()
