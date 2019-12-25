@@ -12,6 +12,7 @@ from math import ceil
 import urllib.error
 from urllib.request import urlopen
 from urllib.parse import quote as urlquote
+from urllib.parse import unquote as urlunquote
 
 try:
     import aiohttp
@@ -221,36 +222,40 @@ class Options:
 class ParsableTimeline:
     """Store timeline-related data important for later parsing."""
 
-    supported_types = [
-        "channel",
-        "tag",
-        "search",
-        "community",
-        "hot",
-    ]
-
-    def __init__(self, url, url_type):
+    def __init__(self, id_type, id_):
         """Initialize timeline object."""
+        supported_types = [
+            "channel",
+            "tag",
+            "search",
+            "community",
+            "hot",
+        ]
+
         self.valid = True
         self.pages = 0
         self.template = ""
 
-        if url_type in self.supported_types:
-            self.type = url_type
+        if id_type in supported_types:
+            self.type = id_type
         else:
             err("Error: Tried to initialize timeline with unsupported type!")
             sys.exit(status.RUN)
 
         try:
-            self.url, self.sort = url.split("#")
+            self.id, self.sort = id_.split("#")
         except ValueError:
-            self.url = url
+            self.id = id_
             self.sort = opts.default_sort[self.type]
 
-        # This is only done for cosmetic reasons if the hot timeline gets
-        # initialized with its command line option
-        if self.type == "hot" and fnmatch(self.url, "-*"):
-            self.url = "https://coub.com/hot"
+        # Links copied from the browser already have special characters escaped
+        # Using urlquote on them again in the template functions would lead
+        # to invalid templates
+        # Also prettifies messages that show the ID as info
+        self.id = urlunquote(self.id)
+
+        if self.type == "hot":
+            self.id = None
 
     def get_request_template(self):
         """Assign template URL for API request based on input type."""
@@ -275,8 +280,7 @@ class ParsableTimeline:
             'random': "random",
         }
 
-        t_id = self.url.split("/")[-1]
-        template = f"https://coub.com/api/v2/timeline/channel/{t_id}"
+        template = f"https://coub.com/api/v2/timeline/channel/{urlquote(self.id)}"
         template = f"{template}?per_page={opts.coubs_per_page}"
 
         if not opts.recoubs:
@@ -287,7 +291,7 @@ class ParsableTimeline:
         if self.sort in methods:
             template = f"{template}&order_by={methods[self.sort]}"
         else:
-            err(f"\nInvalid channel sort order '{self.sort}' ({self.url})!",
+            err(f"\nInvalid channel sort order '{self.sort}' ({self.id})!",
                 color=fgcolors.WARNING)
             self.valid = False
 
@@ -302,15 +306,13 @@ class ParsableTimeline:
             'fresh': "newest"
         }
 
-        t_id = self.url.split("/")[-1]
-        t_id = urlquote(t_id)
-        template = f"https://coub.com/api/v2/timeline/tag/{t_id}"
+        template = f"https://coub.com/api/v2/timeline/tag/{urlquote(self.id)}"
         template = f"{template}?per_page={opts.coubs_per_page}"
 
         if self.sort in methods:
             template = f"{template}&order_by={methods[self.sort]}"
         else:
-            err(f"\nInvalid tag sort order '{self.sort}' ({self.url})!",
+            err(f"\nInvalid tag sort order '{self.sort}' ({self.id})!",
                 color=fgcolors.WARNING)
             self.valid = False
 
@@ -325,13 +327,11 @@ class ParsableTimeline:
             'most_recent': "newest"
         }
 
-        t_id = self.url.split("=")[-1]
-        t_id = urlquote(t_id)
-        template = f"https://coub.com/api/v2/search/coubs?q={t_id}"
+        template = f"https://coub.com/api/v2/search/coubs?q={urlquote(self.id)}"
         template = f"{template}&per_page={opts.coubs_per_page}"
 
         if self.sort not in methods:
-            err(f"\nInvalid search sort order '{self.sort}' ({self.url})!",
+            err(f"\nInvalid search sort order '{self.sort}' ({self.id})!",
                 color=fgcolors.WARNING)
             self.valid = False
         # The default tab on coub.com is labelled "Relevance", but the
@@ -356,17 +356,16 @@ class ParsableTimeline:
             'random': "random",
         }
 
-        t_id = self.url.split("/")[-1]
-        template = f"https://coub.com/api/v2/timeline/community/{t_id}"
+        template = f"https://coub.com/api/v2/timeline/community/{urlquote(self.id)}"
 
         if self.sort not in methods:
-            err(f"\nInvalid community sort order '{self.sort}' ({self.url})!",
+            err(f"\nInvalid community sort order '{self.sort}' ({self.id})!",
                 color=fgcolors.WARNING)
             self.valid = False
         elif self.sort in ("top", "views_count"):
             template = f"{template}/fresh?order_by={methods[self.sort]}&"
         elif self.sort == "random":
-            template = f"https://coub.com/api/v2/timeline/random/{t_id}?"
+            template = f"https://coub.com/api/v2/timeline/random/{self.id}?"
         else:
             template = f"{template}/{methods[self.sort]}?"
 
@@ -408,7 +407,7 @@ class ParsableTimeline:
             with urlopen(self.template) as resp:
                 resp_json = json.loads(resp.read())
         except urllib.error.HTTPError:
-            err(f"\nInvalid {self.type} ('{self.url}')!",
+            err(f"\nInvalid {self.type} ('{self.id}')!",
                 color=fgcolors.WARNING)
             self.valid = False
             return
@@ -436,19 +435,23 @@ class CoubInputData:
         if "https://coub.com/view/" in link:
             self.links.append(link)
         elif "https://coub.com/tags/" in link:
-            self.timelines.append(ParsableTimeline(link, "tag"))
-        elif "https://coub.com/search?" in link:
-            self.timelines.append(ParsableTimeline(link, "search"))
+            t_id = link.partition("https://coub.com/tags/")[2]
+            self.timelines.append(ParsableTimeline("tag", t_id))
+        elif "https://coub.com/search?q=" in link:
+            t_id = link.partition("https://coub.com/search?q=")[2]
+            self.timelines.append(ParsableTimeline("search", t_id))
         elif "https://coub.com/community/" in link:
-            self.timelines.append(ParsableTimeline(link, "community"))
+            t_id = link.partition("https://coub.com/community/")[2]
+            self.timelines.append(ParsableTimeline("community", t_id))
         elif fnmatch(link, "https://coub.com#*") or \
              fnmatch(link, "https://coub.com/hot*") or \
              link == "https://coub.com":
-            self.timelines.append(ParsableTimeline(link, "hot"))
+            self.timelines.append(ParsableTimeline("hot", link))
         # Unfortunately channel URLs don't have any special characteristics
         # and are basically the fallthrough link type
         else:
-            self.timelines.append(ParsableTimeline(link, "channel"))
+            t_id = link.partition("https://coub.com/")[2]
+            self.timelines.append(ParsableTimeline("channel", t_id))
 
     def parse_links(self):
         """Parse the coub links given directly via the command line."""
@@ -532,7 +535,8 @@ class CoubInputData:
 
         requests = [f"{timeline.template}&page={p}" for p in range(1, pages+1)]
 
-        msg(f"\nDownloading {timeline.type} info ({timeline.url}):")
+        msg(f"\nDownloading {timeline.type} info"
+            f"{f' ({timeline.id})' if timeline.id else ''}:")
 
         if aio:
             msg(f"  {pages} out of {timeline.pages} pages")
@@ -988,6 +992,11 @@ def check_connection():
 def normalize_link(link):
     """Format link to guarantee strict adherence to https://coub.com/<info>#<sort>"""
     to_replace = {
+        'channel': {
+            '/coubs': None,
+            '/reposts': None,
+            '/stories': None,
+        },
         'tag': {
             '/likes': "top",
             '/views': "views_count",
@@ -997,6 +1006,7 @@ def normalize_link(link):
             '/likes': "top",
             '/views': "views_count",
             '/fresh': "most_recent",
+            '/channels': None,
         },
         'community': {
             '/rising': "rising",
@@ -1046,17 +1056,13 @@ def normalize_link(link):
         if not sort:
             sort = "fresh"
         info = ""
-
-    # Suffixes that reach this point are not supported (e.g. /coubs, /stories)
-    # or just wrong, so strip any leftovers
-    if "/" in info:
-        parts = info.split("/")
-        if parts[0] in ["view", "tags", "community"]:
-            limit = 2
-        else:
-            limit = 1
-        if len(parts) > limit:
-            info = "/".join(parts[:limit])
+    else:
+        for r in to_replace['channel']:
+            parts = info.partition(r)
+            if parts[1]:
+                if not sort:
+                    sort = to_replace['channel'][r]
+                info = parts[0]
 
     if info:
         normalized = f"https://coub.com/{info}"
@@ -1126,21 +1132,21 @@ def parse_cli():
                 else:
                     err(f"'{arg}' is not a valid list!", color=fgcolors.WARNING)
             elif opt in ("-c", "--channel"):
-                timeline = ParsableTimeline(arg, "channel")
+                timeline = ParsableTimeline("channel", arg)
                 user_input.timelines.append(timeline)
             elif opt in ("-t", "--tag"):
-                timeline = ParsableTimeline(arg, "tag")
+                timeline = ParsableTimeline("tag", arg)
                 user_input.timelines.append(timeline)
             elif opt in ("-e", "--search"):
-                timeline = ParsableTimeline(arg, "search")
+                timeline = ParsableTimeline("search", arg)
                 user_input.timelines.append(timeline)
             elif opt in ("--community",):
-                timeline = ParsableTimeline(arg, "community")
+                timeline = ParsableTimeline("community", arg)
                 user_input.timelines.append(timeline)
             # Hot section selection doesn't have an argument, so the option
             # itself can come with a sort order attached
             elif fnmatch(opt, "--hot*"):
-                timeline = ParsableTimeline(opt, "hot")
+                timeline = ParsableTimeline("hot", opt)
                 user_input.timelines.append(timeline)
             # Common options
             elif opt in ("-h", "--help"):
