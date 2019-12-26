@@ -1324,7 +1324,7 @@ def check_options():
 def resolve_paths():
     """Change into (and create) the destination directory."""
     if not os.path.exists(opts.path):
-        os.mkdir(opts.path)
+        os.makedirs(opts.path)
     os.chdir(opts.path)
 
 
