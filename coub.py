@@ -174,7 +174,10 @@ class Options:
     out_file = None
 
     # Use an archive file to keep track of downloaded coubs
-    archive_file = None
+    #   archive_path -> path to the archive
+    #   archive      -> content of the archive
+    archive_path = None
+    archive = None
 
     # Output name formatting (default: %id%)
     # Supports the following special keywords:
@@ -648,7 +651,7 @@ class Coub():
         if self.erroneous():
             return
 
-        if opts.archive_file and self.in_archive():
+        if opts.archive and self.id in opts.archive:
             self.exists = True
             return
 
@@ -785,19 +788,6 @@ class Coub():
             os.remove(self.v_name)
             os.remove(self.a_name)
 
-    def in_archive(self):
-        """Test if a coub's ID is present in the archive file."""
-        if not os.path.exists(opts.archive_file):
-            return False
-
-        with open(opts.archive_file, "r") as f:
-            content = f.readlines()
-        for l in content:
-            if l == self.id + "\n":
-                return True
-
-        return False
-
     def archive(self):
         """Log a coub's ID in the archive file."""
         # This return also prevents users from creating new archive files
@@ -805,7 +795,7 @@ class Coub():
         if self.erroneous():
             return
 
-        with open(opts.archive_file, "a") as f:
+        with open(opts.archive_path, "a") as f:
             print(self.id, file=f)
 
     def preview(self):
@@ -856,7 +846,7 @@ class Coub():
         # of valid streams with special format options (e.g. --video-only)
         self.done = True
 
-        if opts.archive_file:
+        if opts.archive_path:
             self.archive()
         if opts.preview:
             self.preview()
@@ -1379,7 +1369,17 @@ def parse_cli():
             elif opt in ("--write-list",):
                 opts.out_file = os.path.abspath(arg)
             elif opt in ("--use-archive",):
-                opts.archive_file = os.path.abspath(arg)
+                opts.archive_path = os.path.abspath(arg)
+                try:
+                    with open(opts.archive_path, "r") as f:
+                        opts.archive = [l.strip() for l in f]
+                except FileNotFoundError:
+                    # opts.archive is already None in that case
+                    pass
+                except (OSError, UnicodeError):
+                    err(f"'{opts.archive_path}' is not a valid archive!",
+                        color=fgcolors.WARNING)
+                    opts.archive_path = None
             # Output
             elif opt in ("-o", "--output"):
                 # The default naming scheme is the same as using %id%
