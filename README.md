@@ -8,13 +8,14 @@ CoubDownloader is a simple script to download videos (called coubs) from [Coub](
 2. [Requirements](https://github.com/HelpSeeker/CoubDownloader#requirements)  
 2.1 [Optional](https://github.com/HelpSeeker/CoubDownloader#optional)  
 3. [Input](https://github.com/HelpSeeker/CoubDownloader#input)  
-3.1. [Links](https://github.com/HelpSeeker/CoubDownloader#links)  
-3.2. [Lists](https://github.com/HelpSeeker/CoubDownloader#lists)  
-3.3. [Channels](https://github.com/HelpSeeker/CoubDownloader#channels)  
-3.4. [Tags](https://github.com/HelpSeeker/CoubDownloader#tags)  
+3.1. [Overview](https://github.com/HelpSeeker/CoubDownloader#overview)  
+3.2. [Direct coub links](https://github.com/HelpSeeker/CoubDownloader#direct-coub-links)  
+3.3. [Lists](https://github.com/HelpSeeker/CoubDownloader#lists)  
+3.4. [Channels](https://github.com/HelpSeeker/CoubDownloader#channels)  
 3.5. [Searches](https://github.com/HelpSeeker/CoubDownloader#searches)  
-3.6. [Hot section](https://github.com/HelpSeeker/CoubDownloader#hot-section)  
-3.7. [Categories](https://github.com/HelpSeeker/CoubDownloader#categories)  
+3.6. [Tags](https://github.com/HelpSeeker/CoubDownloader#tags)  
+3.7. [Communities](https://github.com/HelpSeeker/CoubDownloader#communities)  
+3.8. [Hot section](https://github.com/HelpSeeker/CoubDownloader#hot-section)  
 4. [Misc. information](https://github.com/HelpSeeker/CoubDownloader#misc-information)  
 4.1. [Video resolution vs. quality](https://github.com/HelpSeeker/CoubDownloader#video-resolution-vs-quality)  
 4.2. [AAC audio](https://github.com/HelpSeeker/CoubDownloader#aac-audio)  
@@ -30,14 +31,19 @@ CoubDownloader is a simple download script for coub.com
 Usage: coub.py [OPTIONS] INPUT [INPUT]...
 
 Input:
-  LINK                   download specified coubs
-  -l, --list LIST        read coub links from a text file
-  -c, --channel CHANNEL  download coubs from a channel
+  URL                    download coub(s) from the given URL
+  -i, --id ID            download a single coub
+  -l, --list PATH        read coub links from a text file
+  -c, --channel NAME     download coubs from a channel
   -t, --tag TAG          download coubs with the specified tag
   -e, --search TERM      download search results for the given term
-  --hot                  download coubs from the 'Hot' section
-  --category CATEGORY    download coubs from a certain category
-                           '--category help' for all supported values
+  -m, --community NAME   download coubs from a community
+                           NAME as seen in the URL (e.g. animals-pets)
+  --hot                  download coubs from the hot section
+  --input-help           show full input help
+
+    Input options do NOT support full URLs.
+    Both URLs and input options support sorting (see --input-help).
 
 Common options:
   -h, --help             show this help
@@ -55,21 +61,19 @@ Download options:
   --retries N            number of retries when connection is lost (def: 5)
                            0 to disable, <0 to retry indefinitely
   --limit-num LIMIT      limit max. number of downloaded coubs
-  --sort ORDER           specify download order for channels, tags, etc.
-                           '--sort help' for all supported values
 
 Format selection:
-  --bestvideo            Download best available video quality (def)
-  --worstvideo           Download worst available video quality
-  --max-video FORMAT     Set limit for the best video format (def: 'higher')
+  --bestvideo            download best available video quality (def)
+  --worstvideo           download worst available video quality
+  --max-video FORMAT     set limit for the best video format (def: higher)
                            Supported values: med, high, higher
-  --min-video FORMAT     Set limit for the worst video format (def: 'med')
-                           Supported values: see '--max-video'
-  --bestaudio            Download best available audio quality (def)
-  --worstaudio           Download worst available audio quality
-  --aac                  Prefer AAC over higher quality MP3 audio
-  --aac-strict           Only download AAC audio (never MP3)
-  --share                Download 'share' video (shorter and includes audio)
+  --min-video FORMAT     set limit for the worst video format (def: med)
+                           Supported values: med, high, higher
+  --bestaudio            download best available audio quality (def)
+  --worstaudio           download worst available audio quality
+  --aac                  prefer AAC over higher quality MP3 audio
+  --aac-strict           only download AAC audio (never MP3)
+  --share                download 'share' video (shorter and includes audio)
 
 Channel options:
   --recoubs              include recoubs during channel downloads (def)
@@ -93,9 +97,9 @@ Output:
       %id%        - coub ID (identifier in the URL)
       %title%     - coub title
       %creation%  - creation date/time
-      %category%  - coub category
+      %community% - coub community
       %channel%   - channel title
-      %tags%      - all tags (separated by '_')
+      %tags%      - all tags (separated by _)
 
     Other strings will be interpreted literally.
     This option has no influence on the file extension.
@@ -113,61 +117,227 @@ Output:
 
 ## Input
 
-#### Links
+#### Overview
 
-The simplest form of input is a direct link to a coub. Only strings that contain `coub.com/view/` will get parsed as coub links.
+Accessible via `coub.py --input-help`
+
+```
+CoubDownloader Full Input Help
+
+Contents
+========
+
+  1. Input Types
+  2. Input Methods
+  3. Sorting
+
+1. Input Types
+==============
+
+  -) Direct coub links
+  -) Lists
+  -) Channels
+  -) Searches
+  -) Tags
+  -) Communities (partially*)
+  -) Hot section
+
+  * 'Featured' and 'Coub of the Day' are not yet supported as they use
+    different API endpoints.
+
+2. Input Methods
+================
+
+  1) Direct URLs from coub.com (or list paths)
+
+    Single Coub:  https://coub.com/view/1234567
+    List:         path/to/list.txt
+    Channel:      https://coub.com/example-channel
+    Search:       https://coub.com/search?q=example-term
+    Tag:          https://coub.com/tags/example-tag
+    Community:    https://coub.com/community/example-community
+    Hot section:  https://coub.com/hot
+
+    URLs which indicate special sort orders are also supported.
+
+  2) Input option + channel name/tag/search term/etc.
+
+    Single Coub:  -i 1234567            or  --id 1234567
+    List:         -l path/to/list.txt   or  --list path/to/list.txt
+    Channel:      -c example-channel    or  --channel example-channel
+    Search:       -e example-term       or  --search example-term
+    Tag:          -t example-tag        or  --tag example-tag
+    Community:    -m example-community  or  --community example-community
+    Hot section:  --hot
+
+  3) Prefix + channel name/tag/search term/etc.
+
+    A subform of 1). Utilizes the script's ability to autocomplete/format
+    incomplete URLs.
+
+    Single Coub:  view/1234567
+    Channel:      example-channel
+    Search:       search?q=example-term
+    Tag:          tags/example-tag
+    Community:    community/example-community
+    Hot section:  hot
+
+3. Sorting
+==========
+
+  Input types which return lists of coub links (e.g. channels or tags)
+  support custom sorting/selection methods (I will refer to both as sort
+  orders from now on). This is mainly useful when used in combination with
+  --limit-num (e.g. download the 100 most popular coubs with a given tag),
+  but sometimes it also changes the list of returned links drastically
+  (e.g. a community's most popular coubs of a month vs. a week).
+
+  Sort orders can either be specified by providing an URL that already
+  indicates special sorting
+
+    https://coub.com/search/likes?q=example-term
+    https://coub.com/tags/example-tag/views
+    https://coub.com/rising
+
+  or by adding it manually to the input with '#' as separator
+
+    https://coub.com/search?q=example-term#top
+    tags/example-tag#views_count
+    --hot#rising
+
+  This is supported by all input methods. Please note that a manually
+  specified sort order will overwrite the sort order as indicated by
+  the URL.
+
+  Supported sort orders
+  ---------------------
+
+    Channels:     most_recent (default)
+                  most_liked
+                  most_viewed
+                  oldest
+                  random
+
+    Searches:     relevance (default)
+                  top
+                  views_count
+                  most_recent
+
+    Tags:         popular (default)
+                  top
+                  views_count
+                  fresh
+
+    Communities:  hot_daily
+                  hot_weekly
+                  hot_monthly (default)
+                  hot_quarterly
+                  hot_six_months
+                  rising
+                  fresh
+                  top
+                  views_count
+                  random
+
+    Hot section:  hot_daily
+                  hot_weekly
+                  hot_monthly (default)
+                  hot_quarterly
+                  hot_six_months
+                  rising
+                  fresh
+```
+
+***
+
+The following points provide more in-depth information about the different input types, which didn't make it into the overview because of self-imposed space restrictions.
+
+***
+
+#### Direct coub links
+
+A link to a single coub (e.g. https://coub.com/view/123456). This is the most basic form of input and what the other input types boil down to once parsed.
 
 #### Lists
 
-A list is a normal text file containing one or more coub links. Links must be separated by a white space, tab or new line. Like before only strings that contain `coub.com/view/` will get parsed as coub links.
+Lists are files on your computer, which will be scanned for direct coub links. In order to detect a direct link, it must separated from the surrounding content via one of the following delimiters:
 
-Example:
+  * whitespace
+  * tab
+  * newline
 
-```
-https://coub.com/view/111111
-https://coub.com/view/222222
-https://coub.com/view/333333
-https://coub.com/view/444444
-https://coub.com/view/555555 https://coub.com/view/666666 https://coub.com/view/777777
-```
+Additionally a direct link must start with 'https://coub.com/view/'.
 
-`--write-list` can be used to parse links, lists, channels, tags, etc. and output all found coub links into a list for later usage.
+CoubDownloader itself is also able to create lists with `--write-list`. When used, all parsed links will be outputted to a user-defined file. This helps to avoid additional parsing time, if a long download is split into several sessions, but also to weed out duplicate links in an already existing list.
 
 #### Channels
 
-Whole channels can be downloaded by providing a full URL or the name of the channel (the name as seen in the URL). By default both original coubs and recoubs will be downloaded. `--no-recoubs` will skip all recoubs, while `--only-recoubs` will only download recoubs.
+Channels allow to download all (re)coubs from a single user. The channel options:
 
-#### Tags
+  * `--recoubs`
+  * `--no-recoubs`
+  * `--only-recoubs`
 
-Tags can be scraped by providing the term or a full URL. Due to a bug (?) in the Coub API you can only download the first 99 pages (i.e. 2475 coubs) listed. All pages afterwards will redirect to page 1.
+allow fine-grained control over what type of coub to download. As they are global options, they apply to all channels for a single script instance. Story download is not supported.
 
 #### Searches
 
-Coubs from search queries can be downloaded by providing the search term or the corresponding search URL. Please note that searches can (in extreme cases) provide tens of thousands of coub links. The usage of `--limit-num` is advised. 
+Searches provide the same results as on Coub's website, with the exception that it is not possible to search for channels.
+
+Using general search terms can potentially return tens of thousands of coub links. The usage of `--limit-num` is encouraged.
+
+***
+
+The now following input types only return a limited number of links. This is indirectly enforced by the API, although I can't say if it is done on purpose or a bug (pages >99 redirect to page 1).
+
+Each of the following input types provides at most 2475 direct links.
+
+***
+
+#### Tags
+
+Tags (just like searches) are the same as the user will know them from Coub's website.
+
+Please note that the default sort order (by popularity) provides less results than all the other sort orders.
+
+#### Communities
+
+There are currently 17 supported communities.
+
+The following list shows the names of the supported communities (as seen on Coub's website). In parenthesis are the internally used names and what should be used as input for the script.
+
+* Animals & Pets       (**animals-pets**)
+* Mashup               (**mashup**)
+* Anime                (**anime**)
+* Movies & TV          (**movies**)
+* Gaming               (**gaming**)
+* Cartoons             (**cartoons**)
+* Art & Design         (**art**)
+* Music                (**music**)
+* News & Politics      (**news**)
+* Sports               (**sports**)
+* Science & Technology (**science-technology**)
+* Celebrity            (**celebrity**)
+* Nature & Travel      (**nature-travel**)
+* Fashion & Beauty     (**fashion**)
+* Dance                (**dance**)
+* Auto & Technique     (**cars**)
+* NSFW                 (**nsfw**)
+
+The default sort order (most popular coubs of the month) may provide less results than other sort orders.
 
 #### Hot section
 
-The currently most popular/trending coubs can be found in the [hot section](https://coub.com/hot). Similar to tags, you can only download the first 99 pages (i.e. 2475 coubs) listed. All pages afterwards will redirect to page 1.
+The currently most popular/trending coubs.
 
-#### Categories
+Both
 
-There are currently 20 supported categories. 17 communities and 3 special categories (newest, random and coub_of_the_day). Categories limit the max. number of pages just like tags and the hot section. So once again max. 2475 coubs per category.
+* [https://coub.com/hot](https://coub.com/hot)
+* [https://coub.com](https://coub.com)
 
-***
+refer to the hot section and can be used as input.
 
-Please note that URLs mustn't include a special sort order (e.g. https://coub.com/tags/tag/likes) or other filters (e.g. https://coub.com/user/reposts). The last word in a URL needs to be the channel name, tag, search term, etc.
-
-***
-
-Input gets parsed in the following order:
-
-* Links
-* Lists
-* Channels
-* Tags
-* Searches
-* Categories
-* Hot section
+The default sort order (most popular coubs of the month) may provide less results than other sort orders.
 
 ## Misc. information
 
@@ -263,20 +433,24 @@ Coub started to massively overhaul their database and API. Of course those chang
 - [x] Add options to prefer AAC or only download AAC audio
 - [x] Add shared option (video+audio already combined)
 - [x] Download coubs from the hot section
-- [x] Download coubs from categories
+- [x] Download coubs from communities
 - [x] Asynchronous coub processing
 - [x] Asynchronous timeline parsing
 - [x] Detect stream corruption (incl. old Coub storage method)
 - [x] Workspace cleanup (incomplete coubs) after user interrupt 
 - [x] Colorized terminal output
 - [x] Download retries
+- [x] URL input without input options
+- [x] Autocompletion of incomplete/malformed URLs (to some extent)
+- [x] Advanced sorting per input
+- [x] Support for sort order related URLs
 
 ## Changes since switching to Coub's API (previously used youtube-dl)
 
 - [x] Download all coubs from a channel
 - [x] Download all recoubs from a channel
 - [x] Limit number of downloaded coubs
-- [x] Wait x seconds between downloads
+- [x] ~~Wait x seconds between downloads~~ (not supported anymore due to async execution)
 - [x] ~~Limit download speed~~ (was only possible in the Bash version)
 - [x] Download all coubs with a certain tag
 - [x] Check for the existence of a coub before downloading
