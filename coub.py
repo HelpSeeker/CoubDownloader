@@ -922,10 +922,12 @@ Input:
   -t, --tag TAG          download coubs with the specified tag
   -e, --search TERM      download search results for the given term
   -m, --community NAME   download coubs from a community
-  --hot                  download coubs from the 'hot' section
+                           NAME as seen in the URL (e.g. animals-pets)
+  --hot                  download coubs from the hot section
+  --input-help           show full input help
 
     Input options do NOT support full URLs.
-    URLs should be provided without an input option.
+    Both URLs and input options support sorting (see --input-help).
 
 Common options:
   -h, --help             show this help
@@ -950,7 +952,7 @@ Format selection:
   --max-video FORMAT     set limit for the best video format (def: {opts.v_max})
                            Supported values: med, high, higher
   --min-video FORMAT     set limit for the worst video format (def: {opts.v_min})
-                           Supported values: see '--max-video'
+                           Supported values: med, high, higher
   --bestaudio            download best available audio quality (def)
   --worstaudio           download worst available audio quality
   --aac                  prefer AAC over higher quality MP3 audio
@@ -985,6 +987,134 @@ Output:
 
     Other strings will be interpreted literally.
     This option has no influence on the file extension.""")
+
+
+def usage_input():
+    """Print help text regarding input and input options."""
+    print(f"""CoubDownloader Full Input Help
+
+Contents
+========
+
+  1. Input Types
+  2. Input Methods
+  3. Sorting
+
+1. Input Types
+==============
+
+  -) Direct coub links
+  -) Lists
+  -) Channels
+  -) Searches
+  -) Tags
+  -) Communities (partially*)
+  -) Hot section
+
+  * 'Featured' and 'Coub of the Day' are not yet supported as they use
+    different API endpoints.
+
+2. Input Methods
+================
+
+  1) Direct URLs from coub.com (or list paths)
+
+    Single Coub:  https://coub.com/view/1234567
+    List:         path/to/list.txt
+    Channel:      https://coub.com/example-channel
+    Search:       https://coub.com/search?q=example-term
+    Tag:          https://coub.com/tags/example-tag
+    Community:    https://coub.com/community/example-community
+    Hot section:  https://coub.com/hot
+
+    URLs which indicate special sort orders are also supported.
+
+  2) Input option + channel name/tag/search term/etc.
+
+    Single Coub:  -i 1234567            or  --id 1234567
+    List:         -l path/to/list.txt   or  --list path/to/list.txt
+    Channel:      -c example-channel    or  --channel example-channel
+    Search:       -e example-term       or  --search example-term
+    Tag:          -t example-tag        or  --tag example-tag
+    Community:    -m example-community  or  --community example-community
+    Hot section:  --hot
+
+  3) Prefix + channel name/tag/search term/etc.
+
+    A subform of 1). Utilizes the script's ability to autocomplete/format
+    incomplete URLs.
+
+    Single Coub:  view/1234567
+    Channel:      example-channel
+    Search:       search?q=example-term
+    Tag:          tags/example-tag
+    Community:    community/example-community
+    Hot section:  hot
+
+3. Sorting
+==========
+
+  Input types which return lists of coub links (e.g. channels or tags)
+  support custom sorting/selection methods (I will refer to both as sort
+  orders from now on). This is mainly useful when used in combination with
+  --limit-num (e.g. download the 100 most popular coubs with a given tag),
+  but sometimes it also changes the list of returned links drastically
+  (e.g. a community's most popular coubs of a month vs. a week).
+
+  Sort orders can either be specified by providing an URL that already
+  indicates special sorting
+
+    https://coub.com/search/likes?q=example-term
+    https://coub.com/tags/example-tag/views
+    https://coub.com/rising
+
+  or by adding it manually to the input with '#' as separator
+
+    https://coub.com/search?q=example-term#top
+    tags/example-tag#views_count
+    --hot#rising
+
+  This is supported by all input methods. Please note that a manually
+  specified sort order will overwrite the sort order as indicated by
+  the URL.
+
+  Supported sort orders
+  ---------------------
+
+    Channels:     most_recent (default)
+                  most_liked
+                  most_viewed
+                  oldest
+                  random
+
+    Searches:     relevance (default)
+                  top
+                  views_count
+                  most_recent
+
+    Tags:         popular (default)
+                  top
+                  views_count
+                  fresh
+
+    Communities:  hot_daily
+                  hot_weekly
+                  hot_monthly (default)
+                  hot_quarterly
+                  hot_six_months
+                  rising
+                  fresh
+                  top
+                  views_count
+                  random
+
+    Hot section:  hot_daily
+                  hot_weekly
+                  hot_monthly (default)
+                  hot_quarterly
+                  hot_six_months
+                  rising
+                  fresh""")
 
 
 def check_prereq():
@@ -1179,6 +1309,9 @@ def parse_cli():
             # itself can come with a sort order attached
             elif fnmatch(opt, "--hot*"):
                 user_input.append_timeline(ParsableTimeline("hot", opt))
+            elif opt in ("--input-help",):
+                usage_input()
+                sys.exit(0)
             # Common options
             elif opt in ("-h", "--help"):
                 usage()
