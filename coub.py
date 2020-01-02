@@ -218,7 +218,7 @@ class Options:
         'tag': "popular",
         'search': "relevance",
         'community': "hot_monthly",
-        'hot': "hot_monthly",
+        'hot section': "hot_monthly",
     }
 
 
@@ -232,7 +232,7 @@ class ParsableTimeline:
             "tag",
             "search",
             "community",
-            "hot",
+            "hot section",
         ]
 
         self.valid = True
@@ -257,7 +257,7 @@ class ParsableTimeline:
         # Also prettifies messages that show the ID as info
         self.id = urlunquote(self.id)
 
-        if self.type == "hot":
+        if self.type == "hot section":
             self.id = None
 
     def get_request_template(self):
@@ -270,7 +270,7 @@ class ParsableTimeline:
             self.template = self.search_template()
         elif self.type == "community":
             self.template = self.community_template()
-        elif self.type == "hot":
+        elif self.type == "hot section":
             self.template = self.hot_template()
 
     def channel_template(self):
@@ -457,7 +457,7 @@ class CoubInputData:
         elif fnmatch(link, "https://coub.com#*") or \
              fnmatch(link, "https://coub.com/hot*") or \
              link == "https://coub.com":
-            self.append_timeline(ParsableTimeline("hot", link))
+            self.append_timeline(ParsableTimeline("hot section", link))
         # Unfortunately channel URLs don't have any special characteristics
         # and are basically the fallthrough link type
         else:
@@ -547,7 +547,8 @@ class CoubInputData:
         requests = [f"{timeline.template}&page={p}" for p in range(1, pages+1)]
 
         msg(f"\nDownloading {timeline.type} info"
-            f"{f' ({timeline.id})' if timeline.id else ''}:")
+            f"{f': {timeline.id}' if timeline.id else ''}"
+            f" (sorted by '{timeline.sort}')")
 
         if aio:
             msg(f"  {pages} out of {timeline.pages} pages")
@@ -1298,7 +1299,7 @@ def parse_cli():
             # Hot section selection doesn't have an argument, so the option
             # itself can come with a sort order attached
             elif fnmatch(opt, "--hot*"):
-                user_input.append_timeline(ParsableTimeline("hot", opt))
+                user_input.append_timeline(ParsableTimeline("hot section", opt))
             elif opt in ("--input-help",):
                 usage_input()
                 sys.exit(0)
