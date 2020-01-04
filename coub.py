@@ -197,6 +197,9 @@ class Options:
     coubs_per_page = 25       # allowed: 1-25
     tag_sep = "_"
 
+    # Container to mux video/audio into (must support AVC, MP3 and AAC)
+    merge_ext = "mkv"
+
     # Default sort order for various input types
     #
     # Channels:     most_recent, most_liked, most_viewed, oldest, random
@@ -760,8 +763,8 @@ class Coub():
         if not (self.v_name and self.a_name):
             return
 
-        m_name = f"{self.name}.mkv"     # merged name
-        t_name = f"{self.name}.txt"     # txt name
+        m_name = f"{self.name}.{opts.merge_ext}"     # merged name
+        t_name = f"{self.name}.txt"                  # txt name
 
         try:
             # Print .txt for FFmpeg's concat
@@ -778,15 +781,19 @@ class Coub():
             ]
             if opts.dur:
                 command.extend(["-t", opts.dur])
-            command.extend(["-c", "copy", "-shortest", f"file:{m_name}"])
+            command.extend(["-c", "copy", "-shortest", f"file:temp_{m_name}"])
 
             subprocess.run(command)
         finally:
             if os.path.exists(t_name):
                 os.remove(t_name)
 
+        # Merging would break when using <...>.mp4 both as input and output
+        os.replace(f"temp_{m_name}", m_name)
+
         if not opts.keep:
-            os.remove(self.v_name)
+            if self.v_name != m_name:
+                os.remove(self.v_name)
             os.remove(self.a_name)
 
     def archive(self):
@@ -805,7 +812,7 @@ class Coub():
             return
 
         if self.v_name and self.a_name:
-            play = f"{self.name}.mkv"
+            play = f"{self.name}.{opts.merge_ext}"
         elif self.v_name:
             play = self.v_name
         elif self.a_name:
@@ -1506,18 +1513,18 @@ def get_name(req_json, c_id):
 def exists(name):
     """Test if a video with the given name and requested extension exists."""
     if opts.v_only or opts.share:
-        full_name = [name + ".mp4"]
+        full_name = [f"{name}.mp4"]
     elif opts.a_only:
         # exists() gets called before and after the API request was made
         # Unless MP3 or AAC audio are strictly prohibited, there's no way to
         # tell the final extension before the API request
         full_name = []
         if opts.aac > 0:
-            full_name.append(name + ".m4a")
+            full_name.append(f"{name}.m4a")
         if opts.aac < 3:
-            full_name.append(name + ".mp3")
+            full_name.append(f"{name}.mp3")
     else:
-        full_name = [name + ".mkv"]
+        full_name = [f"{name}.{opts.merge_ext}"]
 
     for f in full_name:
         if os.path.exists(f):
