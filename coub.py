@@ -1735,6 +1735,9 @@ async def process(coubs):
         except aiohttp.ClientConnectionError:
             err("\nLost connection to coub.com!")
             raise
+        except aiohttp.ClientPayloadError:
+            err("\nReceived malformed data!")
+            raise
     else:
         for c in coubs:
             await c.process()
@@ -1760,7 +1763,7 @@ def attempt_process(coubs, level=0):
 
     try:
         asyncio.run(process(coubs), debug=False)
-    except aiohttp.ClientConnectionError:
+    except (aiohttp.ClientConnectionError, aiohttp.ClientPayloadError):
         check_connection()
         # Reduce the list of coubs to only those yet to finish
         coubs = [c for c in coubs if not c.done]
