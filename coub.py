@@ -625,7 +625,7 @@ class CoubInputData:
         self.count = len(self.parsed)
 
 
-class Coub():
+class Coub:
     """Store all relevant infos and methods to process a single coub."""
 
     def __init__(self, link):
