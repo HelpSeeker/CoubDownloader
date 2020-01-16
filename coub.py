@@ -1134,6 +1134,38 @@ def check_connection():
         sys.exit(status.CONN)
 
 
+def positive_int(string):
+    """Convert string provided by parse_cli() to a positive int."""
+    value = int(string)
+    if value <= 0:
+        raise ValueError
+    return value
+
+
+def valid_time(string):
+    """Test valditiy of time syntax with FFmpeg."""
+    command = [
+        "ffmpeg", "-v", "quiet",
+        "-f", "lavfi", "-i", "anullsrc",
+        "-t", string, "-c", "copy",
+        "-f", "null", "-",
+    ]
+    try:
+        subprocess.check_call(command)
+    except subprocess.CalledProcessError:
+        raise ValueError
+
+    return string
+
+
+def valid_quality(string):
+    """Test validity of format specifier."""
+    formats = ["med", "high", "higher"]
+    if string not in formats:
+        raise ValueError
+    return string
+
+
 def normalize_link(link):
     """Format link to guarantee strict adherence to https://coub.com/<info>#<sort>"""
     to_replace = {
@@ -1327,25 +1359,25 @@ def parse_cli():
             elif opt in ("-k", "--keep"):
                 opts.keep = True
             elif opt in ("-r", "--repeat"):
-                opts.repeat = int(arg)
+                opts.repeat = positive_int(arg)
             elif opt in ("-d", "--duration"):
-                opts.dur = arg
+                opts.dur = valid_time(arg)
             # Download options
             elif opt in ("--connections",):
-                opts.connect = int(arg)
+                opts.connect = positive_int(arg)
             elif opt in ("--retries",):
                 opts.retries = int(arg)
             elif opt in ("--limit-num",):
-                opts.max_coubs = int(arg)
+                opts.max_coubs = positive_int(arg)
             # Format selection
             elif opt in ("--bestvideo",):
                 opts.v_quality = -1
             elif opt in ("--worstvideo",):
                 opts.v_quality = 0
             elif opt in ("--max-video",):
-                opts.v_max = arg
+                opts.v_max = valid_quality(arg)
             elif opt in ("--min-video",):
-                opts.v_min = arg
+                opts.v_min = valid_quality(arg)
             elif opt in ("--bestaudio",):
                 opts.a_quality = -1
             elif opt in ("--worstaudio",):
@@ -1410,32 +1442,6 @@ def parse_cli():
 
 def check_options():
     """Test the user input (command line) for its validity."""
-    if opts.repeat <= 0:
-        err("-r/--repeat must be greater than 0!")
-        sys.exit(status.OPT)
-    elif opts.max_coubs is not None and opts.max_coubs <= 0:
-        err("--limit-num must be greater than 0!")
-        sys.exit(status.OPT)
-    elif opts.connect <= 0:
-        err("--connections must be greater than 0!")
-        sys.exit(status.OPT)
-
-    if opts.dur:
-        command = [
-            "ffmpeg", "-v", "quiet",
-            "-f", "lavfi", "-i", "anullsrc",
-            "-t", opts.dur, "-c", "copy",
-            "-f", "null", "-",
-        ]
-        try:
-            subprocess.check_call(command)
-        except subprocess.CalledProcessError:
-            err("Invalid duration!")
-            err("For the supported syntax see:", color=fgcolors.RESET)
-            err("https://ffmpeg.org/ffmpeg-utils.html#time-duration-syntax",
-                color=fgcolors.RESET)
-            sys.exit(status.OPT)
-
     if opts.a_only and opts.v_only:
         err("--audio-only and --video-only are mutually exclusive!")
         sys.exit(status.OPT)
@@ -1446,18 +1452,8 @@ def check_options():
         err("--share and --video-/audio-only are mutually exclusive!")
         sys.exit(status.OPT)
 
-    v_formats = {
-        'med': 0,
-        'high': 1,
-        'higher': 2,
-    }
-    if opts.v_max not in v_formats:
-        err(f"Invalid value for --max-video ('{opts.v_max}')!")
-        sys.exit(status.OPT)
-    elif opts.v_min not in v_formats:
-        err(f"Invalid value for --min-video ('{opts.v_min}')!")
-        sys.exit(status.OPT)
-    elif v_formats[opts.v_min] > v_formats[opts.v_max]:
+    formats = {'med': 0, 'high': 1, 'higher': 2}
+    if formats[opts.v_min] > formats[opts.v_max]:
         err("Quality of --min-quality greater than --max-quality!")
         sys.exit(status.OPT)
 
