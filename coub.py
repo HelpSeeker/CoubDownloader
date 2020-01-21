@@ -521,8 +521,6 @@ class CoubInputData:
     links = []
     containers = []
     parsed = []
-    # This keeps track of the initial size of parsed for progress messages
-    count = 0
 
     def append_container(self, to_add):
         """Append timelines if they don't already exist."""
@@ -606,10 +604,6 @@ class CoubInputData:
             msg(f"\nParsed coubs written to '{opts.out_file}'!",
                 color=fgcolors.SUCCESS)
             sys.exit(0)
-
-    def update_count(self):
-        """Keep track of the initial number of parsed links."""
-        self.count = len(self.parsed)
 
 
 class Coub:
@@ -848,7 +842,7 @@ class Coub:
 
         # Log status after processing
         count += 1
-        progress = f"[{count: >{len(str(user_input.count))}}/{user_input.count}]"
+        progress = f"[{count: >{len(str(len(user_input.parsed)))}}/{len(user_input.parsed)}]"
         if self.unavailable:
             err(f"  {progress} {self.link: <30} ... ", color=fgcolors.RESET, end="")
             err("unavailable")
@@ -1787,12 +1781,9 @@ def main():
 
     msg("\n### Parse Input ###")
     user_input.parse_input()
-    user_input.update_count()
 
     msg("\n### Download Coubs ###\n")
-
     coubs = [Coub(l) for l in user_input.parsed]
-
     try:
         attempt_process(coubs)
     finally:
