@@ -561,24 +561,6 @@ class CoubInputData:
             msg("\nReading command line:")
             msg(f"  {len(self.links)} link{'s' if len(self.links) != 1 else ''} found")
 
-    def find_dupes(self):
-        """Find and remove duplicates from the parsed coub link list."""
-        dupes = 0
-
-        self.parsed.sort()
-        last = self.parsed[-1]
-
-        # There are faster and more elegant ways to do this
-        # but I also want to keep track of how many dupes were found
-        for i in range(len(self.parsed)-2, -1, -1):
-            if last == self.parsed[i]:
-                dupes += 1
-                del self.parsed[i]
-            else:
-                last = self.parsed[i]
-
-        return dupes
-
     def parse_input(self):
         """Handle the parsing process of all provided input sources."""
         self.parse_links()
@@ -599,15 +581,18 @@ class CoubInputData:
             msg(f"\nDownload limit ({opts.max_coubs}) reached!",
                 color=fgcolors.WARNING)
 
-        dupes = self.find_dupes()
+        total = len(self.parsed)
+        # Weed out duplicates
+        self.parsed = list(set(self.parsed))
+        dupes = total - len(self.parsed)
         if dupes:
             msg("\nResults:")
-            msg(f"  {len(self.parsed)} input link{'s' if len(self.parsed) != 1 else ''}")
+            msg(f"  {total} input link{'s' if total != 1 else ''}")
             msg(f"  {dupes} duplicate{'s' if dupes != 1 else ''}")
             msg(f"  {len(self.parsed)} final link{'s' if len(self.parsed) != 1 else ''}")
         else:
             msg("\nResults:")
-            msg(f"  {len(self.parsed)} link{'s' if len(self.parsed) != 1 else ''}")
+            msg(f"  {total} link{'s' if total != 1 else ''}")
 
         if opts.out_file:
             with open(opts.out_file, "a") as f:
