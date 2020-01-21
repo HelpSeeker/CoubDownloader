@@ -476,24 +476,56 @@ class HotSection(BaseContainer):
         self.template = template
 
 
+class LinkList:
+    """Store and parse link lists."""
+    type = "list"
+
+    def __init__(self, path):
+        """Initialize list object."""
+        self.id = os.path.abspath(path)
+        self.sort = None
+
+    async def process(self, quantity=None):
+        """Parse coub links provided in via an external text file."""
+        msg(f"\nReading input list ({self.id}):")
+
+        try:
+            with open(self.id, "r") as f:
+                content = f.read()
+        except (OSError, UnicodeError):
+            err(f"'{self.id}' is not a valid list!", color=fgcolors.WARNING)
+            return []
+
+        # Replace tabs and spaces with newlines
+        # Emulates default wordsplitting in Bash
+        content = content.replace("\t", "\n")
+        content = content.replace(" ", "\n")
+        content = content.splitlines()
+
+        links = [l for l in content if "https://coub.com/view/" in l]
+        msg(f"  {len(links)} link{'s' if len(links) != 1 else ''} found")
+
+        if quantity:
+            return links[:quantity]
+        return links
+
+
 class CoubInputData:
     """Store and parse all user-defined input sources."""
 
     links = []
-    lists = []
-    timelines = []
-
+    containers = []
     parsed = []
     # This keeps track of the initial size of parsed for progress messages
     count = 0
 
-    def append_timeline(self, to_add):
+    def append_container(self, to_add):
         """Append timelines if they don't already exist."""
-        for t in self.timelines:
+        for t in self.containers:
             if (t.type, t.id, t.sort) == (to_add.type, to_add.id, to_add.sort):
                 return
 
-        self.timelines.append(to_add)
+        self.containers.append(to_add)
 
     def map_input(self, link):
         """Detect input link type."""
@@ -501,22 +533,22 @@ class CoubInputData:
             self.links.append(link)
         elif "https://coub.com/tags/" in link:
             t_id = link.partition("https://coub.com/tags/")[2]
-            self.append_timeline(Tag(t_id))
+            self.append_container(Tag(t_id))
         elif "https://coub.com/search?q=" in link:
             t_id = link.partition("https://coub.com/search?q=")[2]
-            self.append_timeline(Search(t_id))
+            self.append_container(Search(t_id))
         elif "https://coub.com/community/" in link:
             t_id = link.partition("https://coub.com/community/")[2]
-            self.append_timeline(Community(t_id))
+            self.append_container(Community(t_id))
         elif fnmatch(link, "https://coub.com#*") or \
              fnmatch(link, "https://coub.com/hot*") or \
              link == "https://coub.com":
-            self.append_timeline(HotSection(link))
+            self.append_container(HotSection(link))
         # Unfortunately channel URLs don't have any special characteristics
         # and are basically the fallthrough link type
         else:
             t_id = link.partition("https://coub.com/")[2]
-            self.append_timeline(Channel(t_id))
+            self.append_container(Channel(t_id))
 
     def parse_links(self):
         """Parse the coub links given directly via the command line."""
@@ -528,32 +560,6 @@ class CoubInputData:
         if self.links:
             msg("\nReading command line:")
             msg(f"  {len(self.links)} link{'s' if len(self.links) != 1 else ''} found")
-
-    def parse_lists(self):
-        """Parse coub links provided in via an external text file."""
-        for l in self.lists:
-            msg(f"\nReading input list ({l}):")
-
-            try:
-                with open(l, "r") as f:
-                    content = f.read()
-            except (OSError, UnicodeError):
-                err(f"'{l}' is not a valid list!", color=fgcolors.WARNING)
-                continue
-
-            # Replace tabs and spaces with newlines
-            # Emulates default wordsplitting in Bash
-            content = content.replace("\t", "\n")
-            content = content.replace(" ", "\n")
-            content = content.splitlines()
-
-            links = [line for line in content if "https://coub.com/view/" in line]
-            for link in links:
-                if opts.max_coubs and len(self.parsed) >= opts.max_coubs:
-                    break
-                self.parsed.append(link)
-
-            msg(f"  {len(links)} link{'s' if len(links) != 1 else ''} found")
 
     def find_dupes(self):
         """Find and remove duplicates from the parsed coub link list."""
@@ -576,15 +582,14 @@ class CoubInputData:
     def parse_input(self):
         """Handle the parsing process of all provided input sources."""
         self.parse_links()
-        self.parse_lists()
-        for t in self.timelines:
+        for c in self.containers:
             if opts.max_coubs:
                 rest = opts.max_coubs - len(self.parsed)
                 if not rest:
                     break
-                self.parsed.extend(asyncio.run(t.process(rest)))
+                self.parsed.extend(asyncio.run(c.process(rest)))
             else:
-                self.parsed.extend(asyncio.run(t.process()))
+                self.parsed.extend(asyncio.run(c.process()))
 
         if not self.parsed:
             err("\nNo coub links specified!", color=fgcolors.WARNING)
@@ -1294,7 +1299,7 @@ def parse_cli():
                 # Otherwise they would be forced into a coub link like form
                 # which obviously leads to garbled nonsense
                 if os.path.exists(opt):
-                    user_input.lists.append(os.path.abspath(opt))
+                    user_input.append_container(LinkList(opt))
                 else:
                     user_input.map_input(normalize_link(opt))
             elif opt in ("-i", "--id"):
@@ -1304,33 +1309,33 @@ def parse_cli():
                     user_input.links.append(f"https://coub.com/view/{arg}")
             elif opt in ("-l", "--list"):
                 if os.path.exists(arg):
-                    user_input.lists.append(os.path.abspath(arg))
+                    user_input.append_container(LinkList(arg))
                 else:
                     err(f"'{arg}' is not a valid list!", color=fgcolors.WARNING)
             elif opt in ("-c", "--channel"):
                 if "coub.com" in arg:
                     err(f"{opt} doesn't support URL input!", color=fgcolors.WARNING)
                 else:
-                    user_input.append_timeline(Channel(arg))
+                    user_input.append_container(Channel(arg))
             elif opt in ("-t", "--tag"):
                 if "coub.com" in arg:
                     err(f"{opt} doesn't support URL input!", color=fgcolors.WARNING)
                 else:
-                    user_input.append_timeline(Tag(arg))
+                    user_input.append_container(Tag(arg))
             elif opt in ("-e", "--search"):
                 if "coub.com" in arg:
                     err(f"{opt} doesn't support URL input!", color=fgcolors.WARNING)
                 else:
-                    user_input.append_timeline(Search(arg))
+                    user_input.append_container(Search(arg))
             elif opt in ("-m", "--community",):
                 if "coub.com" in arg:
                     err(f"{opt} doesn't support URL input!", color=fgcolors.WARNING)
                 else:
-                    user_input.append_timeline(Community(arg))
+                    user_input.append_container(Community(arg))
             # Hot section selection doesn't have an argument, so the option
             # itself can come with a sort order attached
             elif fnmatch(opt, "--hot*"):
-                user_input.append_timeline(HotSection(opt))
+                user_input.append_container(HotSection(opt))
             elif opt in ("--input-help",):
                 usage_input()
                 sys.exit(0)
