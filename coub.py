@@ -197,6 +197,11 @@ class Options:
     coubs_per_page = 25       # allowed: 1-25
     tag_sep = "_"
 
+    # How to open output lists (--write-list)
+    #   w -> overwrite file
+    #   a -> append to file
+    write_method = "w"
+
     # Container to mux video/audio into (must support AVC, MP3 and AAC)
     merge_ext = "mkv"
 
@@ -595,7 +600,7 @@ class CoubInputData:
             msg(f"  {total} link{'s' if total != 1 else ''}")
 
         if opts.out_file:
-            with open(opts.out_file, "a") as f:
+            with open(opts.out_file, opts.write_method) as f:
                 for link in self.parsed:
                     print(link, file=f)
             msg(f"\nParsed coubs written to '{opts.out_file}'!",
