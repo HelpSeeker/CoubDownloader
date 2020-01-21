@@ -514,35 +514,30 @@ class CoubInputData:
                 resp_json = resp.read()
                 resp_json = json.loads(resp_json)
 
-        for c in resp_json['coubs']:
-            if opts.max_coubs and len(self.parsed) >= opts.max_coubs:
-                return
+        ids = [
+            c['recoub_to']['permalink'] if c['recoub_to'] else c['permalink']
+            for c in resp_json['coubs']
+        ]
 
-            if c['recoub_to']:
-                c_id = c['recoub_to']['permalink']
-            else:
-                c_id = c['permalink']
+        return [f"https://coub.com/view/{i}" for i in ids]
 
-            self.parsed.append(f"https://coub.com/view/{c_id}")
-
-    async def parse_timeline(self, timeline):
+    async def parse_timeline(self, timeline, quantity=None):
         """
         Parse the coub links from tags, channels, etc.
 
         The Coub API refers to the list of coubs from a tag, channel,
         community, etc. as a timeline.
         """
-        if opts.max_coubs and len(self.parsed) >= opts.max_coubs:
-            return
+        if not timeline.valid:
+            return []
 
         pages = timeline.pages
 
         # Limit max. number of requested pages
         # Necessary as self.parse_page() returns when limit
         # is reached, but only AFTER the request was made
-        if opts.max_coubs:
-            to_limit = opts.max_coubs - len(self.parsed)
-            max_pages = ceil(to_limit / opts.coubs_per_page)
+        if quantity:
+            max_pages = ceil(quantity / opts.coubs_per_page)
             if pages > max_pages:
                 pages = max_pages
 
@@ -559,11 +554,18 @@ class CoubInputData:
             conn = aiohttp.TCPConnector(limit=opts.connect)
             async with aiohttp.ClientSession(timeout=tout, connector=conn) as session:
                 tasks = [self.parse_page(req, session) for req in requests]
-                await asyncio.gather(*tasks)
+                links = await asyncio.gather(*tasks)
+            links = [l for page in links for l in page]
         else:
+            links = []
             for i in range(pages):
                 msg(f"  {i+1} out of {timeline.pages} pages")
-                await self.parse_page(requests[i])
+                page = await self.parse_page(requests[i])
+                links.extend(page)
+
+        if quantity:
+            return links[:quantity]
+        return links
 
     def find_dupes(self):
         """Find and remove duplicates from the parsed coub link list."""
@@ -590,8 +592,13 @@ class CoubInputData:
         for t in self.timelines:
             t.get_template()
             t.get_page_count()
-            if t.valid:
-                asyncio.run(self.parse_timeline(t))
+            if opts.max_coubs:
+                rest = opts.max_coubs - len(self.parsed)
+                if not rest:
+                    break
+                self.parsed.extend(asyncio.run(self.parse_timeline(t, rest)))
+            else:
+                self.parsed.extend(asyncio.run(self.parse_timeline(t)))
 
         if not self.parsed:
             err("\nNo coub links specified!", color=fgcolors.WARNING)
