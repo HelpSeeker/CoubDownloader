@@ -250,6 +250,10 @@ class BaseContainer:
         if self.type == "hot section":
             self.id = None
 
+    def get_template(self):
+        """Placeholder function, which must be overwritten by subclasses."""
+        self.template = ""
+
     def get_page_count(self):
         """Contact API once to get page count and check validity."""
         if not self.valid:
@@ -269,6 +273,54 @@ class BaseContainer:
         # other timelines work like intended
         if self.type in ("tag", "community") and self.pages > 99:
             self.pages = 99
+
+    async def process(self, quantity=None):
+        """
+        Parse the coub links from tags, channels, etc.
+
+        The Coub API refers to the list of coubs from a tag, channel,
+        community, etc. as a timeline.
+        """
+        self.get_template()
+        self.get_page_count()
+        if not self.valid:
+            return []
+
+        pages = self.pages
+
+        # Limit max. number of requested pages
+        # Necessary as self.parse_page() returns when limit
+        # is reached, but only AFTER the request was made
+        if quantity:
+            max_pages = ceil(quantity / opts.coubs_per_page)
+            if pages > max_pages:
+                pages = max_pages
+
+        requests = [f"{self.template}&page={p}" for p in range(1, pages+1)]
+
+        msg(f"\nDownloading {self.type} info"
+            f"{f': {self.id}' if self.id else ''}"
+            f" (sorted by '{self.sort}')")
+
+        if aio:
+            msg(f"  {pages} out of {self.pages} pages")
+
+            tout = aiohttp.ClientTimeout(total=None)
+            conn = aiohttp.TCPConnector(limit=opts.connect)
+            async with aiohttp.ClientSession(timeout=tout, connector=conn) as session:
+                tasks = [parse_page(req, session) for req in requests]
+                links = await asyncio.gather(*tasks)
+            links = [l for page in links for l in page]
+        else:
+            links = []
+            for i in range(pages):
+                msg(f"  {i+1} out of {self.pages} pages")
+                page = await parse_page(requests[i])
+                links.extend(page)
+
+        if quantity:
+            return links[:quantity]
+        return links
 
 
 class Channel(BaseContainer):
@@ -503,70 +555,6 @@ class CoubInputData:
 
             msg(f"  {len(links)} link{'s' if len(links) != 1 else ''} found")
 
-    async def parse_page(self, req, session=None):
-        """Request a single timeline page and parse its content."""
-        if aio:
-            async with session.get(req) as resp:
-                resp_json = await resp.read()
-                resp_json = json.loads(resp_json)
-        else:
-            with urlopen(req) as resp:
-                resp_json = resp.read()
-                resp_json = json.loads(resp_json)
-
-        ids = [
-            c['recoub_to']['permalink'] if c['recoub_to'] else c['permalink']
-            for c in resp_json['coubs']
-        ]
-
-        return [f"https://coub.com/view/{i}" for i in ids]
-
-    async def parse_timeline(self, timeline, quantity=None):
-        """
-        Parse the coub links from tags, channels, etc.
-
-        The Coub API refers to the list of coubs from a tag, channel,
-        community, etc. as a timeline.
-        """
-        if not timeline.valid:
-            return []
-
-        pages = timeline.pages
-
-        # Limit max. number of requested pages
-        # Necessary as self.parse_page() returns when limit
-        # is reached, but only AFTER the request was made
-        if quantity:
-            max_pages = ceil(quantity / opts.coubs_per_page)
-            if pages > max_pages:
-                pages = max_pages
-
-        requests = [f"{timeline.template}&page={p}" for p in range(1, pages+1)]
-
-        msg(f"\nDownloading {timeline.type} info"
-            f"{f': {timeline.id}' if timeline.id else ''}"
-            f" (sorted by '{timeline.sort}')")
-
-        if aio:
-            msg(f"  {pages} out of {timeline.pages} pages")
-
-            tout = aiohttp.ClientTimeout(total=None)
-            conn = aiohttp.TCPConnector(limit=opts.connect)
-            async with aiohttp.ClientSession(timeout=tout, connector=conn) as session:
-                tasks = [self.parse_page(req, session) for req in requests]
-                links = await asyncio.gather(*tasks)
-            links = [l for page in links for l in page]
-        else:
-            links = []
-            for i in range(pages):
-                msg(f"  {i+1} out of {timeline.pages} pages")
-                page = await self.parse_page(requests[i])
-                links.extend(page)
-
-        if quantity:
-            return links[:quantity]
-        return links
-
     def find_dupes(self):
         """Find and remove duplicates from the parsed coub link list."""
         dupes = 0
@@ -590,15 +578,13 @@ class CoubInputData:
         self.parse_links()
         self.parse_lists()
         for t in self.timelines:
-            t.get_template()
-            t.get_page_count()
             if opts.max_coubs:
                 rest = opts.max_coubs - len(self.parsed)
                 if not rest:
                     break
-                self.parsed.extend(asyncio.run(self.parse_timeline(t, rest)))
+                self.parsed.extend(asyncio.run(t.process(rest)))
             else:
-                self.parsed.extend(asyncio.run(self.parse_timeline(t)))
+                self.parsed.extend(asyncio.run(t.process()))
 
         if not self.parsed:
             err("\nNo coub links specified!", color=fgcolors.WARNING)
@@ -1469,6 +1455,25 @@ def resolve_paths():
     if not os.path.exists(opts.path):
         os.makedirs(opts.path)
     os.chdir(opts.path)
+
+
+async def parse_page(req, session=None):
+    """Request a single timeline page and parse its content."""
+    if aio:
+        async with session.get(req) as resp:
+            resp_json = await resp.read()
+            resp_json = json.loads(resp_json)
+    else:
+        with urlopen(req) as resp:
+            resp_json = resp.read()
+            resp_json = json.loads(resp_json)
+
+    ids = [
+        c['recoub_to']['permalink'] if c['recoub_to'] else c['permalink']
+        for c in resp_json['coubs']
+    ]
+
+    return [f"https://coub.com/view/{i}" for i in ids]
 
 
 def get_name(req_json, c_id):
