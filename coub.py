@@ -225,28 +225,15 @@ class Options:
     }
 
 
-class ParsableTimeline:
-    """Store timeline-related data important for later parsing."""
+class BaseContainer:
+    """Base class for link containers (timelines)."""
+    type = None
 
-    def __init__(self, id_type, id_):
-        """Initialize timeline object."""
-        supported_types = [
-            "channel",
-            "tag",
-            "search",
-            "community",
-            "hot section",
-        ]
-
+    def __init__(self, id_):
+        """Initialize object."""
         self.valid = True
         self.pages = 0
         self.template = ""
-
-        if id_type in supported_types:
-            self.type = id_type
-        else:
-            err("Error: Tried to initialize timeline with unsupported type!")
-            sys.exit(status.RUN)
 
         try:
             self.id, self.sort = id_.split("#")
@@ -263,21 +250,33 @@ class ParsableTimeline:
         if self.type == "hot section":
             self.id = None
 
-    def get_request_template(self):
-        """Assign template URL for API request based on input type."""
-        if self.type == "channel":
-            self.template = self.channel_template()
-        elif self.type == "tag":
-            self.template = self.tag_template()
-        elif self.type == "search":
-            self.template = self.search_template()
-        elif self.type == "community":
-            self.template = self.community_template()
-        elif self.type == "hot section":
-            self.template = self.hot_template()
+    def get_page_count(self):
+        """Contact API once to get page count and check validity."""
+        if not self.valid:
+            return
 
-    def channel_template(self):
-        """Return API request template for channel timelines."""
+        try:
+            with urlopen(self.template) as resp:
+                resp_json = json.loads(resp.read())
+        except urllib.error.HTTPError:
+            err(f"\nInvalid {self.type} ('{self.id}')!",
+                color=fgcolors.WARNING)
+            self.valid = False
+            return
+
+        self.pages = resp_json['total_pages']
+        # tag/community timeline redirects pages >99 to page 1
+        # other timelines work like intended
+        if self.type in ("tag", "community") and self.pages > 99:
+            self.pages = 99
+
+
+class Channel(BaseContainer):
+    """Store and parse channels."""
+    type = "channel"
+
+    def get_template(self):
+        """Return API request template for channels."""
         methods = {
             'most_recent': "newest",
             'most_liked': "likes_count",
@@ -301,10 +300,15 @@ class ParsableTimeline:
                 color=fgcolors.WARNING)
             self.valid = False
 
-        return template
+        self.template = template
 
-    def tag_template(self):
-        """Return API request template for tag timelines."""
+
+class Tag(BaseContainer):
+    """Store and parse tags."""
+    type = "tag"
+
+    def get_template(self):
+        """Return API request template for tags."""
         methods = {
             'popular': "newest_popular",
             'top': "likes_count",
@@ -322,9 +326,14 @@ class ParsableTimeline:
                 color=fgcolors.WARNING)
             self.valid = False
 
-        return template
+        self.template = template
 
-    def search_template(self):
+
+class Search(BaseContainer):
+    """Store and parse searches."""
+    type = "search"
+
+    def get_template(self):
         """Return API request template for coub searches."""
         methods = {
             'relevance': None,
@@ -345,10 +354,15 @@ class ParsableTimeline:
         elif self.sort != "relevance":
             template = f"{template}&order_by={methods[self.sort]}"
 
-        return template
+        self.template = template
 
-    def community_template(self):
-        """Return API request template for community timelines."""
+
+class Community(BaseContainer):
+    """Store and parse communities."""
+    type = "community"
+
+    def get_template(self):
+        """Return API request template for communities."""
         methods = {
             'hot_daily': "daily",
             'hot_weekly': "weekly",
@@ -377,9 +391,14 @@ class ParsableTimeline:
 
         template = f"{template}per_page={opts.coubs_per_page}"
 
-        return template
+        self.template = template
 
-    def hot_template(self):
+
+class HotSection(BaseContainer):
+    """Store and parse the hot section."""
+    type = "hot section"
+
+    def get_template(self):
         """Return API request template for Coub's hot section."""
         methods = {
             'hot_daily': "daily",
@@ -402,27 +421,7 @@ class ParsableTimeline:
 
         template = f"{template}?per_page={opts.coubs_per_page}"
 
-        return template
-
-    def get_page_count(self):
-        """Contact API once to get page count and check timeline validity."""
-        if not self.valid:
-            return
-
-        try:
-            with urlopen(self.template) as resp:
-                resp_json = json.loads(resp.read())
-        except urllib.error.HTTPError:
-            err(f"\nInvalid {self.type} ('{self.id}')!",
-                color=fgcolors.WARNING)
-            self.valid = False
-            return
-
-        self.pages = resp_json['total_pages']
-        # tag/community timeline redirects pages >99 to page 1
-        # other timelines work like intended
-        if self.type in ("tag", "community") and self.pages > 99:
-            self.pages = 99
+        self.template = template
 
 
 class CoubInputData:
@@ -450,22 +449,22 @@ class CoubInputData:
             self.links.append(link)
         elif "https://coub.com/tags/" in link:
             t_id = link.partition("https://coub.com/tags/")[2]
-            self.append_timeline(ParsableTimeline("tag", t_id))
+            self.append_timeline(Tag(t_id))
         elif "https://coub.com/search?q=" in link:
             t_id = link.partition("https://coub.com/search?q=")[2]
-            self.append_timeline(ParsableTimeline("search", t_id))
+            self.append_timeline(Search(t_id))
         elif "https://coub.com/community/" in link:
             t_id = link.partition("https://coub.com/community/")[2]
-            self.append_timeline(ParsableTimeline("community", t_id))
+            self.append_timeline(Community(t_id))
         elif fnmatch(link, "https://coub.com#*") or \
              fnmatch(link, "https://coub.com/hot*") or \
              link == "https://coub.com":
-            self.append_timeline(ParsableTimeline("hot section", link))
+            self.append_timeline(HotSection(link))
         # Unfortunately channel URLs don't have any special characteristics
         # and are basically the fallthrough link type
         else:
             t_id = link.partition("https://coub.com/")[2]
-            self.append_timeline(ParsableTimeline("channel", t_id))
+            self.append_timeline(Channel(t_id))
 
     def parse_links(self):
         """Parse the coub links given directly via the command line."""
@@ -589,7 +588,7 @@ class CoubInputData:
         self.parse_links()
         self.parse_lists()
         for t in self.timelines:
-            t.get_request_template()
+            t.get_template()
             t.get_page_count()
             if t.valid:
                 asyncio.run(self.parse_timeline(t))
@@ -1319,26 +1318,26 @@ def parse_cli():
                 if "coub.com" in arg:
                     err(f"{opt} doesn't support URL input!", color=fgcolors.WARNING)
                 else:
-                    user_input.append_timeline(ParsableTimeline("channel", arg))
+                    user_input.append_timeline(Channel(arg))
             elif opt in ("-t", "--tag"):
                 if "coub.com" in arg:
                     err(f"{opt} doesn't support URL input!", color=fgcolors.WARNING)
                 else:
-                    user_input.append_timeline(ParsableTimeline("tag", arg))
+                    user_input.append_timeline(Tag(arg))
             elif opt in ("-e", "--search"):
                 if "coub.com" in arg:
                     err(f"{opt} doesn't support URL input!", color=fgcolors.WARNING)
                 else:
-                    user_input.append_timeline(ParsableTimeline("search", arg))
+                    user_input.append_timeline(Search(arg))
             elif opt in ("-m", "--community",):
                 if "coub.com" in arg:
                     err(f"{opt} doesn't support URL input!", color=fgcolors.WARNING)
                 else:
-                    user_input.append_timeline(ParsableTimeline("community", arg))
+                    user_input.append_timeline(Community(arg))
             # Hot section selection doesn't have an argument, so the option
             # itself can come with a sort order attached
             elif fnmatch(opt, "--hot*"):
-                user_input.append_timeline(ParsableTimeline("hot section", opt))
+                user_input.append_timeline(HotSection(opt))
             elif opt in ("--input-help",):
                 usage_input()
                 sys.exit(0)
