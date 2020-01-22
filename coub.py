@@ -494,12 +494,8 @@ class LinkList:
         """Parse coub links provided in via an external text file."""
         msg(f"\nReading input list ({self.id}):")
 
-        try:
-            with open(self.id, "r") as f:
-                content = f.read()
-        except (OSError, UnicodeError):
-            err(f"'{self.id}' is not a valid list!", color=fgcolors.WARNING)
-            return []
+        with open(self.id, "r") as f:
+            content = f.read()
 
         # Replace tabs and spaces with newlines
         # Emulates default wordsplitting in Bash
@@ -1115,11 +1111,18 @@ def check_connection():
         sys.exit(status.CONN)
 
 
+def no_url(string):
+    """Test if direct input is an URL."""
+    if "coub.com" in string:
+        raise ValueError("input options don't support URLs")
+    return string
+
+
 def positive_int(string):
     """Convert string provided by parse_cli() to a positive int."""
     value = int(string)
     if value <= 0:
-        raise ValueError
+        raise ValueError("invalid positive int")
     return value
 
 
@@ -1134,7 +1137,7 @@ def valid_time(string):
     try:
         subprocess.check_call(command)
     except subprocess.CalledProcessError:
-        raise ValueError
+        raise ValueError(f"invalid time syntax ('{string}')")
 
     return string
 
@@ -1143,11 +1146,39 @@ def valid_quality(string):
     """Test validity of format specifier."""
     formats = ["med", "high", "higher"]
     if string not in formats:
-        raise ValueError
+        raise ValueError(f"invalid quality ('{string}')")
     return string
 
 
-def normalize_link(link):
+def valid_list(string):
+    """Convert string provided by parse_cli() to an absolute path."""
+    path = os.path.abspath(string)
+    try:
+        with open(path, "r") as f:
+            _ = f.read(1)
+    except FileNotFoundError:
+        raise ValueError(f"list doesn't exist ('{path}')")
+    except (OSError, UnicodeError):
+        raise ValueError(f"invalid list ('{path}')")
+
+    return path
+
+
+def valid_archive(string):
+    """Convert string provided by parse_cli() to an absolute path."""
+    path = os.path.abspath(string)
+    try:
+        with open(path, "r") as f:
+            _ = f.read(1)
+    except FileNotFoundError:
+        pass
+    except (OSError, UnicodeError):
+        raise ValueError(f"invalid archive file ('{path}')")
+
+    return path
+
+
+def normalized_link(string):
     """Format link to guarantee strict adherence to https://coub.com/<info>#<sort>"""
     to_replace = {
         'channel': {
@@ -1176,8 +1207,9 @@ def normalize_link(link):
     }
 
     try:
-        link, sort = link.split("#")
+        link, sort = string.split("#")
     except ValueError:
+        link = string
         sort = None
 
     info = link.rpartition("coub.com")[2]
@@ -1283,39 +1315,28 @@ def parse_cli():
                 # Otherwise they would be forced into a coub link like form
                 # which obviously leads to garbled nonsense
                 if os.path.exists(opt):
+                    opt = valid_list(opt)
                     user_input.append_container(LinkList(opt))
                 else:
-                    user_input.map_input(normalize_link(opt))
+                    user_input.map_input(normalized_link(opt))
             elif opt in ("-i", "--id"):
-                if "coub.com" in arg:
-                    err(f"{opt} doesn't support URL input!", color=fgcolors.WARNING)
-                else:
-                    user_input.links.append(f"https://coub.com/view/{arg}")
+                arg = no_url(arg)
+                user_input.links.append(f"https://coub.com/view/{arg}")
             elif opt in ("-l", "--list"):
-                if os.path.exists(arg):
-                    user_input.append_container(LinkList(arg))
-                else:
-                    err(f"'{arg}' is not a valid list!", color=fgcolors.WARNING)
+                arg = valid_list(arg)
+                user_input.append_container(LinkList(arg))
             elif opt in ("-c", "--channel"):
-                if "coub.com" in arg:
-                    err(f"{opt} doesn't support URL input!", color=fgcolors.WARNING)
-                else:
-                    user_input.append_container(Channel(arg))
+                arg = no_url(arg)
+                user_input.append_container(Channel(arg))
             elif opt in ("-t", "--tag"):
-                if "coub.com" in arg:
-                    err(f"{opt} doesn't support URL input!", color=fgcolors.WARNING)
-                else:
-                    user_input.append_container(Tag(arg))
+                arg = no_url(arg)
+                user_input.append_container(Tag(arg))
             elif opt in ("-e", "--search"):
-                if "coub.com" in arg:
-                    err(f"{opt} doesn't support URL input!", color=fgcolors.WARNING)
-                else:
-                    user_input.append_container(Search(arg))
+                arg = no_url(arg)
+                user_input.append_container(Search(arg))
             elif opt in ("-m", "--community",):
-                if "coub.com" in arg:
-                    err(f"{opt} doesn't support URL input!", color=fgcolors.WARNING)
-                else:
-                    user_input.append_container(Community(arg))
+                arg = no_url(arg)
+                user_input.append_container(Community(arg))
             # Hot section selection doesn't have an argument, so the option
             # itself can come with a sort order attached
             elif fnmatch(opt, "--hot*"):
@@ -1390,17 +1411,9 @@ def parse_cli():
             elif opt in ("--write-list",):
                 opts.out_file = os.path.abspath(arg)
             elif opt in ("--use-archive",):
-                opts.archive_path = os.path.abspath(arg)
-                try:
-                    with open(opts.archive_path, "r") as f:
-                        opts.archive = [l.strip() for l in f]
-                except FileNotFoundError:
-                    # opts.archive is already None in that case
-                    pass
-                except (OSError, UnicodeError):
-                    err(f"'{opts.archive_path}' is not a valid archive!",
-                        color=fgcolors.WARNING)
-                    opts.archive_path = None
+                opts.archive_path = valid_archive(arg)
+                with open(opts.archive_path, "r") as f:
+                    opts.archive = [l.strip() for l in f]
             # Output
             elif opt in ("-o", "--output"):
                 # The default naming scheme is the same as using %id%
@@ -1416,8 +1429,8 @@ def parse_cli():
                 err(f"Try '{os.path.basename(sys.argv[0])} "
                     "--help' for more information.", color=fgcolors.RESET)
                 sys.exit(status.OPT)
-        except ValueError:
-            err(f"Invalid {opt} ('{arg}')!")
+        except ValueError as error:
+            err(f"{opt}: {error}")
             sys.exit(status.OPT)
 
 
