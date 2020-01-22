@@ -232,7 +232,6 @@ class Options:
 
     # Input-related (don't touch)
     input = []
-    raw_input = []
     links = []
 
 
@@ -1093,7 +1092,7 @@ def valid_archive(string):
     return path
 
 
-def normalized_link(string):
+def normalize_link(string):
     """Format link to guarantee strict adherence to https://coub.com/<info>#<sort>"""
     to_replace = {
         'channel': {
@@ -1179,6 +1178,34 @@ def normalized_link(string):
     return normalized
 
 
+def mapped_input(string):
+    """Convert string provided by parse_cli() to valid input source."""
+    link = normalize_link(string)
+
+    if "https://coub.com/view/" in link:
+        source = link
+    elif "https://coub.com/tags/" in link:
+        name = link.partition("https://coub.com/tags/")[2]
+        source = Tag(name)
+    elif "https://coub.com/search?q=" in link:
+        term = link.partition("https://coub.com/search?q=")[2]
+        source = Search(term)
+    elif "https://coub.com/community/" in link:
+        name = link.partition("https://coub.com/community/")[2]
+        source = Community(name)
+    elif fnmatch(link, "https://coub.com#*") or \
+         fnmatch(link, "https://coub.com/hot*") or \
+         link == "https://coub.com":
+        source = HotSection(link)
+    # Unfortunately channel URLs don't have any special characteristics
+    # and are basically the fallthrough link type
+    else:
+        name = link.partition("https://coub.com/")[2]
+        source = Channel(name)
+
+    return source
+
+
 def parse_cli():
     """Parse the command line."""
     if not sys.argv[1:]:
@@ -1231,8 +1258,8 @@ def parse_cli():
                     opt = valid_list(opt)
                     opts.input.append(LinkList(opt))
                 else:
-                    opt = normalized_link(opt)
-                    opts.raw_input.append(opt)
+                    opt = mapped_input(opt)
+                    opts.input.append(opt)
             elif opt in ("-i", "--id"):
                 arg = no_url(arg)
                 opts.input.append(f"https://coub.com/view/{arg}")
@@ -1347,9 +1374,6 @@ def parse_cli():
             err(f"{opt}: {error}")
             sys.exit(status.OPT)
 
-    # Map raw input
-    opts.input.extend(map_raw_input(opts.raw_input))
-
 
 def check_options():
     """Test the user input (command line) for its validity."""
@@ -1374,34 +1398,6 @@ def resolve_paths():
     if not os.path.exists(opts.path):
         os.makedirs(opts.path)
     os.chdir(opts.path)
-
-
-def map_raw_input(raw):
-    """Detect input link type."""
-    mapped = []
-    for link in raw:
-        if "https://coub.com/view/" in link:
-            mapped.append(link)
-        elif "https://coub.com/tags/" in link:
-            name = link.partition("https://coub.com/tags/")[2]
-            mapped.append(Tag(name))
-        elif "https://coub.com/search?q=" in link:
-            term = link.partition("https://coub.com/search?q=")[2]
-            mapped.append(Search(term))
-        elif "https://coub.com/community/" in link:
-            name = link.partition("https://coub.com/community/")[2]
-            mapped.append(Community(name))
-        elif fnmatch(link, "https://coub.com#*") or \
-             fnmatch(link, "https://coub.com/hot*") or \
-             link == "https://coub.com":
-            mapped.append(HotSection(link))
-        # Unfortunately channel URLs don't have any special characteristics
-        # and are basically the fallthrough link type
-        else:
-            name = link.partition("https://coub.com/")[2]
-            mapped.append(Channel(name))
-
-    return mapped
 
 
 async def parse_page(req, session=None):
