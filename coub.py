@@ -8,6 +8,7 @@ import sys
 
 from fnmatch import fnmatch
 from math import ceil
+from textwrap import dedent
 
 import urllib.error
 from urllib.request import urlopen
@@ -228,6 +229,11 @@ class Options:
         'community': "hot_monthly",
         'hot section': "hot_monthly",
     }
+
+    # Input-related (don't touch)
+    input = []
+    raw_input = []
+    links = []
 
 
 class BaseContainer:
@@ -511,97 +517,6 @@ class LinkList:
         return links
 
 
-class CoubInputData:
-    """Store and parse all user-defined input sources."""
-
-    links = []
-    containers = []
-    parsed = []
-
-    def append_container(self, to_add):
-        """Append timelines if they don't already exist."""
-        for t in self.containers:
-            if (t.type, t.id, t.sort) == (to_add.type, to_add.id, to_add.sort):
-                return
-
-        self.containers.append(to_add)
-
-    def map_input(self, link):
-        """Detect input link type."""
-        if "https://coub.com/view/" in link:
-            self.links.append(link)
-        elif "https://coub.com/tags/" in link:
-            t_id = link.partition("https://coub.com/tags/")[2]
-            self.append_container(Tag(t_id))
-        elif "https://coub.com/search?q=" in link:
-            t_id = link.partition("https://coub.com/search?q=")[2]
-            self.append_container(Search(t_id))
-        elif "https://coub.com/community/" in link:
-            t_id = link.partition("https://coub.com/community/")[2]
-            self.append_container(Community(t_id))
-        elif fnmatch(link, "https://coub.com#*") or \
-             fnmatch(link, "https://coub.com/hot*") or \
-             link == "https://coub.com":
-            self.append_container(HotSection(link))
-        # Unfortunately channel URLs don't have any special characteristics
-        # and are basically the fallthrough link type
-        else:
-            t_id = link.partition("https://coub.com/")[2]
-            self.append_container(Channel(t_id))
-
-    def parse_links(self):
-        """Parse the coub links given directly via the command line."""
-        for link in self.links:
-            if opts.max_coubs and len(self.parsed) >= opts.max_coubs:
-                break
-            self.parsed.append(link)
-
-        if self.links:
-            msg("\nReading command line:")
-            msg(f"  {len(self.links)} link{'s' if len(self.links) != 1 else ''} found")
-
-    def parse_input(self):
-        """Handle the parsing process of all provided input sources."""
-        self.parse_links()
-        for c in self.containers:
-            if opts.max_coubs:
-                rest = opts.max_coubs - len(self.parsed)
-                if not rest:
-                    break
-                self.parsed.extend(asyncio.run(c.process(rest)))
-            else:
-                self.parsed.extend(asyncio.run(c.process()))
-
-        if not self.parsed:
-            err("\nNo coub links specified!", color=fgcolors.WARNING)
-            sys.exit(status.OPT)
-
-        if opts.max_coubs and len(self.parsed) >= opts.max_coubs:
-            msg(f"\nDownload limit ({opts.max_coubs}) reached!",
-                color=fgcolors.WARNING)
-
-        total = len(self.parsed)
-        # Weed out duplicates
-        self.parsed = list(set(self.parsed))
-        dupes = total - len(self.parsed)
-        if dupes:
-            msg("\nResults:")
-            msg(f"  {total} input link{'s' if total != 1 else ''}")
-            msg(f"  {dupes} duplicate{'s' if dupes != 1 else ''}")
-            msg(f"  {len(self.parsed)} final link{'s' if len(self.parsed) != 1 else ''}")
-        else:
-            msg("\nResults:")
-            msg(f"  {total} link{'s' if total != 1 else ''}")
-
-        if opts.out_file:
-            with open(opts.out_file, opts.write_method) as f:
-                for link in self.parsed:
-                    print(link, file=f)
-            msg(f"\nParsed coubs written to '{opts.out_file}'!",
-                color=fgcolors.SUCCESS)
-            sys.exit(0)
-
-
 class Coub:
     """Store all relevant infos and methods to process a single coub."""
 
@@ -838,7 +753,7 @@ class Coub:
 
         # Log status after processing
         count += 1
-        progress = f"[{count: >{len(str(len(user_input.parsed)))}}/{len(user_input.parsed)}]"
+        progress = f"[{count: >{len(str(len(opts.links)))}}/{len(opts.links)}]"
         if self.unavailable:
             err(f"  {progress} {self.link: <30} ... ", color=fgcolors.RESET, end="")
             err("unavailable")
@@ -1266,8 +1181,6 @@ def normalized_link(string):
 
 def parse_cli():
     """Parse the command line."""
-    global opts, user_input
-
     if not sys.argv[1:]:
         usage()
         sys.exit(0)
@@ -1316,31 +1229,32 @@ def parse_cli():
                 # which obviously leads to garbled nonsense
                 if os.path.exists(opt):
                     opt = valid_list(opt)
-                    user_input.append_container(LinkList(opt))
+                    opts.input.append(LinkList(opt))
                 else:
-                    user_input.map_input(normalized_link(opt))
+                    opt = normalized_link(opt)
+                    opts.raw_input.append(opt)
             elif opt in ("-i", "--id"):
                 arg = no_url(arg)
-                user_input.links.append(f"https://coub.com/view/{arg}")
+                opts.input.append(f"https://coub.com/view/{arg}")
             elif opt in ("-l", "--list"):
                 arg = valid_list(arg)
-                user_input.append_container(LinkList(arg))
+                opts.input.append(LinkList(arg))
             elif opt in ("-c", "--channel"):
                 arg = no_url(arg)
-                user_input.append_container(Channel(arg))
+                opts.input.append(Channel(arg))
             elif opt in ("-t", "--tag"):
                 arg = no_url(arg)
-                user_input.append_container(Tag(arg))
+                opts.input.append(Tag(arg))
             elif opt in ("-e", "--search"):
                 arg = no_url(arg)
-                user_input.append_container(Search(arg))
+                opts.input.append(Search(arg))
             elif opt in ("-m", "--community",):
                 arg = no_url(arg)
-                user_input.append_container(Community(arg))
+                opts.input.append(Community(arg))
             # Hot section selection doesn't have an argument, so the option
             # itself can come with a sort order attached
             elif fnmatch(opt, "--hot*"):
-                user_input.append_container(HotSection(opt))
+                opts.input.append(HotSection(opt))
             elif opt in ("--input-help",):
                 usage_input()
                 sys.exit(0)
@@ -1433,6 +1347,9 @@ def parse_cli():
             err(f"{opt}: {error}")
             sys.exit(status.OPT)
 
+    # Map raw input
+    opts.input.extend(map_raw_input(opts.raw_input))
+
 
 def check_options():
     """Test the user input (command line) for its validity."""
@@ -1459,6 +1376,34 @@ def resolve_paths():
     os.chdir(opts.path)
 
 
+def map_raw_input(raw):
+    """Detect input link type."""
+    mapped = []
+    for link in raw:
+        if "https://coub.com/view/" in link:
+            mapped.append(link)
+        elif "https://coub.com/tags/" in link:
+            name = link.partition("https://coub.com/tags/")[2]
+            mapped.append(Tag(name))
+        elif "https://coub.com/search?q=" in link:
+            term = link.partition("https://coub.com/search?q=")[2]
+            mapped.append(Search(term))
+        elif "https://coub.com/community/" in link:
+            name = link.partition("https://coub.com/community/")[2]
+            mapped.append(Community(name))
+        elif fnmatch(link, "https://coub.com#*") or \
+             fnmatch(link, "https://coub.com/hot*") or \
+             link == "https://coub.com":
+            mapped.append(HotSection(link))
+        # Unfortunately channel URLs don't have any special characteristics
+        # and are basically the fallthrough link type
+        else:
+            name = link.partition("https://coub.com/")[2]
+            mapped.append(Channel(name))
+
+    return mapped
+
+
 async def parse_page(req, session=None):
     """Request a single timeline page and parse its content."""
     if aio:
@@ -1476,6 +1421,64 @@ async def parse_page(req, session=None):
     ]
 
     return [f"https://coub.com/view/{i}" for i in ids]
+
+
+def parse_input(sources):
+    """Handle the parsing process of all provided input sources."""
+    links = [s for s in sources if isinstance(s, str)]
+    containers = [s for s in sources if not isinstance(s, str)]
+
+    if opts.max_coubs:
+        parsed = links[:opts.max_coubs]
+    else:
+        parsed = links
+
+    if parsed:
+        msg("\nReading command line:")
+        msg(f"  {len(parsed)} link{'s' if len(parsed) != 1 else ''} found")
+
+    # And now all containers
+    for c in containers:
+        if opts.max_coubs:
+            rest = opts.max_coubs - len(parsed)
+            if not rest:
+                break
+            parsed.extend(asyncio.run(c.process(rest)))
+        else:
+            parsed.extend(asyncio.run(c.process()))
+
+    if not parsed:
+        err("\nNo coub links specified!", color=fgcolors.WARNING)
+        sys.exit(status.OPT)
+
+    if opts.max_coubs and len(parsed) >= opts.max_coubs:
+        msg(f"\nDownload limit ({opts.max_coubs}) reached!",
+            color=fgcolors.WARNING)
+
+    total = len(parsed)
+    # Weed out duplicates
+    parsed = list(set(parsed))
+    dupes = total - len(parsed)
+    if dupes:
+        msg(dedent(f"""
+            Results:
+              {total} input link{'s' if total != 1 else ''}
+              {dupes} duplicate{'s' if dupes != 1 else ''}
+              {len(parsed)} final link{'s' if len(parsed) != 1 else ''}"""))
+    else:
+        msg(dedent(f"""
+            Results:
+              {total} link{'s' if total != 1 else ''}"""))
+
+    if opts.out_file:
+        with open(opts.out_file, opts.write_method) as f:
+            for link in parsed:
+                print(link, file=f)
+        msg(f"\nParsed coubs written to '{opts.out_file}'!",
+            color=fgcolors.SUCCESS)
+        sys.exit(0)
+
+    return parsed
 
 
 def get_name(req_json, c_id):
@@ -1793,10 +1796,10 @@ def main():
     check_connection()
 
     msg("\n### Parse Input ###")
-    user_input.parse_input()
+    opts.links = parse_input(opts.input)
 
     msg("\n### Download Coubs ###\n")
-    coubs = [Coub(l) for l in user_input.parsed]
+    coubs = [Coub(l) for l in opts.links]
     try:
         attempt_process(coubs)
     finally:
@@ -1808,7 +1811,6 @@ def main():
 # Execute main function
 if __name__ == '__main__':
     opts = Options()
-    user_input = CoubInputData()
     count = 0
     done = 0
 
