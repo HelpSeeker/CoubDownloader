@@ -232,7 +232,6 @@ class Options:
 
     # Input-related (don't touch)
     input = []
-    links = []
 
 
 class BaseContainer:
@@ -752,7 +751,7 @@ class Coub:
 
         # Log status after processing
         count += 1
-        progress = f"[{count: >{len(str(len(opts.links)))}}/{len(opts.links)}]"
+        progress = f"[{count: >{len(str(total))}}/{total}]"
         if self.unavailable:
             err(f"  {progress} {self.link: <30} ... ", color=fgcolors.RESET, end="")
             err("unavailable")
@@ -1451,20 +1450,20 @@ def parse_input(sources):
         msg(f"\nDownload limit ({opts.max_coubs}) reached!",
             color=fgcolors.WARNING)
 
-    total = len(parsed)
-    # Weed out duplicates
-    parsed = list(set(parsed))
-    dupes = total - len(parsed)
+    before = len(parsed)
+    parsed = list(set(parsed))      # Weed out duplicates
+    after = len(parsed)
+    dupes = before - after
     if dupes:
         msg(dedent(f"""
             Results:
-              {total} input link{'s' if total != 1 else ''}
+              {before} input link{'s' if before != 1 else ''}
               {dupes} duplicate{'s' if dupes != 1 else ''}
-              {len(parsed)} final link{'s' if len(parsed) != 1 else ''}"""))
+              {after} final link{'s' if after != 1 else ''}"""))
     else:
         msg(dedent(f"""
             Results:
-              {total} link{'s' if total != 1 else ''}"""))
+              {after} link{'s' if after != 1 else ''}"""))
 
     if opts.out_file:
         with open(opts.out_file, opts.write_method) as f:
@@ -1785,6 +1784,8 @@ def attempt_process(coubs, level=0):
 
 def main():
     """Download all requested coubs."""
+    global total
+
     check_prereq()
     parse_cli()
     check_options()
@@ -1792,10 +1793,11 @@ def main():
     check_connection()
 
     msg("\n### Parse Input ###")
-    opts.links = parse_input(opts.input)
+    links = parse_input(opts.input)
+    total = len(links)
+    coubs = [Coub(l) for l in links]
 
     msg("\n### Download Coubs ###\n")
-    coubs = [Coub(l) for l in opts.links]
     try:
         attempt_process(coubs)
     finally:
@@ -1807,6 +1809,7 @@ def main():
 # Execute main function
 if __name__ == '__main__':
     opts = Options()
+    total = 0
     count = 0
     done = 0
 
