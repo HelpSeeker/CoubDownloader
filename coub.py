@@ -1179,6 +1179,13 @@ def normalize_link(string):
 
 def mapped_input(string):
     """Convert string provided by parse_cli() to valid input source."""
+    # Categorize existing paths as lists
+    # Otherwise the paths would be forced into a coub link like form
+    # which obviously leads to garbled nonsense
+    if os.path.exists(string):
+        path = valid_list(string)
+        return LinkList(path)
+
     link = normalize_link(string)
 
     if "https://coub.com/view/" in link:
@@ -1250,15 +1257,8 @@ def parse_cli():
         try:
             # Input
             if only_input or not fnmatch(opt, "-*"):
-                # Categorize existing paths as lists
-                # Otherwise they would be forced into a coub link like form
-                # which obviously leads to garbled nonsense
-                if os.path.exists(opt):
-                    opt = valid_list(opt)
-                    opts.input.append(LinkList(opt))
-                else:
-                    opt = mapped_input(opt)
-                    opts.input.append(opt)
+                opt = mapped_input(opt)
+                opts.input.append(opt)
             elif opt in ("-i", "--id"):
                 arg = no_url(arg)
                 opts.input.append(f"https://coub.com/view/{arg}")
