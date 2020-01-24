@@ -231,7 +231,7 @@ class CustomArgumentParser(argparse.ArgumentParser):
           -e, --search TERM      download search results for the given term
           -m, --community NAME   download coubs from a community
                                    NAME as seen in the URL (e.g. animals-pets)
-          --hot                  download coubs from the hot section
+          --hot                  download coubs from the hot section (default sorting)
           --input-help           show full input help
 
             Input options do NOT support full URLs.
@@ -337,7 +337,7 @@ class CustomArgumentParser(argparse.ArgumentParser):
             Search:       https://coub.com/search?q=example-term
             Tag:          https://coub.com/tags/example-tag
             Community:    https://coub.com/community/example-community
-            Hot section:  https://coub.com/hot
+            Hot section:  https://coub.com or https://coub.com/hot
 
             URLs which indicate special sort orders are also supported.
 
@@ -384,11 +384,11 @@ class CustomArgumentParser(argparse.ArgumentParser):
 
             https://coub.com/search?q=example-term#top
             tags/example-tag#views_count
-            --hot#rising
+            hot#rising
 
-          This is supported by all input methods. Please note that a manually
-          specified sort order will overwrite the sort order as indicated by
-          the URL.
+          This is supported by all input methods, except the --hot option.
+          Please note that a manually specified sort order will overwrite the
+          sort order as indicated by the URL.
 
           Supported sort orders
           ---------------------
@@ -691,9 +691,10 @@ class HotSection(BaseContainer):
     """Store and parse the hot section."""
     type = "hot section"
 
-    def __init__(self, id_):
-        super(HotSection, self).__init__(id_)
+    def __init__(self, sort=None):
+        super(HotSection, self).__init__("hot")
         self.id = None
+        self.sort = sort
         # Available:      hot_daily, hot_weekly, hot_monthly, hot_quarterly,
         #                 hot_six_months, rising, fresh
         # Coub's default: hot_monthly
@@ -1240,7 +1241,10 @@ def mapped_input(string):
     elif "https://coub.com/hot" in link or \
          "https://coub.com#" in link or \
          link.strip("/") == "https://coub.com":
-        sort = link.partition("https://coub.com")[2]
+        try:
+            _, sort = link.split("#")
+        except ValueError:
+            sort = None
         source = HotSection(sort)
     # Unfortunately channel URLs don't have any special characteristics
     # and are basically the fallthrough link type
@@ -1270,7 +1274,8 @@ def parse_cli():
                         type=Search)
     parser.add_argument("-m", "--community", dest="input", action="append",
                         type=Community)
-    #parser.add_argument("--hot", dest="input", action="append", type=HotSection)
+    parser.add_argument("--hot", dest="input", action="append_const",
+                        const=HotSection())
     parser.add_argument("--input-help", action=InputHelp)
     # Common Options
     parser.add_argument("-q", "--quiet", dest="verbosity", action="store_const",
