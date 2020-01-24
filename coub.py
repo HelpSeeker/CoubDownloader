@@ -36,48 +36,7 @@ except ModuleNotFoundError:
         colors = False
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-# Global constants
-# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-class ExitCodes:
-    """Store exit codes for non-successful execution."""
-
-    DEP = 1         # missing required software
-    OPT = 2         # invalid user-specified option
-    RUN = 3         # misc. runtime error
-    DOWN = 4        # failed to download all input links (existence == success)
-    INT = 5         # early termination was requested by the user (i.e. Ctrl+C)
-    CONN = 6        # connection either couldn't be established or was lost
-
-
-class Colors:
-    """Store ANSI escape codes for colorized output."""
-
-    # https://en.wikipedia.org/wiki/ANSI_escape_code#Colors
-    ERROR = '\033[31m'      # red
-    WARNING = '\033[33m'    # yellow
-    SUCCESS = '\033[32m'    # green
-    RESET = '\033[0m'
-
-    def disable(self):
-        """Disable colorized output by removing escape codes."""
-        # I'm not going to stop addressing these attributes as constants, just
-        # because Windows thinks it needs to be special
-        self.ERROR = ''
-        self.SUCCESS = ''
-        self.WARNING = ''
-        self.RESET = ''
-
-
-# Create objects to hold constants
-status = ExitCodes()
-fgcolors = Colors()
-
-if not colors:
-    fgcolors.disable()
-
-# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-# Classes
+# Default Options
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 class DefaultOptions:
@@ -192,6 +151,55 @@ class DefaultOptions:
     # Usage of an archive file is recommended in such an instance
     OUT_FORMAT = None
 
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# Classes For Global Variables
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+class ExitCodes:
+    """Store exit codes for non-successful execution."""
+
+    DEP = 1         # missing required software
+    OPT = 2         # invalid user-specified option
+    RUN = 3         # misc. runtime error
+    DOWN = 4        # failed to download all input links (existence == success)
+    INT = 5         # early termination was requested by the user (i.e. Ctrl+C)
+    CONN = 6        # connection either couldn't be established or was lost
+
+
+class Colors:
+    """Store ANSI escape codes for colorized output."""
+
+    # https://en.wikipedia.org/wiki/ANSI_escape_code#Colors
+    ERROR = '\033[31m'      # red
+    WARNING = '\033[33m'    # yellow
+    SUCCESS = '\033[32m'    # green
+    RESET = '\033[0m'
+
+    def disable(self):
+        """Disable colorized output by removing escape codes."""
+        # I'm not going to stop addressing these attributes as constants, just
+        # because Windows thinks it needs to be special
+        self.ERROR = ''
+        self.SUCCESS = ''
+        self.WARNING = ''
+        self.RESET = ''
+
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# Global Variables
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+status = ExitCodes()
+fgcolors = Colors()
+if not colors:
+    fgcolors.disable()
+
+total = 0
+count = 0
+done = 0
+
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# Classes
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 class InputHelp(argparse.Action):
     """Custom action to print input help."""
@@ -1779,7 +1787,6 @@ def main():
     global total
 
     check_prereq()
-    parse_cli()
     check_options()
     resolve_paths()
     check_connection()
@@ -1801,10 +1808,6 @@ def main():
 # Execute main function
 if __name__ == '__main__':
     opts = parse_cli()
-    total = 0
-    count = 0
-    done = 0
-
     try:
         main()
     except KeyboardInterrupt:
