@@ -201,6 +201,7 @@ class InputHelp(argparse.Action):
 
     def __init__(self, **kwargs):
         super(InputHelp, self).__init__(nargs=0, **kwargs)
+
     def __call__(self, parser, namespace, values, option_string=None):
         parser.print_input_help()
         parser.exit()
@@ -1063,7 +1064,7 @@ def check_connection():
 def no_url(string):
     """Test if direct input is an URL."""
     if "coub.com" in string:
-        raise ValueError("input options don't support URLs")
+        raise argparse.ArgumentTypeError("input options don't support URLs")
     return string
 
 
