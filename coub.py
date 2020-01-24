@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
 
+import argparse
 import asyncio
 import json
 import os
@@ -80,7 +81,7 @@ if not colors:
 # Classes
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-class Options:
+class DefaultOptions:
     """Define and store all import user settings."""
 
     # Change verbosity of the script
@@ -153,16 +154,17 @@ class Options:
     # Leads to shorter videos, also no further quality selection
     share = False
 
-    # Download reposts during channel downloads
+    # How to treat recoubs during channel downloads
+    #   recoubs = False     -> Only Original
+    #   recoubs = True      -> Original + Recoubs
+    #   only_recoubs = True -> Only Recoubs
+    # recoubs mustn't be False, when only_recoubs is True
     recoubs = True
-
-    # ONLY download reposts during channel downloads
     only_recoubs = False
 
     # Preview a downloaded coub with the given command
     # Keyboard shortcuts may not work for CLI audio players
-    preview = False
-    preview_command = "mpv"
+    preview = None
 
     # Only download video/audio stream
     # a_only and v_only are mutually exclusive
@@ -178,7 +180,6 @@ class Options:
     #   archive_path -> path to the archive
     #   archive      -> content of the archive
     archive_path = None
-    archive = None
 
     # Output name formatting (default: %id%)
     # Supports the following special keywords:
@@ -194,44 +195,241 @@ class Options:
     # Usage of an archive file is recommended in such an instance
     out_format = None
 
-    # Advanced settings
-    coubs_per_page = 25       # allowed: 1-25
-    tag_sep = "_"
 
-    # How to open output lists (--write-list)
-    #   w -> overwrite file
-    #   a -> append to file
-    write_method = "w"
+class InputHelp(argparse.Action):
+    """Custom action to print input help."""
 
-    # Container to mux video/audio into (must support AVC, MP3 and AAC)
-    merge_ext = "mkv"
+    def __init__(self, **kwargs):
+        super(InputHelp, self).__init__(nargs=0, **kwargs)
+    def __call__(self, parser, namespace, values, option_string=None):
+        parser.print_input_help()
+        parser.exit()
 
-    # Default sort order for various input types
-    #
-    # Channels:     most_recent, most_liked, most_viewed, oldest, random
-    # Tags:         popular, top, views_count, fresh
-    # Searches:     relevance, top, views_count, most_recent
-    # Communities:  hot_daily, hot_weekly, hot_monthly, hot_quarterly, hot_six_months
-    #               rising, fresh, top, views_count, random
-    # Hot section:  hot_daily, hot_weekly, hot_monthly, hot_quarterly, hot_six_months
-    #               rising, fresh
-    #
-    # Coub's own defaults are:
-    #   Channel:    most_recent
-    #   Tags:       popular
-    #   Search:     relevance
-    #   Community:  hot_monthly
-    #   Hot:        hot_monthly
-    default_sort = {
-        'channel': "most_recent",
-        'tag': "popular",
-        'search': "relevance",
-        'community': "hot_monthly",
-        'hot section': "hot_monthly",
-    }
 
-    # Input-related (don't touch)
-    input = []
+class CustomArgumentParser(argparse.ArgumentParser):
+    """Override ArgumentParser's automatic help text formatting."""
+
+    def print_input_help(self, file=None):
+        """Slightly changed version of the internal print_help method."""
+        if file is None:
+            file = sys.stdout
+        self._print_message(self.format_input_help(), file)
+
+    def format_help(self):
+        """Return custom help text."""
+        help_text = dedent(f"""\
+        CoubDownloader is a simple download script for coub.com
+
+        Usage: {self.prog} [OPTIONS] INPUT [INPUT]...
+
+        Input:
+          URL                    download coub(s) from the given URL
+          -i, --id ID            download a single coub
+          -l, --list PATH        read coub links from a text file
+          -c, --channel NAME     download coubs from a channel
+          -t, --tag TAG          download coubs with the specified tag
+          -e, --search TERM      download search results for the given term
+          -m, --community NAME   download coubs from a community
+                                   NAME as seen in the URL (e.g. animals-pets)
+          --hot                  download coubs from the hot section
+          --input-help           show full input help
+
+            Input options do NOT support full URLs.
+            Both URLs and input options support sorting (see --input-help).
+
+        Common options:
+          -h, --help             show this help
+          -q, --quiet            suppress all non-error/prompt messages
+          -y, --yes              answer all prompts with yes
+          -n, --no               answer all prompts with no
+          -s, --short            disable video looping
+          -p, --path PATH        set output destination (def: '{self.get_default("path")}')
+          -k, --keep             keep the individual video/audio parts
+          -r, --repeat N         repeat video N times (def: until audio ends)
+          -d, --duration TIME    specify max. coub duration (FFmpeg syntax)
+
+        Download options:
+          --connections N        max. number of connections (def: {self.get_default("connect")})
+          --retries N            number of retries when connection is lost (def: {self.get_default("retries")})
+                                   0 to disable, <0 to retry indefinitely
+          --limit-num LIMIT      limit max. number of downloaded coubs
+
+        Format selection:
+          --bestvideo            download best available video quality (def)
+          --worstvideo           download worst available video quality
+          --max-video FORMAT     set limit for the best video format (def: {self.get_default("v_max")})
+                                   Supported values: med, high, higher
+          --min-video FORMAT     set limit for the worst video format (def: {self.get_default("v_min")})
+                                   Supported values: med, high, higher
+          --bestaudio            download best available audio quality (def)
+          --worstaudio           download worst available audio quality
+          --aac                  prefer AAC over higher quality MP3 audio
+          --aac-strict           only download AAC audio (never MP3)
+          --share                download 'share' video (shorter and includes audio)
+
+        Channel options:
+          --recoubs              include recoubs during channel downloads (def)
+          --no-recoubs           exclude recoubs during channel downloads
+          --only-recoubs         only download recoubs during channel downloads
+
+        Preview options:
+          --preview COMMAND      play finished coub via the given command
+          --no-preview           explicitly disable coub preview
+
+        Misc. options:
+          --audio-only           only download audio streams
+          --video-only           only download video streams
+          --write-list FILE      write all parsed coub links to FILE
+          --use-archive FILE     use FILE to keep track of already downloaded coubs
+
+        Output:
+          -o, --output FORMAT    save output with the specified name (def: %id%)
+
+            Special strings:
+              %id%        - coub ID (identifier in the URL)
+              %title%     - coub title
+              %creation%  - creation date/time
+              %community% - coub community
+              %channel%   - channel title
+              %tags%      - all tags (separated by {self.get_default("tag_sep")})
+
+            Other strings will be interpreted literally.
+            This option has no influence on the file extension.
+        """)
+
+        return help_text
+
+    @staticmethod
+    def format_input_help():
+        """Print help text regarding input and input options."""
+        help_text = dedent(f"""\
+        CoubDownloader Full Input Help
+
+        Contents
+        ========
+
+          1. Input Types
+          2. Input Methods
+          3. Sorting
+
+        1. Input Types
+        ==============
+
+          -) Direct coub links
+          -) Lists
+          -) Channels
+          -) Searches
+          -) Tags
+          -) Communities (partially*)
+          -) Hot section
+
+          * 'Featured' and 'Coub of the Day' are not yet supported as they use
+            different API endpoints.
+
+        2. Input Methods
+        ================
+
+          1) Direct URLs from coub.com (or list paths)
+
+            Single Coub:  https://coub.com/view/1234567
+            List:         path/to/list.txt
+            Channel:      https://coub.com/example-channel
+            Search:       https://coub.com/search?q=example-term
+            Tag:          https://coub.com/tags/example-tag
+            Community:    https://coub.com/community/example-community
+            Hot section:  https://coub.com/hot
+
+            URLs which indicate special sort orders are also supported.
+
+          2) Input option + channel name/tag/search term/etc.
+
+            Single Coub:  -i 1234567            or  --id 1234567
+            List:         -l path/to/list.txt   or  --list path/to/list.txt
+            Channel:      -c example-channel    or  --channel example-channel
+            Search:       -e example-term       or  --search example-term
+            Tag:          -t example-tag        or  --tag example-tag
+            Community:    -m example-community  or  --community example-community
+            Hot section:  --hot
+
+          3) Prefix + channel name/tag/search term/etc.
+
+            A subform of 1). Utilizes the script's ability to autocomplete/format
+            incomplete URLs.
+
+            Single Coub:  view/1234567
+            Channel:      example-channel
+            Search:       search?q=example-term
+            Tag:          tags/example-tag
+            Community:    community/example-community
+            Hot section:  hot
+
+        3. Sorting
+        ==========
+
+          Input types which return lists of coub links (e.g. channels or tags)
+          support custom sorting/selection methods (I will refer to both as sort
+          orders from now on). This is mainly useful when used in combination with
+          --limit-num (e.g. download the 100 most popular coubs with a given tag),
+          but sometimes it also changes the list of returned links drastically
+          (e.g. a community's most popular coubs of a month vs. a week).
+
+          Sort orders can either be specified by providing an URL that already
+          indicates special sorting
+
+            https://coub.com/search/likes?q=example-term
+            https://coub.com/tags/example-tag/views
+            https://coub.com/rising
+
+          or by adding it manually to the input with '#' as separator
+
+            https://coub.com/search?q=example-term#top
+            tags/example-tag#views_count
+            --hot#rising
+
+          This is supported by all input methods. Please note that a manually
+          specified sort order will overwrite the sort order as indicated by
+          the URL.
+
+          Supported sort orders
+          ---------------------
+
+            Channels:     most_recent (default)
+                          most_liked
+                          most_viewed
+                          oldest
+                          random
+
+            Searches:     relevance (default)
+                          top
+                          views_count
+                          most_recent
+
+            Tags:         popular (default)
+                          top
+                          views_count
+                          fresh
+
+            Communities:  hot_daily
+                          hot_weekly
+                          hot_monthly (default)
+                          hot_quarterly
+                          hot_six_months
+                          rising
+                          fresh
+                          top
+                          views_count
+                          random
+
+            Hot section:  hot_daily
+                          hot_weekly
+                          hot_monthly (default)
+                          hot_quarterly
+                          hot_six_months
+                          rising
+                          fresh
+        """)
+
+        return help_text
 
 
 class BaseContainer:
@@ -239,25 +437,22 @@ class BaseContainer:
     type = None
 
     def __init__(self, id_):
-        """Initialize object."""
         self.valid = True
         self.pages = 0
         self.template = ""
 
+        id_ = no_url(id_)
         try:
             self.id, self.sort = id_.split("#")
         except ValueError:
             self.id = id_
-            self.sort = opts.default_sort[self.type]
+            self.sort = None
 
         # Links copied from the browser already have special characters escaped
         # Using urlquote on them again in the template functions would lead
         # to invalid templates
         # Also prettifies messages that show the ID as info
         self.id = urlunquote(self.id)
-
-        if self.type == "hot section":
-            self.id = None
 
     def get_template(self):
         """Placeholder function, which must be overwritten by subclasses."""
@@ -278,10 +473,6 @@ class BaseContainer:
             return
 
         self.pages = resp_json['total_pages']
-        # tag/community timeline redirects pages >99 to page 1
-        # other timelines work like intended
-        if self.type in ("tag", "community") and self.pages > 99:
-            self.pages = 99
 
     async def process(self, quantity=None):
         """
@@ -336,6 +527,13 @@ class Channel(BaseContainer):
     """Store and parse channels."""
     type = "channel"
 
+    def __init__(self, id_):
+        super(Channel, self).__init__(id_)
+        # Available:      most_recent, most_liked, most_viewed, oldest, random
+        # Coub's default: most_recent
+        if not self.sort:
+            self.sort = "most_recent"
+
     def get_template(self):
         """Return API request template for channels."""
         methods = {
@@ -368,6 +566,13 @@ class Tag(BaseContainer):
     """Store and parse tags."""
     type = "tag"
 
+    def __init__(self, id_):
+        super(Tag, self).__init__(id_)
+        # Available:      popular, top, views_count, fresh
+        # Coub's default: popular
+        if not self.sort:
+            self.sort = "popular"
+
     def get_template(self):
         """Return API request template for tags."""
         methods = {
@@ -389,10 +594,23 @@ class Tag(BaseContainer):
 
         self.template = template
 
+    def get_page_count(self):
+        super(Tag, self).get_page_count()
+        # API limits tags to 99 pages
+        if self.pages > 99:
+            self.pages = 99
+
 
 class Search(BaseContainer):
     """Store and parse searches."""
     type = "search"
+
+    def __init__(self, id_):
+        super(Search, self).__init__(id_)
+        # Available:      relevance, top, views_count, most_recent
+        # Coub's default: relevance
+        if not self.sort:
+            self.sort = "relevance"
 
     def get_template(self):
         """Return API request template for coub searches."""
@@ -421,6 +639,14 @@ class Search(BaseContainer):
 class Community(BaseContainer):
     """Store and parse communities."""
     type = "community"
+
+    def __init__(self, id_):
+        super(Community, self).__init__(id_)
+        # Available:      hot_daily, hot_weekly, hot_monthly, hot_quarterly,
+        #                 hot_six_months, rising, fresh, top, views_count, random
+        # Coub's default: hot_monthly
+        if not self.sort:
+            self.sort = "hot_monthly"
 
     def get_template(self):
         """Return API request template for communities."""
@@ -454,10 +680,25 @@ class Community(BaseContainer):
 
         self.template = template
 
+    def get_page_count(self):
+        super(Community, self).get_page_count()
+        # API limits communities to 99 pages
+        if self.pages > 99:
+            self.pages = 99
+
 
 class HotSection(BaseContainer):
     """Store and parse the hot section."""
     type = "hot section"
+
+    def __init__(self, id_):
+        super(HotSection, self).__init__(id_)
+        self.id = None
+        # Available:      hot_daily, hot_weekly, hot_monthly, hot_quarterly,
+        #                 hot_six_months, rising, fresh
+        # Coub's default: hot_monthly
+        if not self.sort:
+            self.sort = "hot_monthly"
 
     def get_template(self):
         """Return API request template for Coub's hot section."""
@@ -484,14 +725,19 @@ class HotSection(BaseContainer):
 
         self.template = template
 
+    def get_page_count(self):
+        super(HotSection, self).get_page_count()
+        # API limits hot section to 99 pages
+        if self.pages > 99:
+            self.pages = 99
+
 
 class LinkList:
     """Store and parse link lists."""
     type = "list"
 
     def __init__(self, path):
-        """Initialize list object."""
-        self.id = os.path.abspath(path)
+        self.id = valid_list(path)
         self.sort = None
 
     async def process(self, quantity=None):
@@ -519,7 +765,6 @@ class Coub:
     """Store all relevant infos and methods to process a single coub."""
 
     def __init__(self, link):
-        """Initialize a Coub object."""
         self.link = link
         self.id = link.split("/")[-1]
         self.req = f"https://coub.com/api/v2/coubs/{self.id}"
@@ -710,7 +955,7 @@ class Coub:
 
         try:
             # Need to split command string into list for check_call
-            command = opts.preview_command.split(" ")
+            command = opts.preview.split(" ")
             command.append(play)
             subprocess.check_call(command, stdout=subprocess.DEVNULL, \
                                            stderr=subprocess.DEVNULL)
@@ -796,215 +1041,6 @@ def msg(*args, color=fgcolors.RESET, **kwargs):
         sys.stdout.write(fgcolors.RESET)
 
 
-def usage():
-    """Print the help text."""
-    print(f"""CoubDownloader is a simple download script for coub.com
-
-Usage: {os.path.basename(sys.argv[0])} [OPTIONS] INPUT [INPUT]...
-
-Input:
-  URL                    download coub(s) from the given URL
-  -i, --id ID            download a single coub
-  -l, --list PATH        read coub links from a text file
-  -c, --channel NAME     download coubs from a channel
-  -t, --tag TAG          download coubs with the specified tag
-  -e, --search TERM      download search results for the given term
-  -m, --community NAME   download coubs from a community
-                           NAME as seen in the URL (e.g. animals-pets)
-  --hot                  download coubs from the hot section
-  --input-help           show full input help
-
-    Input options do NOT support full URLs.
-    Both URLs and input options support sorting (see --input-help).
-
-Common options:
-  -h, --help             show this help
-  -q, --quiet            suppress all non-error/prompt messages
-  -y, --yes              answer all prompts with yes
-  -n, --no               answer all prompts with no
-  -s, --short            disable video looping
-  -p, --path PATH        set output destination (def: '{opts.path}')
-  -k, --keep             keep the individual video/audio parts
-  -r, --repeat N         repeat video N times (def: until audio ends)
-  -d, --duration TIME    specify max. coub duration (FFmpeg syntax)
-
-Download options:
-  --connections N        max. number of connections (def: {opts.connect})
-  --retries N            number of retries when connection is lost (def: {opts.retries})
-                           0 to disable, <0 to retry indefinitely
-  --limit-num LIMIT      limit max. number of downloaded coubs
-
-Format selection:
-  --bestvideo            download best available video quality (def)
-  --worstvideo           download worst available video quality
-  --max-video FORMAT     set limit for the best video format (def: {opts.v_max})
-                           Supported values: med, high, higher
-  --min-video FORMAT     set limit for the worst video format (def: {opts.v_min})
-                           Supported values: med, high, higher
-  --bestaudio            download best available audio quality (def)
-  --worstaudio           download worst available audio quality
-  --aac                  prefer AAC over higher quality MP3 audio
-  --aac-strict           only download AAC audio (never MP3)
-  --share                download 'share' video (shorter and includes audio)
-
-Channel options:
-  --recoubs              include recoubs during channel downloads (def)
-  --no-recoubs           exclude recoubs during channel downloads
-  --only-recoubs         only download recoubs during channel downloads
-
-Preview options:
-  --preview COMMAND      play finished coub via the given command
-  --no-preview           explicitly disable coub preview
-
-Misc. options:
-  --audio-only           only download audio streams
-  --video-only           only download video streams
-  --write-list FILE      write all parsed coub links to FILE
-  --use-archive FILE     use FILE to keep track of already downloaded coubs
-
-Output:
-  -o, --output FORMAT    save output with the specified name (def: %id%)
-
-    Special strings:
-      %id%        - coub ID (identifier in the URL)
-      %title%     - coub title
-      %creation%  - creation date/time
-      %community% - coub community
-      %channel%   - channel title
-      %tags%      - all tags (separated by {opts.tag_sep})
-
-    Other strings will be interpreted literally.
-    This option has no influence on the file extension.""")
-
-
-def usage_input():
-    """Print help text regarding input and input options."""
-    print(f"""CoubDownloader Full Input Help
-
-Contents
-========
-
-  1. Input Types
-  2. Input Methods
-  3. Sorting
-
-1. Input Types
-==============
-
-  -) Direct coub links
-  -) Lists
-  -) Channels
-  -) Searches
-  -) Tags
-  -) Communities (partially*)
-  -) Hot section
-
-  * 'Featured' and 'Coub of the Day' are not yet supported as they use
-    different API endpoints.
-
-2. Input Methods
-================
-
-  1) Direct URLs from coub.com (or list paths)
-
-    Single Coub:  https://coub.com/view/1234567
-    List:         path/to/list.txt
-    Channel:      https://coub.com/example-channel
-    Search:       https://coub.com/search?q=example-term
-    Tag:          https://coub.com/tags/example-tag
-    Community:    https://coub.com/community/example-community
-    Hot section:  https://coub.com/hot
-
-    URLs which indicate special sort orders are also supported.
-
-  2) Input option + channel name/tag/search term/etc.
-
-    Single Coub:  -i 1234567            or  --id 1234567
-    List:         -l path/to/list.txt   or  --list path/to/list.txt
-    Channel:      -c example-channel    or  --channel example-channel
-    Search:       -e example-term       or  --search example-term
-    Tag:          -t example-tag        or  --tag example-tag
-    Community:    -m example-community  or  --community example-community
-    Hot section:  --hot
-
-  3) Prefix + channel name/tag/search term/etc.
-
-    A subform of 1). Utilizes the script's ability to autocomplete/format
-    incomplete URLs.
-
-    Single Coub:  view/1234567
-    Channel:      example-channel
-    Search:       search?q=example-term
-    Tag:          tags/example-tag
-    Community:    community/example-community
-    Hot section:  hot
-
-3. Sorting
-==========
-
-  Input types which return lists of coub links (e.g. channels or tags)
-  support custom sorting/selection methods (I will refer to both as sort
-  orders from now on). This is mainly useful when used in combination with
-  --limit-num (e.g. download the 100 most popular coubs with a given tag),
-  but sometimes it also changes the list of returned links drastically
-  (e.g. a community's most popular coubs of a month vs. a week).
-
-  Sort orders can either be specified by providing an URL that already
-  indicates special sorting
-
-    https://coub.com/search/likes?q=example-term
-    https://coub.com/tags/example-tag/views
-    https://coub.com/rising
-
-  or by adding it manually to the input with '#' as separator
-
-    https://coub.com/search?q=example-term#top
-    tags/example-tag#views_count
-    --hot#rising
-
-  This is supported by all input methods. Please note that a manually
-  specified sort order will overwrite the sort order as indicated by
-  the URL.
-
-  Supported sort orders
-  ---------------------
-
-    Channels:     most_recent (default)
-                  most_liked
-                  most_viewed
-                  oldest
-                  random
-
-    Searches:     relevance (default)
-                  top
-                  views_count
-                  most_recent
-
-    Tags:         popular (default)
-                  top
-                  views_count
-                  fresh
-
-    Communities:  hot_daily
-                  hot_weekly
-                  hot_monthly (default)
-                  hot_quarterly
-                  hot_six_months
-                  rising
-                  fresh
-                  top
-                  views_count
-                  random
-
-    Hot section:  hot_daily
-                  hot_weekly
-                  hot_monthly (default)
-                  hot_quarterly
-                  hot_six_months
-                  rising
-                  fresh""")
-
-
 def check_prereq():
     """Test if all required 3rd-party tools are installed."""
     try:
@@ -1031,11 +1067,21 @@ def no_url(string):
     return string
 
 
+def direct_link(string):
+    """Convert string provided by parse_cli() to a direct coub link."""
+    coub_id = no_url(string)
+    link = f"https://coub.com/view/{coub_id}"
+    return link
+
+
 def positive_int(string):
     """Convert string provided by parse_cli() to a positive int."""
-    value = int(string)
-    if value <= 0:
-        raise ValueError("invalid positive int")
+    try:
+        value = int(string)
+        if value <= 0:
+            raise ValueError
+    except ValueError:
+        raise argparse.ArgumentTypeError("invalid positive int")
     return value
 
 
@@ -1050,16 +1096,8 @@ def valid_time(string):
     try:
         subprocess.check_call(command)
     except subprocess.CalledProcessError:
-        raise ValueError(f"invalid time syntax ('{string}')")
+        raise argparse.ArgumentTypeError("invalid time syntax")
 
-    return string
-
-
-def valid_quality(string):
-    """Test validity of format specifier."""
-    formats = ["med", "high", "higher"]
-    if string not in formats:
-        raise ValueError(f"invalid quality ('{string}')")
     return string
 
 
@@ -1070,9 +1108,9 @@ def valid_list(string):
         with open(path, "r") as f:
             _ = f.read(1)
     except FileNotFoundError:
-        raise ValueError(f"list doesn't exist ('{path}')")
+        raise argparse.ArgumentTypeError("path doesn't exist")
     except (OSError, UnicodeError):
-        raise ValueError(f"invalid list ('{path}')")
+        raise argparse.ArgumentTypeError("invalid list")
 
     return path
 
@@ -1086,7 +1124,7 @@ def valid_archive(string):
     except FileNotFoundError:
         pass
     except (OSError, UnicodeError):
-        raise ValueError(f"invalid archive file ('{path}')")
+        raise argparse.ArgumentTypeError("invalid archive file")
 
     return path
 
@@ -1214,178 +1252,128 @@ def mapped_input(string):
 
 def parse_cli():
     """Parse the command line."""
+    defaults = DefaultOptions()
+    parser = CustomArgumentParser(usage="%(prog)s [OPTIONS] INPUT [INPUT]...")
+
+    # Input
+    parser.add_argument("raw_input", nargs="*", type=mapped_input)
+    parser.add_argument("-i", "--id", dest="input", action="append",
+                        type=direct_link)
+    parser.add_argument("-l", "--list", dest="input", action="append",
+                        type=LinkList)
+    parser.add_argument("-c", "--channel", dest="input", action="append",
+                        type=Channel)
+    parser.add_argument("-t", "--tag", dest="input", action="append",
+                        type=Tag)
+    parser.add_argument("-e", "--search", dest="input", action="append",
+                        type=Search)
+    parser.add_argument("-m", "--community", dest="input", action="append",
+                        type=Community)
+    #parser.add_argument("--hot", dest="input", action="append", type=HotSection)
+    parser.add_argument("--input-help", action=InputHelp)
+    # Common Options
+    parser.add_argument("-q", "--quiet", dest="verbosity", action="store_const",
+                        const=0, default=defaults.verbosity)
+    prompt = parser.add_mutually_exclusive_group()
+    prompt.add_argument("-y", "--yes", dest="prompt_answer", action="store_const",
+                        const="yes", default=defaults.prompt_answer)
+    prompt.add_argument("-n", "--no", dest="prompt_answer", action="store_const",
+                        const="no", default=defaults.prompt_answer)
+    repeat = parser.add_mutually_exclusive_group()
+    repeat.add_argument("-s", "--short", dest="repeat", action="store_const",
+                        const=1, default=defaults.repeat)
+    repeat.add_argument("-r", "--repeat", type=positive_int, default=defaults.repeat)
+    parser.add_argument("-p", "--path", default=defaults.path)
+    parser.add_argument("-k", "--keep", action="store_true", default=defaults.keep)
+    parser.add_argument("-d", "--duration", dest="dur", type=valid_time,
+                        default=defaults.dur)
+    # Download Options
+    parser.add_argument("--connections", dest="connect", type=positive_int,
+                        default=defaults.connect)
+    parser.add_argument("--retries", type=int, default=defaults.retries)
+    parser.add_argument("--limit-num", dest="max_coubs", type=positive_int,
+                        default=defaults.max_coubs)
+    # Format Selection
+    v_qual = parser.add_mutually_exclusive_group()
+    v_qual.add_argument("--bestvideo", dest="v_quality", action="store_const",
+                        const=-1, default=defaults.v_quality)
+    v_qual.add_argument("--worstvideo", dest="v_quality", action="store_const",
+                        const=0, default=defaults.v_quality)
+    a_qual = parser.add_mutually_exclusive_group()
+    a_qual.add_argument("--bestaudio", dest="a_quality", action="store_const",
+                        const=-1, default=defaults.a_quality)
+    a_qual.add_argument("--worstaudio", dest="a_quality", action="store_const",
+                        const=0, default=defaults.a_quality)
+    parser.add_argument("--max-video", dest="v_max", default=defaults.v_max,
+                        choices=["med", "high", "higher"])
+    parser.add_argument("--min-video", dest="v_min", default=defaults.v_min,
+                        choices=["med", "high", "higher"])
+    aac = parser.add_mutually_exclusive_group()
+    aac.add_argument("--aac", action="store_const", const=2, default=defaults.aac)
+    aac.add_argument("--aac-strict", dest="aac", action="store_const", const=3,
+                     default=defaults.aac)
+    # Channel Options
+    recoub = parser.add_mutually_exclusive_group()
+    recoub.add_argument("--recoubs", action="store_true", default=defaults.recoubs)
+    recoub.add_argument("--no-recoubs", dest="recoubs", action="store_false",
+                        default=defaults.recoubs)
+    recoub.add_argument("--only-recoubs", action="store_true",
+                        default=defaults.only_recoubs)
+    # Preview Options
+    player = parser.add_mutually_exclusive_group()
+    player.add_argument("--preview", default=defaults.preview)
+    player.add_argument("--no-preview", dest="preview", action="store_const",
+                        const=None, default=defaults.preview)
+    # Misc. Options
+    stream = parser.add_mutually_exclusive_group()
+    stream.add_argument("--audio-only", dest="a_only", action="store_true",
+                        default=defaults.a_only)
+    stream.add_argument("--video-only", dest="v_only", action="store_true",
+                        default=defaults.v_only)
+    stream.add_argument("--share", action="store_true", default=defaults.share)
+    parser.add_argument("--write-list", dest="out_file", type=os.path.abspath,
+                        default=defaults.out_file)
+    parser.add_argument("--use-archive", dest="archive_path", type=valid_archive,
+                        default=defaults.archive_path)
+    # Output
+    parser.add_argument("-o", "--output", dest="out_format",
+                        default=defaults.out_format)
+
+    # Advanced Options
+    parser.set_defaults(
+        coubs_per_page=25,      # allowed: 1-25
+        tag_sep="_",
+        write_method="w",       # w -> overwrite, a -> append
+        merge_ext="mkv",        # must support AVC, MP3 and AAC streams
+    )
+
     if not sys.argv[1:]:
-        usage()
+        parser.print_help()
         sys.exit(0)
 
-    with_arg = [
-        "-i", "--id",
-        "-l", "--list",
-        "-c", "--channel",
-        "-t", "--tag",
-        "-e", "--search",
-        "-m", "--community",
-        "-p", "--path",
-        "-r", "--repeat",
-        "-d", "--duration",
-        "--connections",
-        "--retries",
-        "--limit-num",
-        "--max-video",
-        "--min-video",
-        "--preview",
-        "--write-list",
-        "--use-archive",
-        "-o", "--output",
-    ]
+    args = parser.parse_args()
 
-    only_input = False
-    pos = 1
-    while pos < len(sys.argv):
-        opt = sys.argv[pos]
-        if opt in with_arg and not only_input:
-            try:
-                arg = sys.argv[pos+1]
-            except IndexError:
-                err(f"Missing value for '{opt}'!")
-                sys.exit(status.OPT)
+    # Append raw input (no option) to the regular input list
+    if args.input:
+        args.input.extend(args.raw_input)
+    else:
+        args.input = args.raw_input
+    # Read archive content
+    if args.archive_path and os.path.exists(args.archive_path):
+        with open(args.archive_path, "r") as f:
+            args.archive = [l.strip() for l in f]
+    else:
+        args.archive = None
+    # The default naming scheme is the same as using %id%
+    # but internally the default value is None
+    if args.out_format == "%id%":
+        args.out_format = None
 
-            pos += 2
-        else:
-            pos += 1
-
-        try:
-            # Input
-            if only_input or not fnmatch(opt, "-*"):
-                opt = mapped_input(opt)
-                opts.input.append(opt)
-            elif opt in ("-i", "--id"):
-                arg = no_url(arg)
-                opts.input.append(f"https://coub.com/view/{arg}")
-            elif opt in ("-l", "--list"):
-                arg = valid_list(arg)
-                opts.input.append(LinkList(arg))
-            elif opt in ("-c", "--channel"):
-                arg = no_url(arg)
-                opts.input.append(Channel(arg))
-            elif opt in ("-t", "--tag"):
-                arg = no_url(arg)
-                opts.input.append(Tag(arg))
-            elif opt in ("-e", "--search"):
-                arg = no_url(arg)
-                opts.input.append(Search(arg))
-            elif opt in ("-m", "--community",):
-                arg = no_url(arg)
-                opts.input.append(Community(arg))
-            # Hot section selection doesn't have an argument, so the option
-            # itself can come with a sort order attached
-            elif fnmatch(opt, "--hot*"):
-                opts.input.append(HotSection(opt))
-            elif opt in ("--input-help",):
-                usage_input()
-                sys.exit(0)
-            # Common options
-            elif opt in ("-h", "--help"):
-                usage()
-                sys.exit(0)
-            elif opt in ("-q", "--quiet"):
-                opts.verbosity = 0
-            elif opt in ("-y", "--yes"):
-                opts.prompt_answer = "yes"
-            elif opt in ("-n", "--no"):
-                opts.prompt_answer = "no"
-            elif opt in ("-s", "--short"):
-                opts.repeat = 1
-            elif opt in ("-p", "--path"):
-                opts.path = arg
-            elif opt in ("-k", "--keep"):
-                opts.keep = True
-            elif opt in ("-r", "--repeat"):
-                opts.repeat = positive_int(arg)
-            elif opt in ("-d", "--duration"):
-                opts.dur = valid_time(arg)
-            # Download options
-            elif opt in ("--connections",):
-                opts.connect = positive_int(arg)
-            elif opt in ("--retries",):
-                opts.retries = int(arg)
-            elif opt in ("--limit-num",):
-                opts.max_coubs = positive_int(arg)
-            # Format selection
-            elif opt in ("--bestvideo",):
-                opts.v_quality = -1
-            elif opt in ("--worstvideo",):
-                opts.v_quality = 0
-            elif opt in ("--max-video",):
-                opts.v_max = valid_quality(arg)
-            elif opt in ("--min-video",):
-                opts.v_min = valid_quality(arg)
-            elif opt in ("--bestaudio",):
-                opts.a_quality = -1
-            elif opt in ("--worstaudio",):
-                opts.a_quality = 0
-            elif opt in ("--aac",):
-                opts.aac = 2
-            elif opt in ("--aac-strict",):
-                opts.aac = 3
-            elif opt in ("--share",):
-                opts.share = True
-            # Channel options
-            elif opt in ("--recoubs",):
-                opts.recoubs = True
-            elif opt in ("--no-recoubs",):
-                opts.recoubs = False
-            elif opt in ("--only-recoubs",):
-                opts.only_recoubs = True
-            # Preview options
-            elif opt in ("--preview",):
-                opts.preview = True
-                opts.preview_command = arg
-            elif opt in ("--no-preview",):
-                opts.preview = False
-            # Misc options
-            elif opt in ("--audio-only",):
-                opts.a_only = True
-            elif opt in ("--video-only",):
-                opts.v_only = True
-            elif opt in ("--write-list",):
-                opts.out_file = os.path.abspath(arg)
-            elif opt in ("--use-archive",):
-                opts.archive_path = valid_archive(arg)
-                with open(opts.archive_path, "r") as f:
-                    opts.archive = [l.strip() for l in f]
-            # Output
-            elif opt in ("-o", "--output"):
-                # The default naming scheme is the same as using %id%
-                # but internally the default value is None
-                # So simply don't assign the argument if it's only %id%
-                if arg != "%id%":
-                    opts.out_format = arg
-            elif opt in ("--",):
-                only_input = True
-            # Unknown options
-            else:
-                err(f"Unknown flag '{opt}'!")
-                err(f"Try '{os.path.basename(sys.argv[0])} "
-                    "--help' for more information.", color=fgcolors.RESET)
-                sys.exit(status.OPT)
-        except ValueError as error:
-            err(f"{opt}: {error}")
-            sys.exit(status.OPT)
+    return args
 
 
 def check_options():
     """Test the user input (command line) for its validity."""
-    if opts.a_only and opts.v_only:
-        err("--audio-only and --video-only are mutually exclusive!")
-        sys.exit(status.OPT)
-    elif not opts.recoubs and opts.only_recoubs:
-        err("--no-recoubs and --only-recoubs are mutually exclusive!")
-        sys.exit(status.OPT)
-    elif opts.share and (opts.v_only or opts.a_only):
-        err("--share and --video-/audio-only are mutually exclusive!")
-        sys.exit(status.OPT)
-
     formats = {'med': 0, 'high': 1, 'higher': 2}
     if formats[opts.v_min] > formats[opts.v_max]:
         err("Quality of --min-quality greater than --max-quality!")
@@ -1808,7 +1796,7 @@ def main():
 
 # Execute main function
 if __name__ == '__main__':
-    opts = Options()
+    opts = parse_cli()
     total = 0
     count = 0
     done = 0
