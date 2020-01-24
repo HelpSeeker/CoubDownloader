@@ -7,7 +7,6 @@ import os
 import subprocess
 import sys
 
-from fnmatch import fnmatch
 from math import ceil
 from textwrap import dedent
 
@@ -1238,10 +1237,11 @@ def mapped_input(string):
     elif "https://coub.com/community/" in link:
         name = link.partition("https://coub.com/community/")[2]
         source = Community(name)
-    elif fnmatch(link, "https://coub.com#*") or \
-         fnmatch(link, "https://coub.com/hot*") or \
-         link == "https://coub.com":
-        source = HotSection(link)
+    elif "https://coub.com/hot" in link or \
+         "https://coub.com#" in link or \
+         link.strip("/") == "https://coub.com":
+        sort = link.partition("https://coub.com")[2]
+        source = HotSection(sort)
     # Unfortunately channel URLs don't have any special characteristics
     # and are basically the fallthrough link type
     else:
