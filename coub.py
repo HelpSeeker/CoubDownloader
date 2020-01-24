@@ -85,34 +85,34 @@ class DefaultOptions:
 
     # Change verbosity of the script
     # 0 for quiet, >= 1 for normal verbosity
-    verbosity = 1
+    VERBOSITY = 1
 
     # yes/no will answer prompts automatically
     # Everything else will lead to a prompt
-    prompt_answer = None
+    PROMPT = None
 
     # Default download destination
-    path = "."
+    PATH = "."
 
     # Keep individual video/audio streams
-    keep = False
+    KEEP = False
 
     # How often to loop the video
     # Only has an effect, if the looped video is shorter than the audio
     # Otherwise the max. length is limited by the audio duration
-    repeat = 1000
+    REPEAT = 1000
 
     # Max. coub duration (FFmpeg syntax)
     # Can be used in combination with repeat, in which case the shorter
     # duration will be used
-    dur = None
+    DUR = None
 
     # Max no. of connections for aiohttp's ClientSession
     # Raising this value can lead to shorter download times, but also
     # increases the risk of Coub throttling or terminating your connections
     # There's also no benefit in higher values, if your connection is already
     # fully utilized
-    connect = 25
+    CONNECT = 25
 
     # How often to retry download when connection is lost
     # >0 -> retry the specified number of times
@@ -120,65 +120,63 @@ class DefaultOptions:
     # <0 -> retry indefinitely
     # Retries happen through recursion, so the max. number is theoretically
     # limited to 1000 retries (although Python's limit could be raised as well)
-    retries = 5
+    RETRIES = 5
 
     # Limit how many coubs can be downloaded during one script invocation
-    max_coubs = None
+    MAX_COUBS = None
 
     # What video/audio quality to download
     #   0 -> worst quality
     #  -1 -> best quality
     # Everything else can lead to undefined behavior
-    v_quality = -1
-    a_quality = -1
+    V_QUALITY = -1
+    A_QUALITY = -1
 
     # Limits for the list of video streams
-    #   v_max: limits what counts as best stream
-    #   v_min: limits what counts as worst stream
+    #   V_MAX: limits what counts as best stream
+    #   V_MIN: limits what counts as worst stream
     # Supported values:
     #   med    ( ~640px width)
     #   high   (~1280px width)
     #   higher (~1600px width)
-    v_max = 'higher'
-    v_min = 'med'
+    V_MAX = 'higher'
+    V_MIN = 'med'
 
     # How much to prefer AAC audio
     #   0 -> never download AAC audio
     #   1 -> rank it between low and high quality MP3
     #   2 -> prefer AAC, use MP3 fallback
     #   3 -> either AAC or no audio
-    aac = 1
+    AAC = 1
 
     # Use shared video+audio instead of merging separate streams
     # Leads to shorter videos, also no further quality selection
-    share = False
+    SHARE = False
 
     # How to treat recoubs during channel downloads
-    #   recoubs = False     -> Only Original
-    #   recoubs = True      -> Original + Recoubs
-    #   only_recoubs = True -> Only Recoubs
-    # recoubs mustn't be False, when only_recoubs is True
-    recoubs = True
-    only_recoubs = False
+    #   RECOUBS = False     -> Only Original
+    #   RECOUBS = True      -> Original + Recoubs
+    #   ONLY_RECOUBS = True -> Only Recoubs
+    # RECOUBS mustn't be False, when ONLY_RECOUBS is True
+    RECOUBS = True
+    ONLY_RECOUBS = False
 
     # Preview a downloaded coub with the given command
     # Keyboard shortcuts may not work for CLI audio players
-    preview = None
+    PREVIEW = None
 
     # Only download video/audio stream
-    # a_only and v_only are mutually exclusive
-    a_only = False
-    v_only = False
+    # A_ONLY and V_ONLY are mutually exclusive
+    A_ONLY = False
+    V_ONLY = False
 
     # Output parsed coubs to file instead of downloading
     # Values other than None will terminate the script after the initial
     # parsing process (i.e. no coubs will be downloaded)
-    out_file = None
+    OUT_FILE = None
 
     # Use an archive file to keep track of downloaded coubs
-    #   archive_path -> path to the archive
-    #   archive      -> content of the archive
-    archive_path = None
+    ARCHIVE_PATH = None
 
     # Output name formatting (default: %id%)
     # Supports the following special keywords:
@@ -192,7 +190,7 @@ class DefaultOptions:
     #
     # Setting a custom value increases skip duration for existing coubs
     # Usage of an archive file is recommended in such an instance
-    out_format = None
+    OUT_FORMAT = None
 
 
 class InputHelp(argparse.Action):
@@ -1279,71 +1277,71 @@ def parse_cli():
     parser.add_argument("--input-help", action=InputHelp)
     # Common Options
     parser.add_argument("-q", "--quiet", dest="verbosity", action="store_const",
-                        const=0, default=defaults.verbosity)
+                        const=0, default=defaults.VERBOSITY)
     prompt = parser.add_mutually_exclusive_group()
-    prompt.add_argument("-y", "--yes", dest="prompt_answer", action="store_const",
-                        const="yes", default=defaults.prompt_answer)
-    prompt.add_argument("-n", "--no", dest="prompt_answer", action="store_const",
-                        const="no", default=defaults.prompt_answer)
+    prompt.add_argument("-y", "--yes", dest="prompt", action="store_const",
+                        const="yes", default=defaults.PROMPT)
+    prompt.add_argument("-n", "--no", dest="prompt", action="store_const",
+                        const="no", default=defaults.PROMPT)
     repeat = parser.add_mutually_exclusive_group()
     repeat.add_argument("-s", "--short", dest="repeat", action="store_const",
-                        const=1, default=defaults.repeat)
-    repeat.add_argument("-r", "--repeat", type=positive_int, default=defaults.repeat)
-    parser.add_argument("-p", "--path", default=defaults.path)
-    parser.add_argument("-k", "--keep", action="store_true", default=defaults.keep)
+                        const=1, default=defaults.REPEAT)
+    repeat.add_argument("-r", "--repeat", type=positive_int, default=defaults.REPEAT)
+    parser.add_argument("-p", "--path", default=defaults.PATH)
+    parser.add_argument("-k", "--keep", action="store_true", default=defaults.KEEP)
     parser.add_argument("-d", "--duration", dest="dur", type=valid_time,
-                        default=defaults.dur)
+                        default=defaults.DUR)
     # Download Options
     parser.add_argument("--connections", dest="connect", type=positive_int,
-                        default=defaults.connect)
-    parser.add_argument("--retries", type=int, default=defaults.retries)
+                        default=defaults.CONNECT)
+    parser.add_argument("--retries", type=int, default=defaults.RETRIES)
     parser.add_argument("--limit-num", dest="max_coubs", type=positive_int,
-                        default=defaults.max_coubs)
+                        default=defaults.MAX_COUBS)
     # Format Selection
     v_qual = parser.add_mutually_exclusive_group()
     v_qual.add_argument("--bestvideo", dest="v_quality", action="store_const",
-                        const=-1, default=defaults.v_quality)
+                        const=-1, default=defaults.V_QUALITY)
     v_qual.add_argument("--worstvideo", dest="v_quality", action="store_const",
-                        const=0, default=defaults.v_quality)
+                        const=0, default=defaults.V_QUALITY)
     a_qual = parser.add_mutually_exclusive_group()
     a_qual.add_argument("--bestaudio", dest="a_quality", action="store_const",
-                        const=-1, default=defaults.a_quality)
+                        const=-1, default=defaults.A_QUALITY)
     a_qual.add_argument("--worstaudio", dest="a_quality", action="store_const",
-                        const=0, default=defaults.a_quality)
-    parser.add_argument("--max-video", dest="v_max", default=defaults.v_max,
+                        const=0, default=defaults.A_QUALITY)
+    parser.add_argument("--max-video", dest="v_max", default=defaults.V_MAX,
                         choices=["med", "high", "higher"])
-    parser.add_argument("--min-video", dest="v_min", default=defaults.v_min,
+    parser.add_argument("--min-video", dest="v_min", default=defaults.V_MIN,
                         choices=["med", "high", "higher"])
     aac = parser.add_mutually_exclusive_group()
-    aac.add_argument("--aac", action="store_const", const=2, default=defaults.aac)
+    aac.add_argument("--aac", action="store_const", const=2, default=defaults.AAC)
     aac.add_argument("--aac-strict", dest="aac", action="store_const", const=3,
-                     default=defaults.aac)
+                     default=defaults.AAC)
     # Channel Options
     recoub = parser.add_mutually_exclusive_group()
-    recoub.add_argument("--recoubs", action="store_true", default=defaults.recoubs)
+    recoub.add_argument("--recoubs", action="store_true", default=defaults.RECOUBS)
     recoub.add_argument("--no-recoubs", dest="recoubs", action="store_false",
-                        default=defaults.recoubs)
+                        default=defaults.RECOUBS)
     recoub.add_argument("--only-recoubs", action="store_true",
-                        default=defaults.only_recoubs)
+                        default=defaults.ONLY_RECOUBS)
     # Preview Options
     player = parser.add_mutually_exclusive_group()
-    player.add_argument("--preview", default=defaults.preview)
+    player.add_argument("--preview", default=defaults.PREVIEW)
     player.add_argument("--no-preview", dest="preview", action="store_const",
-                        const=None, default=defaults.preview)
+                        const=None, default=defaults.PREVIEW)
     # Misc. Options
     stream = parser.add_mutually_exclusive_group()
     stream.add_argument("--audio-only", dest="a_only", action="store_true",
-                        default=defaults.a_only)
+                        default=defaults.A_ONLY)
     stream.add_argument("--video-only", dest="v_only", action="store_true",
-                        default=defaults.v_only)
-    stream.add_argument("--share", action="store_true", default=defaults.share)
+                        default=defaults.V_ONLY)
+    stream.add_argument("--share", action="store_true", default=defaults.SHARE)
     parser.add_argument("--write-list", dest="out_file", type=os.path.abspath,
-                        default=defaults.out_file)
+                        default=defaults.OUT_FILE)
     parser.add_argument("--use-archive", dest="archive_path", type=valid_archive,
-                        default=defaults.archive_path)
+                        default=defaults.ARCHIVE_PATH)
     # Output
     parser.add_argument("-o", "--output", dest="out_format",
-                        default=defaults.out_format)
+                        default=defaults.OUT_FORMAT)
 
     # Advanced Options
     parser.set_defaults(
@@ -1536,9 +1534,9 @@ def exists(name):
 
 def overwrite(name):
     """Prompt the user if they want to overwrite an existing coub."""
-    if opts.prompt_answer == "yes":
+    if opts.prompt == "yes":
         return True
-    elif opts.prompt_answer == "no":
+    elif opts.prompt == "no":
         return False
     else:
         # this should get printed even with --quiet
