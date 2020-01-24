@@ -1544,23 +1544,20 @@ def overwrite(name):
     """Prompt the user if they want to overwrite an existing coub."""
     if opts.prompt == "yes":
         return True
-    elif opts.prompt == "no":
+    if opts.prompt == "no":
         return False
-    else:
-        # this should get printed even with --quiet
-        # so print() instead of msg()
-        if name:
-            print(f"Overwrite file? ({name})")
-        else:
-            print("Overwrite file?")
-        print("1) yes")
-        print("2) no")
-        while True:
-            answer = input("#? ")
-            if answer == "1":
-                return True
-            if answer == "2":
-                return False
+
+    # this should get printed even with --quiet
+    # so print() instead of msg()
+    print(f"Overwrite file? ({name})")
+    print("1) yes")
+    print("2) no")
+    while True:
+        answer = input("#? ")
+        if answer == "1":
+            return True
+        if answer == "2":
+            return False
 
 
 def stream_lists(resp_json):
