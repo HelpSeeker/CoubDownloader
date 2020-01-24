@@ -1465,15 +1465,17 @@ def parse_input(sources):
             Results:
               {after} link{'s' if after != 1 else ''}"""))
 
-    if opts.out_file:
-        with open(opts.out_file, opts.write_method) as f:
-            for link in parsed:
-                print(link, file=f)
-        msg(f"\nParsed coubs written to '{opts.out_file}'!",
-            color=fgcolors.SUCCESS)
-        sys.exit(0)
-
     return parsed
+
+
+def write_list(links):
+    """Output parsed links to a list and exit."""
+    with open(opts.out_file, opts.write_method) as f:
+        for l in links:
+            print(l, file=f)
+    msg(f"\nParsed coubs written to '{opts.out_file}'!",
+        color=fgcolors.SUCCESS)
+    sys.exit(0)
 
 
 def get_name(req_json, c_id):
@@ -1790,6 +1792,8 @@ def main():
 
     msg("\n### Parse Input ###")
     links = parse_input(opts.input)
+    if opts.out_file:
+        write_list(links)
     total = len(links)
     coubs = [Coub(l) for l in links]
 
