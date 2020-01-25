@@ -326,11 +326,8 @@ class CustomArgumentParser(argparse.ArgumentParser):
           -) Channels
           -) Searches
           -) Tags
-          -) Communities (partially*)
+          -) Communities (incl. Featured & Coub of the Day)
           -) Hot section
-
-          * 'Coub of the Day' is not yet supported as it uses a different API
-            endpoint.
 
         2. Input Methods
         ================
@@ -399,44 +396,48 @@ class CustomArgumentParser(argparse.ArgumentParser):
           Supported sort orders
           ---------------------
 
-            Channels:     most_recent (default)
-                          most_liked
-                          most_viewed
-                          oldest
-                          random
+            Channels:         most_recent (default)
+                              most_liked
+                              most_viewed
+                              oldest
+                              random
 
-            Searches:     relevance (default)
-                          top
-                          views_count
-                          most_recent
+            Searches:         relevance (default)
+                              top
+                              views_count
+                              most_recent
 
-            Tags:         popular (default)
-                          top
-                          views_count
-                          fresh
+            Tags:             popular (default)
+                              top
+                              views_count
+                              fresh
 
-            Communities:  hot_daily
-                          hot_weekly
-                          hot_monthly (default)
-                          hot_quarterly
-                          hot_six_months
-                          rising
-                          fresh
-                          top
-                          views_count
-                          random
+            Communities:      hot_daily
+                              hot_weekly
+                              hot_monthly (default)
+                              hot_quarterly
+                              hot_six_months
+                              rising
+                              fresh
+                              top
+                              views_count
+                              random
 
-            Featured:     recent
-            (community)   top_of_the_month
-                          undervalued
+            Featured:         recent (default)
+            (community)       top_of_the_month
+                              undervalued
 
-            Hot section:  hot_daily
-                          hot_weekly
-                          hot_monthly (default)
-                          hot_quarterly
-                          hot_six_months
-                          rising
-                          fresh
+            Coub of the Day:  recent (default)
+            (community)       top
+                              views_count
+
+            Hot section:      hot_daily
+                              hot_weekly
+                              hot_monthly (default)
+                              hot_quarterly
+                              hot_six_months
+                              rising
+                              fresh
         """)
 
         return help_text
@@ -656,7 +657,7 @@ class Community(BaseContainer):
         #                 hot_six_months, rising, fresh, top, views_count, random
         # Coub's default: hot_monthly
         if not self.sort:
-            if self.id == "featured":
+            if self.id in ("featured", "coub-of-the-day"):
                 self.sort = "recent"
             else:
                 self.sort = "hot_monthly"
@@ -670,6 +671,13 @@ class Community(BaseContainer):
                 'undervalued': "undervalued",
             }
             template = "https://coub.com/api/v2/timeline/explore?"
+        elif self.id == "coub-of-the-day":
+            methods = {
+                'recent': None,
+                'top': "top",
+                'views_count': "views_count",
+            }
+            template = "https://coub.com/api/v2/timeline/explore/coub_of_the_day?"
         else:
             methods = {
                 'hot_daily': "daily",
@@ -691,7 +699,7 @@ class Community(BaseContainer):
             self.valid = False
             return
 
-        if self.id == "featured":
+        if self.id in ("featured", "coub-of-the-day"):
             if self.sort != "recent":
                 template = f"{template}order_by={methods[self.sort]}&"
         else:
