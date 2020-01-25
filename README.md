@@ -13,9 +13,10 @@ CoubDownloader is a simple script to download videos (called coubs) from [Coub](
 3.3. [Lists](https://github.com/HelpSeeker/CoubDownloader#lists)  
 3.4. [Channels](https://github.com/HelpSeeker/CoubDownloader#channels)  
 3.5. [Searches](https://github.com/HelpSeeker/CoubDownloader#searches)  
-3.6. [Tags](https://github.com/HelpSeeker/CoubDownloader#tags)  
-3.7. [Communities](https://github.com/HelpSeeker/CoubDownloader#communities)  
-3.8. [Hot section](https://github.com/HelpSeeker/CoubDownloader#hot-section)  
+3.6. [Random](https://github.com/HelpSeeker/CoubDownloader#random)  
+3.7. [Tags](https://github.com/HelpSeeker/CoubDownloader#tags)  
+3.8. [Communities](https://github.com/HelpSeeker/CoubDownloader#communities)  
+3.9. [Hot section](https://github.com/HelpSeeker/CoubDownloader#hot-section)  
 4. [Misc. information](https://github.com/HelpSeeker/CoubDownloader#misc-information)  
 4.1. [Video resolution vs. quality](https://github.com/HelpSeeker/CoubDownloader#video-resolution-vs-quality)  
 4.2. [AAC audio](https://github.com/HelpSeeker/CoubDownloader#aac-audio)  
@@ -39,7 +40,8 @@ Input:
   -e, --search TERM      download search results for the given term
   -m, --community NAME   download coubs from a community
                            NAME as seen in the URL (e.g. animals-pets)
-  --hot                  download coubs from the hot section
+  --hot                  download coubs from the hot section (default sorting)
+  --random               download random coubs
   --input-help           show full input help
 
     Input options do NOT support full URLs.
@@ -103,6 +105,7 @@ Output:
 
     Other strings will be interpreted literally.
     This option has no influence on the file extension.
+
 ```
 
 ## Requirements
@@ -139,11 +142,9 @@ Contents
   -) Channels
   -) Searches
   -) Tags
-  -) Communities (partially*)
+  -) Communities (incl. Featured & Coub of the Day)
   -) Hot section
-
-  * 'Featured' and 'Coub of the Day' are not yet supported as they use
-    different API endpoints.
+  -) Random
 
 2. Input Methods
 ================
@@ -156,7 +157,8 @@ Contents
     Search:       https://coub.com/search?q=example-term
     Tag:          https://coub.com/tags/example-tag
     Community:    https://coub.com/community/example-community
-    Hot section:  https://coub.com/hot
+    Hot section:  https://coub.com or https://coub.com/hot
+    Random:       https://coub.com/random
 
     URLs which indicate special sort orders are also supported.
 
@@ -169,6 +171,7 @@ Contents
     Tag:          -t example-tag        or  --tag example-tag
     Community:    -m example-community  or  --community example-community
     Hot section:  --hot
+    Random:       --random
 
   3) Prefix + channel name/tag/search term/etc.
 
@@ -181,6 +184,7 @@ Contents
     Tag:          tags/example-tag
     Community:    community/example-community
     Hot section:  hot
+    Random:       random
 
 3. Sorting
 ==========
@@ -203,49 +207,61 @@ Contents
 
     https://coub.com/search?q=example-term#top
     tags/example-tag#views_count
-    --hot#rising
+    hot#rising
 
-  This is supported by all input methods. Please note that a manually
-  specified sort order will overwrite the sort order as indicated by
-  the URL.
+  This is supported by all input methods, except the --hot option.
+  Please note that a manually specified sort order will overwrite the
+  sort order as indicated by the URL.
 
   Supported sort orders
   ---------------------
 
-    Channels:     most_recent (default)
-                  most_liked
-                  most_viewed
-                  oldest
-                  random
+    Channels:         most_recent (default)
+                      most_liked
+                      most_viewed
+                      oldest
+                      random
 
-    Searches:     relevance (default)
-                  top
-                  views_count
-                  most_recent
+    Searches:         relevance (default)
+                      top
+                      views_count
+                      most_recent
 
-    Tags:         popular (default)
-                  top
-                  views_count
-                  fresh
+    Tags:             popular (default)
+                      top
+                      views_count
+                      fresh
 
-    Communities:  hot_daily
-                  hot_weekly
-                  hot_monthly (default)
-                  hot_quarterly
-                  hot_six_months
-                  rising
-                  fresh
-                  top
-                  views_count
-                  random
+    Communities:      hot_daily
+                      hot_weekly
+                      hot_monthly (default)
+                      hot_quarterly
+                      hot_six_months
+                      rising
+                      fresh
+                      top
+                      views_count
+                      random
 
-    Hot section:  hot_daily
-                  hot_weekly
-                  hot_monthly (default)
-                  hot_quarterly
-                  hot_six_months
-                  rising
-                  fresh
+    Featured:         recent (default)
+    (community)       top_of_the_month
+                      undervalued
+
+    Coub of the Day:  recent (default)
+    (community)       top
+                      views_count
+
+    Hot section:      hot_daily
+                      hot_weekly
+                      hot_monthly (default)
+                      hot_quarterly
+                      hot_six_months
+                      rising
+                      fresh
+
+    Random:           popular (default)
+                      top
+
 ```
 
 ***
@@ -286,6 +302,10 @@ Searches provide the same results as on Coub's website, with the exception that 
 
 Using general search terms can potentially return tens of thousands of coub links. The usage of `--limit-num` is encouraged.
 
+#### Random
+
+Provides a random collection of coubs. A request returns max. 1000 coubs, but several requests can be made during one script invocation (e.g. using the --random option thrice).
+
 ***
 
 The now following input types only return a limited number of links. This is indirectly enforced by the API, although I can't say if it is done on purpose or a bug (pages >99 redirect to page 1).
@@ -302,7 +322,7 @@ Please note that the default sort order (by popularity) provides less results th
 
 #### Communities
 
-There are currently 17 supported communities.
+There are currently 19 supported communities.
 
 The following list shows the names of the supported communities (as seen on Coub's website). In parenthesis are the internally used names and what should be used as input for the script.
 
@@ -323,8 +343,12 @@ The following list shows the names of the supported communities (as seen on Coub
 * Dance                (**dance**)
 * Auto & Technique     (**cars**)
 * NSFW                 (**nsfw**)
+* Featured             (**featured**)
+* Coub of the Day      (**coub-of-the-day**)
 
-The default sort order (most popular coubs of the month) may provide less results than other sort orders.
+The default sort order for most communities (most popular coubs of the month) may provide less results than other sort orders.
+
+*Featured* and *Coub of the Day* have unique sort orders.
 
 #### Hot section
 
@@ -433,7 +457,7 @@ Coub started to massively overhaul their database and API. Of course those chang
 - [x] Add options to prefer AAC or only download AAC audio
 - [x] Add shared option (video+audio already combined)
 - [x] Download coubs from the hot section
-- [x] Download coubs from communities
+- [x] Download coubs from communities (incl. Featured & Coub of the Day)
 - [x] Asynchronous coub processing
 - [x] Asynchronous timeline parsing
 - [x] Detect stream corruption (incl. old Coub storage method)
@@ -444,6 +468,8 @@ Coub started to massively overhaul their database and API. Of course those chang
 - [x] Autocompletion of incomplete/malformed URLs (to some extent)
 - [x] Advanced sorting per input
 - [x] Support for sort order related URLs
+- [x] Download random coubs
+- [x] Advanced setting to change the container format for stream remuxing
 
 ## Changes since switching to Coub's API (previously used youtube-dl)
 
