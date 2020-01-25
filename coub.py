@@ -238,6 +238,7 @@ class CustomArgumentParser(argparse.ArgumentParser):
           -m, --community NAME   download coubs from a community
                                    NAME as seen in the URL (e.g. animals-pets)
           --hot                  download coubs from the hot section (default sorting)
+          --random               download random coubs
           --input-help           show full input help
 
             Input options do NOT support full URLs.
@@ -328,6 +329,7 @@ class CustomArgumentParser(argparse.ArgumentParser):
           -) Tags
           -) Communities (incl. Featured & Coub of the Day)
           -) Hot section
+          -) Random
 
         2. Input Methods
         ================
@@ -341,6 +343,7 @@ class CustomArgumentParser(argparse.ArgumentParser):
             Tag:          https://coub.com/tags/example-tag
             Community:    https://coub.com/community/example-community
             Hot section:  https://coub.com or https://coub.com/hot
+            Random:       https://coub.com/random
 
             URLs which indicate special sort orders are also supported.
 
@@ -353,6 +356,7 @@ class CustomArgumentParser(argparse.ArgumentParser):
             Tag:          -t example-tag        or  --tag example-tag
             Community:    -m example-community  or  --community example-community
             Hot section:  --hot
+            Random:       --random
 
           3) Prefix + channel name/tag/search term/etc.
 
@@ -365,6 +369,7 @@ class CustomArgumentParser(argparse.ArgumentParser):
             Tag:          tags/example-tag
             Community:    community/example-community
             Hot section:  hot
+            Random:       random
 
         3. Sorting
         ==========
@@ -438,6 +443,9 @@ class CustomArgumentParser(argparse.ArgumentParser):
                               hot_six_months
                               rising
                               fresh
+
+            Random:           popular (default)
+                              top
         """)
 
         return help_text
@@ -763,6 +771,38 @@ class HotSection(BaseContainer):
         # API limits hot section to 99 pages
         if self.pages > 99:
             self.pages = 99
+
+
+class RandomCategory(BaseContainer):
+    """Store and parse the random category."""
+    type = "random"
+
+    def __init__(self, sort=None):
+        super(RandomCategory, self).__init__("random")
+        self.id = None
+        self.sort = sort
+        # Available:      popular, top
+        # Coub's default: popular
+        if not self.sort:
+            self.sort = "popular"
+
+    def get_template(self):
+        """Return API request template for Coub's random category."""
+        methods = {
+            'popular': None,
+            'top': "top",
+        }
+        template = "https://coub.com/api/v2/timeline/explore/random?"
+
+        if self.sort not in methods:
+            err(f"\nInvalid random sort order '{self.sort}'!",
+                color=fgcolors.WARNING)
+            self.valid = False
+            return
+        if self.sort == "top":
+            template = f"{template}order_by={methods[self.sort]}&"
+
+        self.template = f"{template}per_page={opts.coubs_per_page}"
 
 
 class LinkList:
@@ -1194,7 +1234,10 @@ def normalize_link(string):
             'featured/stories': None,
             'featured/channels': None,
             'featured': "recent",
-        }
+        },
+        'random': {
+            '/top': "top",
+        },
     }
 
     try:
@@ -1235,6 +1278,13 @@ def normalize_link(string):
                 if not sort:
                     sort = to_replace['featured'][r]
                 info = "community/featured"
+    elif "random" in info:
+        for r in to_replace['random']:
+            parts = info.partition(r)
+            if parts[1]:
+                if not sort:
+                    sort = to_replace['random'][r]
+                info = parts[0]
     # These are the 2 special cases for the hot section
     elif info in ("rising", "fresh"):
         if not sort:
@@ -1280,6 +1330,12 @@ def mapped_input(string):
     elif "https://coub.com/community/" in link:
         name = link.partition("https://coub.com/community/")[2]
         source = Community(name)
+    elif "https://coub.com/random" in link:
+        try:
+            _, sort = link.split("#")
+        except ValueError:
+            sort = None
+        source = RandomCategory(sort)
     elif "https://coub.com/hot" in link or \
          "https://coub.com#" in link or \
          link.strip("/") == "https://coub.com":
@@ -1318,6 +1374,10 @@ def parse_cli():
                         type=Community)
     parser.add_argument("--hot", dest="input", action="append_const",
                         const=HotSection())
+    parser.add_argument("--random", "--random#popular", dest="input",
+                        action="append_const", const=RandomCategory())
+    parser.add_argument("--random#top", dest="input", action="append_const",
+                        const=RandomCategory("top"))
     parser.add_argument("--input-help", action=InputHelp)
     # Common Options
     parser.add_argument("-q", "--quiet", dest="verbosity", action="store_const",
