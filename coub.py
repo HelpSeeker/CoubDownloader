@@ -329,8 +329,8 @@ class CustomArgumentParser(argparse.ArgumentParser):
           -) Communities (partially*)
           -) Hot section
 
-          * 'Featured' and 'Coub of the Day' are not yet supported as they use
-            different API endpoints.
+          * 'Coub of the Day' is not yet supported as it uses a different API
+            endpoint.
 
         2. Input Methods
         ================
@@ -425,6 +425,10 @@ class CustomArgumentParser(argparse.ArgumentParser):
                           top
                           views_count
                           random
+
+            Featured:     recent
+            (community)   top_of_the_month
+                          undervalued
 
             Hot section:  hot_daily
                           hot_weekly
@@ -652,39 +656,53 @@ class Community(BaseContainer):
         #                 hot_six_months, rising, fresh, top, views_count, random
         # Coub's default: hot_monthly
         if not self.sort:
-            self.sort = "hot_monthly"
+            if self.id == "featured":
+                self.sort = "recent"
+            else:
+                self.sort = "hot_monthly"
 
     def get_template(self):
         """Return API request template for communities."""
-        methods = {
-            'hot_daily': "daily",
-            'hot_weekly': "weekly",
-            'hot_monthly': "monthly",
-            'hot_quarterly': "quarter",
-            'hot_six_months': "half",
-            'rising': "rising",
-            'fresh': "fresh",
-            'top': "likes_count",
-            'views_count': "views_count",
-            'random': "random",
-        }
-
-        template = f"https://coub.com/api/v2/timeline/community/{urlquote(self.id)}"
+        if self.id == "featured":
+            methods = {
+                'recent': None,
+                'top_of_the_month': "top_of_the_month",
+                'undervalued': "undervalued",
+            }
+            template = "https://coub.com/api/v2/timeline/explore?"
+        else:
+            methods = {
+                'hot_daily': "daily",
+                'hot_weekly': "weekly",
+                'hot_monthly': "monthly",
+                'hot_quarterly': "quarter",
+                'hot_six_months': "half",
+                'rising': "rising",
+                'fresh': "fresh",
+                'top': "likes_count",
+                'views_count': "views_count",
+                'random': "random",
+            }
+            template = f"https://coub.com/api/v2/timeline/community/{urlquote(self.id)}"
 
         if self.sort not in methods:
             err(f"\nInvalid community sort order '{self.sort}' ({self.id})!",
                 color=fgcolors.WARNING)
             self.valid = False
-        elif self.sort in ("top", "views_count"):
-            template = f"{template}/fresh?order_by={methods[self.sort]}&"
-        elif self.sort == "random":
-            template = f"https://coub.com/api/v2/timeline/random/{self.id}?"
+            return
+
+        if self.id == "featured":
+            if self.sort != "recent":
+                template = f"{template}order_by={methods[self.sort]}&"
         else:
-            template = f"{template}/{methods[self.sort]}?"
+            if self.sort in ("top", "views_count"):
+                template = f"{template}/fresh?order_by={methods[self.sort]}&"
+            elif self.sort == "random":
+                template = f"https://coub.com/api/v2/timeline/random/{self.id}?"
+            else:
+                template = f"{template}/{methods[self.sort]}?"
 
-        template = f"{template}per_page={opts.coubs_per_page}"
-
-        self.template = template
+        self.template = f"{template}per_page={opts.coubs_per_page}"
 
     def get_page_count(self):
         super(Community, self).get_page_count()
@@ -1161,6 +1179,13 @@ def normalize_link(string):
             '/top': "top",
             '/views': "views_count",
             '/random': "random",
+        },
+        'featured': {
+            'featured/coubs/top_of_the_month': "top_of_the_month",
+            'featured/coubs/undervalued': "undervalued",
+            'featured/stories': None,
+            'featured/channels': None,
+            'featured': "recent",
         }
     }
 
@@ -1195,14 +1220,17 @@ def normalize_link(string):
                 if not sort:
                     sort = to_replace['community'][r]
                 info = parts[0]
+    elif "featured" in info:
+        for r in to_replace['featured']:
+            parts = info.partition(r)
+            if parts[1]:
+                if not sort:
+                    sort = to_replace['featured'][r]
+                info = "community/featured"
     # These are the 2 special cases for the hot section
-    elif info == "rising":
+    elif info in ("rising", "fresh"):
         if not sort:
-            sort = "rising"
-        info = ""
-    elif info == "fresh":
-        if not sort:
-            sort = "fresh"
+            sort = info
         info = ""
     else:
         for r in to_replace['channel']:
