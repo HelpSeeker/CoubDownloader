@@ -1798,7 +1798,7 @@ async def save_stream(link, path, session=None):
             return
 
 
-def valid_stream(path):
+def valid_stream(path, attempted_fix=False):
     """Test a given stream for eventual corruption with a test remux (FFmpeg)."""
     command = [
         "ffmpeg", "-v", "error",
@@ -1807,6 +1807,14 @@ def valid_stream(path):
         "-f", "null", "-",
     ]
     out = subprocess.run(command, capture_output=True, text=True)
+
+    # Fix broken video stream
+    if "moov atom not found" in out.stderr and not attempted_fix:
+        with open(path, "r+b") as f:
+            temp = f.read()
+        with open(path, "w+b") as f:
+            f.write(b'\x00\x00' + temp[2:])
+        return valid_stream(path, attempted_fix=True)
 
     # Checks against typical error messages in case of missing chunks
     # "Header missing"/"Failed to read frame size" -> audio corruption
