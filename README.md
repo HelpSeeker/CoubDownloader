@@ -32,68 +32,70 @@ CoubDownloader is a simple download script for coub.com
 Usage: coub.py [OPTIONS] INPUT [INPUT]...
 
 Input:
-  URL                    download coub(s) from the given URL
-  -i, --id ID            download a single coub
-  -l, --list PATH        read coub links from a text file
-  -c, --channel NAME     download coubs from a channel
-  -t, --tag TAG          download coubs with the specified tag
-  -e, --search TERM      download search results for the given term
-  -m, --community NAME   download coubs from a community
-                           NAME as seen in the URL (e.g. animals-pets)
-  --hot                  download coubs from the hot section (default sorting)
-  --random               download random coubs
-  --input-help           show full input help
+  URL                   download coub(s) from the given URL
+  -i, --id ID           download a single coub
+  -l, --list PATH       read coub links from a text file
+  -c, --channel NAME    download coubs from a channel
+  -t, --tag TAG         download coubs with the given tag
+  -e, --search TERM     download search results for the given term
+  -m, --community NAME  download coubs from a community
+                          NAME as seen in the URL (e.g. animals-pets)
+  --hot                 download coubs from the hot section (default sorting)
+  --random              download random coubs
+  --input-help          show full input help
 
     Input options do NOT support full URLs.
     Both URLs and input options support sorting (see --input-help).
 
 Common options:
-  -h, --help             show this help
-  -q, --quiet            suppress all non-error/prompt messages
-  -y, --yes              answer all prompts with yes
-  -n, --no               answer all prompts with no
-  -s, --short            disable video looping
-  -p, --path PATH        set output destination (def: '.')
-  -k, --keep             keep the individual video/audio parts
-  -r, --repeat N         repeat video N times (def: until audio ends)
-  -d, --duration TIME    specify max. coub duration (FFmpeg syntax)
+  -h, --help            show this help
+  -q, --quiet           suppress all non-error/prompt messages
+  -y, --yes             answer all prompts with yes
+  -n, --no              answer all prompts with no
+  -s, --short           disable video looping
+  -p, --path PATH       set output destination (def: '.')
+  -k, --keep            keep the individual video/audio parts
+  -r, --repeat N        repeat video N times (def: until audio ends)
+  -d, --duration TIME   specify max. coub duration (FFmpeg syntax)
 
 Download options:
-  --connections N        max. number of connections (def: 25)
-  --retries N            number of retries when connection is lost (def: 5)
-                           0 to disable, <0 to retry indefinitely
-  --limit-num LIMIT      limit max. number of downloaded coubs
+  --connections N       max. number of connections (def: 25)
+  --retries N           number of retries when connection is lost (def: 5)
+                          0 to disable, <0 to retry indefinitely
+  --limit-num LIMIT     limit max. number of downloaded coubs
 
 Format selection:
-  --bestvideo            download best available video quality (def)
-  --worstvideo           download worst available video quality
-  --max-video FORMAT     set limit for the best video format (def: higher)
-                           Supported values: med, high, higher
-  --min-video FORMAT     set limit for the worst video format (def: med)
-                           Supported values: med, high, higher
-  --bestaudio            download best available audio quality (def)
-  --worstaudio           download worst available audio quality
-  --aac                  prefer AAC over higher quality MP3 audio
-  --aac-strict           only download AAC audio (never MP3)
-  --share                download 'share' video (shorter and includes audio)
+  --bestvideo           download best available video quality (def)
+  --worstvideo          download worst available video quality
+  --max-video FORMAT    set limit for the best video format (def: higher)
+                          Supported values: med, high, higher
+  --min-video FORMAT    set limit for the worst video format (def: med)
+                          Supported values: med, high, higher
+  --bestaudio           download best available audio quality (def)
+  --worstaudio          download worst available audio quality
+  --aac                 prefer AAC over higher quality MP3 audio
+  --aac-strict          only download AAC audio (never MP3)
+  --share               download 'share' video (shorter and includes audio)
 
 Channel options:
-  --recoubs              include recoubs during channel downloads (def)
-  --no-recoubs           exclude recoubs during channel downloads
-  --only-recoubs         only download recoubs during channel downloads
+  --recoubs             include recoubs during channel downloads (def)
+  --no-recoubs          exclude recoubs during channel downloads
+  --only-recoubs        only download recoubs during channel downloads
 
 Preview options:
-  --preview COMMAND      play finished coub via the given command
-  --no-preview           explicitly disable coub preview
+  --preview COMMAND     play finished coub via the given command
+  --no-preview          explicitly disable coub preview
 
 Misc. options:
-  --audio-only           only download audio streams
-  --video-only           only download video streams
-  --write-list FILE      write all parsed coub links to FILE
-  --use-archive FILE     use FILE to keep track of already downloaded coubs
+  --audio-only          only download audio streams
+  --video-only          only download video streams
+  --write-list FILE     write all parsed coub links to FILE
+  --use-archive FILE    use FILE to keep track of already downloaded coubs
 
 Output:
-  -o, --output FORMAT    save output with the specified name (def: %id%)
+  --ext EXTENSION       merge output with the given extension (def: mkv)
+                          ignored if no merge is required
+  -o, --output FORMAT   save output with the given template (def: %id%)
 
     Special strings:
       %id%        - coub ID (identifier in the URL)
@@ -105,7 +107,6 @@ Output:
 
     Other strings will be interpreted literally.
     This option has no influence on the file extension.
-
 ```
 
 ## Requirements
@@ -411,7 +412,7 @@ It basically tells the script to rank AAC higher than anything else. On the othe
 
 Either an AAC stream is present or the audio will be entirely missing. This ensures AAC audio under any circumstances. Another way to look at it is that `--aac` tries to download AAC with MP3 as fallback, while `--aac-strict` gets rid of the fallback.
 
-To make matters even more complicated, some users might not want AAC audio at all. This is hopefully only a small demographic (after all AAC support is thorough and it does compress a lot better than MP3), but the script is still able to cater to this group. There's no extra command line option, but look for the following lines inside the script and change `aac` to 0.
+To make matters even more complicated, some users might not want AAC audio at all. This is hopefully only a small demographic (after all AAC support is thorough and it does compress a lot better than MP3), but the script is still able to cater to this group. There's no extra command line option, but look for the following lines inside the script and change `AAC` to 0.
 
 ```
     # How much to prefer AAC audio
@@ -419,7 +420,7 @@ To make matters even more complicated, some users might not want AAC audio at al
     # 1 -> rank it between low and high quality MP3
     # 2 -> prefer AAC, use MP3 fallback
     # 3 -> either AAC or no audio
-    aac = 1
+    AAC = 1
 ```
 
 Now AAC audio will be completely ignored and the script only serves MP3 audio (like the old version).
@@ -451,7 +452,7 @@ There's no fallback for *share* videos. If the *share* version is not yet availa
 
 Coub started to massively overhaul their database and API. Of course those changes aren't documented (why would you document API changes anyway?).
 
-- [x] Remove video repair (most videos are already stored in a non-broken state and the rest will soon follow)
+- [x] Only repair video streams that are actually broken
 - [x] Remove mobile option (they now come with a watermark and are the exact same as html5 med) 
 - [x] Add AAC mobile audio as another possible audio version (ranked between low and high quality MP3 audio)
 - [x] Add options to prefer AAC or only download AAC audio
@@ -469,7 +470,7 @@ Coub started to massively overhaul their database and API. Of course those chang
 - [x] Advanced sorting per input
 - [x] Support for sort order related URLs
 - [x] Download random coubs
-- [x] Advanced setting to change the container format for stream remuxing
+- [x] Option to change the container format for stream remuxing
 
 ## Changes since switching to Coub's API (previously used youtube-dl)
 
