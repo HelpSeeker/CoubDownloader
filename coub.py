@@ -1579,7 +1579,6 @@ def write_list(links):
             print(l, file=f)
     msg(f"\nParsed coubs written to '{opts.out_file}'!",
         color=fgcolors.SUCCESS)
-    sys.exit(0)
 
 
 def get_name(req_json, c_id):
@@ -1906,6 +1905,7 @@ def main():
     links = parse_input(opts.input)
     if opts.out_file:
         write_list(links)
+        sys.exit(0)
     total = len(links)
     coubs = [Coub(l) for l in links]
 
