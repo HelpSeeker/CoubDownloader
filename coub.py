@@ -137,6 +137,11 @@ class DefaultOptions:
     # Use an archive file to keep track of downloaded coubs
     ARCHIVE_PATH = None
 
+    # Container to merge separate video/audio streams into
+    # Must support AVC video and AAC/MP3 audio (e.g. mkv or mp4)
+    # See: https://en.wikipedia.org/wiki/Comparison_of_video_container_formats
+    MERGE_EXT = "mkv"
+
     # Output name formatting (default: %id%)
     # Supports the following special keywords:
     #   %id%        - coub ID (identifier in the URL)
@@ -229,68 +234,70 @@ class CustomArgumentParser(argparse.ArgumentParser):
         Usage: {self.prog} [OPTIONS] INPUT [INPUT]...
 
         Input:
-          URL                    download coub(s) from the given URL
-          -i, --id ID            download a single coub
-          -l, --list PATH        read coub links from a text file
-          -c, --channel NAME     download coubs from a channel
-          -t, --tag TAG          download coubs with the specified tag
-          -e, --search TERM      download search results for the given term
-          -m, --community NAME   download coubs from a community
-                                   NAME as seen in the URL (e.g. animals-pets)
-          --hot                  download coubs from the hot section (default sorting)
-          --random               download random coubs
-          --input-help           show full input help
+          URL                   download coub(s) from the given URL
+          -i, --id ID           download a single coub
+          -l, --list PATH       read coub links from a text file
+          -c, --channel NAME    download coubs from a channel
+          -t, --tag TAG         download coubs with the given tag
+          -e, --search TERM     download search results for the given term
+          -m, --community NAME  download coubs from a community
+                                  NAME as seen in the URL (e.g. animals-pets)
+          --hot                 download coubs from the hot section (default sorting)
+          --random              download random coubs
+          --input-help          show full input help
 
             Input options do NOT support full URLs.
             Both URLs and input options support sorting (see --input-help).
 
         Common options:
-          -h, --help             show this help
-          -q, --quiet            suppress all non-error/prompt messages
-          -y, --yes              answer all prompts with yes
-          -n, --no               answer all prompts with no
-          -s, --short            disable video looping
-          -p, --path PATH        set output destination (def: '{self.get_default("path")}')
-          -k, --keep             keep the individual video/audio parts
-          -r, --repeat N         repeat video N times (def: until audio ends)
-          -d, --duration TIME    specify max. coub duration (FFmpeg syntax)
+          -h, --help            show this help
+          -q, --quiet           suppress all non-error/prompt messages
+          -y, --yes             answer all prompts with yes
+          -n, --no              answer all prompts with no
+          -s, --short           disable video looping
+          -p, --path PATH       set output destination (def: '{self.get_default("path")}')
+          -k, --keep            keep the individual video/audio parts
+          -r, --repeat N        repeat video N times (def: until audio ends)
+          -d, --duration TIME   specify max. coub duration (FFmpeg syntax)
 
         Download options:
-          --connections N        max. number of connections (def: {self.get_default("connect")})
-          --retries N            number of retries when connection is lost (def: {self.get_default("retries")})
-                                   0 to disable, <0 to retry indefinitely
-          --limit-num LIMIT      limit max. number of downloaded coubs
+          --connections N       max. number of connections (def: {self.get_default("connect")})
+          --retries N           number of retries when connection is lost (def: {self.get_default("retries")})
+                                  0 to disable, <0 to retry indefinitely
+          --limit-num LIMIT     limit max. number of downloaded coubs
 
         Format selection:
-          --bestvideo            download best available video quality (def)
-          --worstvideo           download worst available video quality
-          --max-video FORMAT     set limit for the best video format (def: {self.get_default("v_max")})
-                                   Supported values: med, high, higher
-          --min-video FORMAT     set limit for the worst video format (def: {self.get_default("v_min")})
-                                   Supported values: med, high, higher
-          --bestaudio            download best available audio quality (def)
-          --worstaudio           download worst available audio quality
-          --aac                  prefer AAC over higher quality MP3 audio
-          --aac-strict           only download AAC audio (never MP3)
-          --share                download 'share' video (shorter and includes audio)
+          --bestvideo           download best available video quality (def)
+          --worstvideo          download worst available video quality
+          --max-video FORMAT    set limit for the best video format (def: {self.get_default("v_max")})
+                                  Supported values: med, high, higher
+          --min-video FORMAT    set limit for the worst video format (def: {self.get_default("v_min")})
+                                  Supported values: med, high, higher
+          --bestaudio           download best available audio quality (def)
+          --worstaudio          download worst available audio quality
+          --aac                 prefer AAC over higher quality MP3 audio
+          --aac-strict          only download AAC audio (never MP3)
+          --share               download 'share' video (shorter and includes audio)
 
         Channel options:
-          --recoubs              include recoubs during channel downloads (def)
-          --no-recoubs           exclude recoubs during channel downloads
-          --only-recoubs         only download recoubs during channel downloads
+          --recoubs             include recoubs during channel downloads (def)
+          --no-recoubs          exclude recoubs during channel downloads
+          --only-recoubs        only download recoubs during channel downloads
 
         Preview options:
-          --preview COMMAND      play finished coub via the given command
-          --no-preview           explicitly disable coub preview
+          --preview COMMAND     play finished coub via the given command
+          --no-preview          explicitly disable coub preview
 
         Misc. options:
-          --audio-only           only download audio streams
-          --video-only           only download video streams
-          --write-list FILE      write all parsed coub links to FILE
-          --use-archive FILE     use FILE to keep track of already downloaded coubs
+          --audio-only          only download audio streams
+          --video-only          only download video streams
+          --write-list FILE     write all parsed coub links to FILE
+          --use-archive FILE    use FILE to keep track of already downloaded coubs
 
         Output:
-          -o, --output FORMAT    save output with the specified name (def: %id%)
+          --ext EXTENSION       merge output with the given extension (def: {self.get_default("merge_ext")})
+                                  ignored if no merge is required
+          -o, --output FORMAT   save output with the given template (def: %id%)
 
             Special strings:
               %id%        - coub ID (identifier in the URL)
@@ -1444,6 +1451,8 @@ def parse_cli():
     parser.add_argument("--use-archive", dest="archive_path", type=valid_archive,
                         default=defaults.ARCHIVE_PATH)
     # Output
+    parser.add_argument("--ext", dest="merge_ext", default=defaults.MERGE_EXT,
+                        choices=["mkv", "mp4", "asf", "avi", "flv", "f4v", "mov"])
     parser.add_argument("-o", "--output", dest="out_format",
                         default=defaults.OUT_FORMAT)
 
@@ -1452,7 +1461,6 @@ def parse_cli():
         coubs_per_page=25,      # allowed: 1-25
         tag_sep="_",
         write_method="w",       # w -> overwrite, a -> append
-        merge_ext="mkv",        # must support AVC, MP3 and AAC streams
     )
 
     if not sys.argv[1:]:
