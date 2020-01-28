@@ -1522,10 +1522,26 @@ async def parse_page(req, session=None):
     return [f"https://coub.com/view/{i}" for i in ids]
 
 
+def remove_container_dupes(containers):
+    """Remove duplicate containers to avoid unnecessary parsing."""
+    no_dupes = []
+    # Brute-force sorting
+    for c in containers:
+        unique = True
+        for u in no_dupes:
+            if (c.type, c.id, c.sort) == (u.type, u.id, u.sort):
+                unique = False
+        if unique or c.type == "random":
+            no_dupes.append(c)
+
+    return no_dupes
+
+
 def parse_input(sources):
     """Handle the parsing process of all provided input sources."""
     links = [s for s in sources if isinstance(s, str)]
     containers = [s for s in sources if not isinstance(s, str)]
+    containers = remove_container_dupes(containers)
 
     if opts.max_coubs:
         parsed = links[:opts.max_coubs]
