@@ -13,9 +13,10 @@ CoubDownloader is a simple script to download videos (called coubs) from [Coub](
 3.3. [Lists](https://github.com/HelpSeeker/CoubDownloader#lists)  
 3.4. [Channels](https://github.com/HelpSeeker/CoubDownloader#channels)  
 3.5. [Searches](https://github.com/HelpSeeker/CoubDownloader#searches)  
-3.6. [Tags](https://github.com/HelpSeeker/CoubDownloader#tags)  
-3.7. [Communities](https://github.com/HelpSeeker/CoubDownloader#communities)  
-3.8. [Hot section](https://github.com/HelpSeeker/CoubDownloader#hot-section)  
+3.6. [Random](https://github.com/HelpSeeker/CoubDownloader#random)  
+3.7. [Tags](https://github.com/HelpSeeker/CoubDownloader#tags)  
+3.8. [Communities](https://github.com/HelpSeeker/CoubDownloader#communities)  
+3.9. [Hot section](https://github.com/HelpSeeker/CoubDownloader#hot-section)  
 4. [Misc. information](https://github.com/HelpSeeker/CoubDownloader#misc-information)  
 4.1. [Video resolution vs. quality](https://github.com/HelpSeeker/CoubDownloader#video-resolution-vs-quality)  
 4.2. [AAC audio](https://github.com/HelpSeeker/CoubDownloader#aac-audio)  
@@ -31,67 +32,70 @@ CoubDownloader is a simple download script for coub.com
 Usage: coub.py [OPTIONS] INPUT [INPUT]...
 
 Input:
-  URL                    download coub(s) from the given URL
-  -i, --id ID            download a single coub
-  -l, --list PATH        read coub links from a text file
-  -c, --channel NAME     download coubs from a channel
-  -t, --tag TAG          download coubs with the specified tag
-  -e, --search TERM      download search results for the given term
-  -m, --community NAME   download coubs from a community
-                           NAME as seen in the URL (e.g. animals-pets)
-  --hot                  download coubs from the hot section
-  --input-help           show full input help
+  URL                   download coub(s) from the given URL
+  -i, --id ID           download a single coub
+  -l, --list PATH       read coub links from a text file
+  -c, --channel NAME    download coubs from a channel
+  -t, --tag TAG         download coubs with the given tag
+  -e, --search TERM     download search results for the given term
+  -m, --community NAME  download coubs from a community
+                          NAME as seen in the URL (e.g. animals-pets)
+  --hot                 download coubs from the hot section (default sorting)
+  --random              download random coubs
+  --input-help          show full input help
 
     Input options do NOT support full URLs.
     Both URLs and input options support sorting (see --input-help).
 
 Common options:
-  -h, --help             show this help
-  -q, --quiet            suppress all non-error/prompt messages
-  -y, --yes              answer all prompts with yes
-  -n, --no               answer all prompts with no
-  -s, --short            disable video looping
-  -p, --path PATH        set output destination (def: '.')
-  -k, --keep             keep the individual video/audio parts
-  -r, --repeat N         repeat video N times (def: until audio ends)
-  -d, --duration TIME    specify max. coub duration (FFmpeg syntax)
+  -h, --help            show this help
+  -q, --quiet           suppress all non-error/prompt messages
+  -y, --yes             answer all prompts with yes
+  -n, --no              answer all prompts with no
+  -s, --short           disable video looping
+  -p, --path PATH       set output destination (def: '.')
+  -k, --keep            keep the individual video/audio parts
+  -r, --repeat N        repeat video N times (def: until audio ends)
+  -d, --duration TIME   specify max. coub duration (FFmpeg syntax)
 
 Download options:
-  --connections N        max. number of connections (def: 25)
-  --retries N            number of retries when connection is lost (def: 5)
-                           0 to disable, <0 to retry indefinitely
-  --limit-num LIMIT      limit max. number of downloaded coubs
+  --connections N       max. number of connections (def: 25)
+  --retries N           number of retries when connection is lost (def: 5)
+                          0 to disable, <0 to retry indefinitely
+  --limit-num LIMIT     limit max. number of downloaded coubs
 
 Format selection:
-  --bestvideo            download best available video quality (def)
-  --worstvideo           download worst available video quality
-  --max-video FORMAT     set limit for the best video format (def: higher)
-                           Supported values: med, high, higher
-  --min-video FORMAT     set limit for the worst video format (def: med)
-                           Supported values: med, high, higher
-  --bestaudio            download best available audio quality (def)
-  --worstaudio           download worst available audio quality
-  --aac                  prefer AAC over higher quality MP3 audio
-  --aac-strict           only download AAC audio (never MP3)
-  --share                download 'share' video (shorter and includes audio)
+  --bestvideo           download best available video quality (def)
+  --worstvideo          download worst available video quality
+  --max-video FORMAT    set limit for the best video format (def: higher)
+                          Supported values: med, high, higher
+  --min-video FORMAT    set limit for the worst video format (def: med)
+                          Supported values: med, high, higher
+  --bestaudio           download best available audio quality (def)
+  --worstaudio          download worst available audio quality
+  --aac                 prefer AAC over higher quality MP3 audio
+  --aac-strict          only download AAC audio (never MP3)
+  --share               download 'share' video (shorter and includes audio)
 
 Channel options:
-  --recoubs              include recoubs during channel downloads (def)
-  --no-recoubs           exclude recoubs during channel downloads
-  --only-recoubs         only download recoubs during channel downloads
+  --recoubs             include recoubs during channel downloads (def)
+  --no-recoubs          exclude recoubs during channel downloads
+  --only-recoubs        only download recoubs during channel downloads
 
 Preview options:
-  --preview COMMAND      play finished coub via the given command
-  --no-preview           explicitly disable coub preview
+  --preview COMMAND     play finished coub via the given command
+  --no-preview          explicitly disable coub preview
 
 Misc. options:
-  --audio-only           only download audio streams
-  --video-only           only download video streams
-  --write-list FILE      write all parsed coub links to FILE
-  --use-archive FILE     use FILE to keep track of already downloaded coubs
+  --audio-only          only download audio streams
+  --video-only          only download video streams
+  --write-list FILE     write all parsed coub links to FILE
+  --use-archive FILE    use FILE to keep track of already downloaded coubs
 
 Output:
-  -o, --output FORMAT    save output with the specified name (def: %id%)
+  --ext EXTENSION       merge output with the given extension (def: mkv)
+                          ignored if no merge is required
+  -o, --output FORMAT   save output with the given template (def: %id%)
 
     Special strings:
       %id%        - coub ID (identifier in the URL)
@@ -139,11 +143,9 @@ Contents
   -) Channels
   -) Searches
   -) Tags
-  -) Communities (partially*)
+  -) Communities (incl. Featured & Coub of the Day)
   -) Hot section
-
-  * 'Featured' and 'Coub of the Day' are not yet supported as they use
-    different API endpoints.
+  -) Random
 
 2. Input Methods
 ================
@@ -156,7 +158,8 @@ Contents
     Search:       https://coub.com/search?q=example-term
     Tag:          https://coub.com/tags/example-tag
     Community:    https://coub.com/community/example-community
-    Hot section:  https://coub.com/hot
+    Hot section:  https://coub.com or https://coub.com/hot
+    Random:       https://coub.com/random
 
     URLs which indicate special sort orders are also supported.
 
@@ -169,6 +172,7 @@ Contents
     Tag:          -t example-tag        or  --tag example-tag
     Community:    -m example-community  or  --community example-community
     Hot section:  --hot
+    Random:       --random
 
   3) Prefix + channel name/tag/search term/etc.
 
@@ -181,6 +185,7 @@ Contents
     Tag:          tags/example-tag
     Community:    community/example-community
     Hot section:  hot
+    Random:       random
 
 3. Sorting
 ==========
@@ -203,49 +208,61 @@ Contents
 
     https://coub.com/search?q=example-term#top
     tags/example-tag#views_count
-    --hot#rising
+    hot#rising
 
-  This is supported by all input methods. Please note that a manually
-  specified sort order will overwrite the sort order as indicated by
-  the URL.
+  This is supported by all input methods, except the --hot option.
+  Please note that a manually specified sort order will overwrite the
+  sort order as indicated by the URL.
 
   Supported sort orders
   ---------------------
 
-    Channels:     most_recent (default)
-                  most_liked
-                  most_viewed
-                  oldest
-                  random
+    Channels:         most_recent (default)
+                      most_liked
+                      most_viewed
+                      oldest
+                      random
 
-    Searches:     relevance (default)
-                  top
-                  views_count
-                  most_recent
+    Searches:         relevance (default)
+                      top
+                      views_count
+                      most_recent
 
-    Tags:         popular (default)
-                  top
-                  views_count
-                  fresh
+    Tags:             popular (default)
+                      top
+                      views_count
+                      fresh
 
-    Communities:  hot_daily
-                  hot_weekly
-                  hot_monthly (default)
-                  hot_quarterly
-                  hot_six_months
-                  rising
-                  fresh
-                  top
-                  views_count
-                  random
+    Communities:      hot_daily
+                      hot_weekly
+                      hot_monthly (default)
+                      hot_quarterly
+                      hot_six_months
+                      rising
+                      fresh
+                      top
+                      views_count
+                      random
 
-    Hot section:  hot_daily
-                  hot_weekly
-                  hot_monthly (default)
-                  hot_quarterly
-                  hot_six_months
-                  rising
-                  fresh
+    Featured:         recent (default)
+    (community)       top_of_the_month
+                      undervalued
+
+    Coub of the Day:  recent (default)
+    (community)       top
+                      views_count
+
+    Hot section:      hot_daily
+                      hot_weekly
+                      hot_monthly (default)
+                      hot_quarterly
+                      hot_six_months
+                      rising
+                      fresh
+
+    Random:           popular (default)
+                      top
+
 ```
 
 ***
@@ -286,6 +303,10 @@ Searches provide the same results as on Coub's website, with the exception that 
 
 Using general search terms can potentially return tens of thousands of coub links. The usage of `--limit-num` is encouraged.
 
+#### Random
+
+Provides a random collection of coubs. A request returns max. 1000 coubs, but several requests can be made during one script invocation (e.g. using the --random option thrice).
+
 ***
 
 The now following input types only return a limited number of links. This is indirectly enforced by the API, although I can't say if it is done on purpose or a bug (pages >99 redirect to page 1).
@@ -302,7 +323,7 @@ Please note that the default sort order (by popularity) provides less results th
 
 #### Communities
 
-There are currently 17 supported communities.
+There are currently 19 supported communities.
 
 The following list shows the names of the supported communities (as seen on Coub's website). In parenthesis are the internally used names and what should be used as input for the script.
 
@@ -323,8 +344,12 @@ The following list shows the names of the supported communities (as seen on Coub
 * Dance                (**dance**)
 * Auto & Technique     (**cars**)
 * NSFW                 (**nsfw**)
+* Featured             (**featured**)
+* Coub of the Day      (**coub-of-the-day**)
 
-The default sort order (most popular coubs of the month) may provide less results than other sort orders.
+The default sort order for most communities (most popular coubs of the month) may provide less results than other sort orders.
+
+*Featured* and *Coub of the Day* have unique sort orders.
 
 #### Hot section
 
@@ -387,7 +412,7 @@ It basically tells the script to rank AAC higher than anything else. On the othe
 
 Either an AAC stream is present or the audio will be entirely missing. This ensures AAC audio under any circumstances. Another way to look at it is that `--aac` tries to download AAC with MP3 as fallback, while `--aac-strict` gets rid of the fallback.
 
-To make matters even more complicated, some users might not want AAC audio at all. This is hopefully only a small demographic (after all AAC support is thorough and it does compress a lot better than MP3), but the script is still able to cater to this group. There's no extra command line option, but look for the following lines inside the script and change `aac` to 0.
+To make matters even more complicated, some users might not want AAC audio at all. This is hopefully only a small demographic (after all AAC support is thorough and it does compress a lot better than MP3), but the script is still able to cater to this group. There's no extra command line option, but look for the following lines inside the script and change `AAC` to 0.
 
 ```
     # How much to prefer AAC audio
@@ -395,7 +420,7 @@ To make matters even more complicated, some users might not want AAC audio at al
     # 1 -> rank it between low and high quality MP3
     # 2 -> prefer AAC, use MP3 fallback
     # 3 -> either AAC or no audio
-    aac = 1
+    AAC = 1
 ```
 
 Now AAC audio will be completely ignored and the script only serves MP3 audio (like the old version).
@@ -427,13 +452,13 @@ There's no fallback for *share* videos. If the *share* version is not yet availa
 
 Coub started to massively overhaul their database and API. Of course those changes aren't documented (why would you document API changes anyway?).
 
-- [x] Remove video repair (most videos are already stored in a non-broken state and the rest will soon follow)
+- [x] Only repair video streams that are actually broken
 - [x] Remove mobile option (they now come with a watermark and are the exact same as html5 med) 
 - [x] Add AAC mobile audio as another possible audio version (ranked between low and high quality MP3 audio)
 - [x] Add options to prefer AAC or only download AAC audio
 - [x] Add shared option (video+audio already combined)
 - [x] Download coubs from the hot section
-- [x] Download coubs from communities
+- [x] Download coubs from communities (incl. Featured & Coub of the Day)
 - [x] Asynchronous coub processing
 - [x] Asynchronous timeline parsing
 - [x] Detect stream corruption (incl. old Coub storage method)
@@ -444,6 +469,8 @@ Coub started to massively overhaul their database and API. Of course those chang
 - [x] Autocompletion of incomplete/malformed URLs (to some extent)
 - [x] Advanced sorting per input
 - [x] Support for sort order related URLs
+- [x] Download random coubs
+- [x] Option to change the container format for stream remuxing
 
 ## Changes since switching to Coub's API (previously used youtube-dl)
 
