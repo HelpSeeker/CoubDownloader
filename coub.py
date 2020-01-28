@@ -1398,7 +1398,7 @@ def parse_cli():
     repeat.add_argument("-s", "--short", dest="repeat", action="store_const",
                         const=1, default=defaults.REPEAT)
     repeat.add_argument("-r", "--repeat", type=positive_int, default=defaults.REPEAT)
-    parser.add_argument("-p", "--path", default=defaults.PATH)
+    parser.add_argument("-p", "--path", type=os.path.abspath, default=defaults.PATH)
     parser.add_argument("-k", "--keep", action="store_true", default=defaults.KEEP)
     parser.add_argument("-d", "--duration", dest="dur", type=valid_time,
                         default=defaults.DUR)
