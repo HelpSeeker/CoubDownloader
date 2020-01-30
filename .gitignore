@@ -1,6 +1,8 @@
-*
+/*
 
 !.gitignore
 !LICENSE
 !README.md
 !coub.py
+!coub-gui.py
+!/images/

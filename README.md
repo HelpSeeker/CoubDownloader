@@ -4,25 +4,26 @@ CoubDownloader is a simple script to download videos (called coubs) from [Coub](
 
 ## Contents
 
-1. [Usage](https://github.com/HelpSeeker/CoubDownloader#usage)  
-2. [Requirements](https://github.com/HelpSeeker/CoubDownloader#requirements)  
-2.1 [Optional](https://github.com/HelpSeeker/CoubDownloader#optional)  
-3. [Input](https://github.com/HelpSeeker/CoubDownloader#input)  
-3.1. [Overview](https://github.com/HelpSeeker/CoubDownloader#overview)  
-3.2. [Direct coub links](https://github.com/HelpSeeker/CoubDownloader#direct-coub-links)  
-3.3. [Lists](https://github.com/HelpSeeker/CoubDownloader#lists)  
-3.4. [Channels](https://github.com/HelpSeeker/CoubDownloader#channels)  
-3.5. [Searches](https://github.com/HelpSeeker/CoubDownloader#searches)  
-3.6. [Random](https://github.com/HelpSeeker/CoubDownloader#random)  
-3.7. [Tags](https://github.com/HelpSeeker/CoubDownloader#tags)  
-3.8. [Communities](https://github.com/HelpSeeker/CoubDownloader#communities)  
-3.9. [Hot section](https://github.com/HelpSeeker/CoubDownloader#hot-section)  
-4. [Misc. information](https://github.com/HelpSeeker/CoubDownloader#misc-information)  
-4.1. [Video resolution vs. quality](https://github.com/HelpSeeker/CoubDownloader#video-resolution-vs-quality)  
-4.2. [AAC audio](https://github.com/HelpSeeker/CoubDownloader#aac-audio)  
-4.3. ['share' videos](https://github.com/HelpSeeker/CoubDownloader#share-videos)  
-5. [Changes since Coub's database upgrade (watermark & co)](https://github.com/HelpSeeker/CoubDownloader#changes-since-coubs-database-upgrade-watermark--co)  
-6. [Changes since switching to Coub's API (previously used youtube-dl)](https://github.com/HelpSeeker/CoubDownloader#changes-since-switching-to-coubs-api-previously-used-youtube-dl)  
+1. [Usage](#usage)
+2. [Requirements](#requirements)
+    2.1 [Optional](#optional)
+3. [Input](#input)
+    3.1. [Overview](#overview)
+    3.2. [Direct coub links](#direct-coub-links)
+    3.3. [Lists](#lists)
+    3.4. [Channels](#channels)
+    3.5. [Searches](#searches)
+    3.6. [Random](#random)
+    3.7. [Tags](#tags)
+    3.8. [Communities](#communities)
+    3.9. [Hot section](#hot-section)
+4. [GUI](#gui)
+5. [Misc. information](#misc-information)
+    5.1. [Video resolution vs. quality](#video-resolution-vs-quality)
+    5.2. [AAC audio](#aac-audio)
+    5.3. ['share' videos](#share-videos)
+6. [Changes since Coub's database upgrade (watermark & co)](#changes-since-coubs-database-upgrade-watermark--co)
+7. [Changes since switching to Coub's API (previously used youtube-dl)](#changes-since-switching-to-coubs-api-previously-used-youtube-dl)
 
 ## Usage
 
@@ -118,6 +119,7 @@ Output:
 
 * [aiohttp](https://aiohttp.readthedocs.io/en/stable/) for asynchronous execution **(recommended)**
 * [colorama](https://github.com/tartley/colorama) for colorized terminal output on Windows
+* [Gooey](https://github.com/chriskiehl/Gooey) to run `coub-gui.py`
 
 ## Input
 
@@ -364,6 +366,21 @@ refer to the hot section and can be used as input.
 
 The default sort order (most popular coubs of the month) may provide less results than other sort orders.
 
+## GUI
+
+A basic GUI, powered by [Gooey](https://github.com/chriskiehl/Gooey), is provided via `coub-gui.py`.
+
+![Settings window on Windows](/images/coub-gui_input_Windows.png) ![Progress window on Linux](/images/coub-gui_execution_Linux.png)
+
+It provides the same functionality as the main CLI tool, with a few notable exceptions:
+
+* No quiet mode
+* No overwrite prompt (default prompt answer is set to "no")
+* No option equivalent to `--random#top` (direct URL input must be used)
+* The output path defaults to "coubs" in the user's home directory instead of the current one
+
+Another important difference is that `coub-gui.py` is **NOT** a standalone script. It depends on `coub.py` being in the same location.
+
 ## Misc. information
 
 ### Video resolution vs. quality
@@ -453,7 +470,7 @@ There's no fallback for *share* videos. If the *share* version is not yet availa
 Coub started to massively overhaul their database and API. Of course those changes aren't documented (why would you document API changes anyway?).
 
 - [x] Only repair video streams that are actually broken
-- [x] Remove mobile option (they now come with a watermark and are the exact same as html5 med) 
+- [x] Remove mobile option (they now come with a watermark and are the exact same as html5 med)
 - [x] Add AAC mobile audio as another possible audio version (ranked between low and high quality MP3 audio)
 - [x] Add options to prefer AAC or only download AAC audio
 - [x] Add shared option (video+audio already combined)
@@ -462,7 +479,7 @@ Coub started to massively overhaul their database and API. Of course those chang
 - [x] Asynchronous coub processing
 - [x] Asynchronous timeline parsing
 - [x] Detect stream corruption (incl. old Coub storage method)
-- [x] Workspace cleanup (incomplete coubs) after user interrupt 
+- [x] Workspace cleanup (incomplete coubs) after user interrupt
 - [x] Colorized terminal output
 - [x] Download retries
 - [x] URL input without input options
@@ -471,6 +488,7 @@ Coub started to massively overhaul their database and API. Of course those chang
 - [x] Support for sort order related URLs
 - [x] Download random coubs
 - [x] Option to change the container format for stream remuxing
+- [x] Basic GUI frontend
 
 ## Changes since switching to Coub's API (previously used youtube-dl)
 
@@ -481,7 +499,7 @@ Coub started to massively overhaul their database and API. Of course those chang
 - [x] ~~Limit download speed~~ (was only possible in the Bash version)
 - [x] Download all coubs with a certain tag
 - [x] Check for the existence of a coub before downloading
-- [x] Specify max. coub duration (FFmpeg syntax) 
+- [x] Specify max. coub duration (FFmpeg syntax)
 - [x] Keep track of already downloaded coubs
 - [x] Export parsed coub links (from channels or tags) to a file for later usage
 - [x] Different verbosity levels
