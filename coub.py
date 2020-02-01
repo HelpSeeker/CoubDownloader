@@ -1461,6 +1461,7 @@ def parse_cli():
         coubs_per_page=25,      # allowed: 1-25
         tag_sep="_",
         write_method="w",       # w -> overwrite, a -> append
+        chunk_size=1024,
     )
 
     if not sys.argv[1:]:
@@ -1805,7 +1806,7 @@ async def save_stream(link, path, session=None):
         async with session.get(link) as stream:
             with open(path, "wb") as f:
                 while True:
-                    chunk = await stream.content.read(1024)
+                    chunk = await stream.content.read(opts.chunk_size)
                     if not chunk:
                         break
                     f.write(chunk)
@@ -1813,7 +1814,7 @@ async def save_stream(link, path, session=None):
         try:
             with urlopen(link) as stream, open(path, "wb") as f:
                 while True:
-                    chunk = stream.read(1024)
+                    chunk = stream.read(opts.chunk_size)
                     if not chunk:
                         break
                     f.write(chunk)

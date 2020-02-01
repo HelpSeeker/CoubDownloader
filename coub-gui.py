@@ -217,6 +217,7 @@ def parse_cli():
         coubs_per_page=25,      # allowed: 1-25
         tag_sep="_",
         write_method="w",       # w -> overwrite, a -> append
+        chunk_size=1024,
     )
 
     args = parser.parse_args()
