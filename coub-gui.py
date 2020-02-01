@@ -82,6 +82,21 @@ def translate_to_cli(options):
     show_failure_modal=False,
     hide_progress_msg=False,
     terminal_font_family="monospace", # didn't work when I tested it on Windows
+    menu=[
+        {
+            'name': 'Help',
+            'items': [
+                {
+                    'type': 'AboutDialog',
+                    'menuTitle': 'About',
+                    'name': 'CoubDownloader',
+                    'description': 'A simple download script for coub.com',
+                    'website': 'https://github.com/HelpSeeker/CoubDownloader',
+                    'license': 'GPLv3',
+                }
+            ]
+        }
+    ]
 )
 def parse_cli():
     """Create Gooey GUI."""
