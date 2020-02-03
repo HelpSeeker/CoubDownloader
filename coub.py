@@ -154,7 +154,7 @@ class DefaultOptions:
     #
     # Setting a custom value increases skip duration for existing coubs
     # Usage of an archive file is recommended in such an instance
-    OUT_FORMAT = None
+    OUT_FORMAT = "%id%"
 
     # Advanced options
     COUBS_PER_PAGE = 25      # allowed: 1-25
@@ -371,7 +371,7 @@ class CustomArgumentParser(argparse.ArgumentParser):
         Output:
           --ext EXTENSION       merge output with the given extension (def: {self.get_default("merge_ext")})
                                   ignored if no merge is required
-          -o, --output FORMAT   save output with the given template (def: %id%)
+          -o, --output FORMAT   save output with the given template (def: {self.get_default("out_format")})
 
             Special strings:
               %id%        - coub ID (identifier in the URL)

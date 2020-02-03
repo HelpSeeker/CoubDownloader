@@ -21,12 +21,6 @@ class GuiDefaultOptions(coub.DefaultOptions):
     else:
         PATH = os.path.abspath(coub.DefaultOptions.PATH)
 
-    # "%id%" by itself gets replaced by None anyway and it's less confusing
-    # than just showing None as default value
-    # This might be worth changing in the main script as well
-    if not coub.DefaultOptions.OUT_FORMAT:
-        OUT_FORMAT = "%id%"
-
     # Create special labels for dropdown menus
     # Some internally used values would cause confusion
     # Some menus also combine options
