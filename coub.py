@@ -82,6 +82,7 @@ class DefaultOptions:
     RETRIES = 5
 
     # Limit how many coubs can be downloaded during one script invocation
+    # 0, None, etc. to disable
     MAX_COUBS = None
 
     # What video/audio quality to download
@@ -218,6 +219,12 @@ class DefaultOptions:
             "A_ONLY",
             "V_ONLY",
         ]
+        none_allowed = [
+            "DUR",
+            "PREVIEW",
+            "OUT_FILE",
+            "ARCHIVE_PATH",
+        ]
 
         if option in ints:
             return int(value)
@@ -227,6 +234,9 @@ class DefaultOptions:
             if value == "False":
                 return False
             raise ValueError
+        if option in none_allowed:
+            if value == "None":
+                return None
         return value
 
 
