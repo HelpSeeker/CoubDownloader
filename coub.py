@@ -157,10 +157,78 @@ class DefaultOptions:
     OUT_FORMAT = None
 
     # Advanced options
-    COUBS_PER_PAGE=25      # allowed: 1-25
-    TAG_SEP="_"
-    WRITE_METHOD="w"       # w -> overwrite, a -> append
-    CHUNK_SIZE=1024        # in Bytes
+    COUBS_PER_PAGE = 25      # allowed: 1-25
+    TAG_SEP = "_"
+    WRITE_METHOD = "w"       # w -> overwrite, a -> append
+    CHUNK_SIZE = 1024        # in Bytes
+
+    def __init__(self):
+        # Only supports script's location for now, but write it to be extensible
+        config_dirs = [os.path.dirname(os.path.realpath(__file__))]
+        for d in config_dirs:
+            config_path = os.path.join(d, "coub.conf")
+            if os.path.exists(config_path):
+                self.read_from_config(config_path)
+
+    def read_from_config(self, path):
+        """Change default options based on user config file."""
+        try:
+            with open(path, "r") as f:
+                user_settings = [l for l in f
+                                 if "=" in l and not l.startswith("#")]
+        except (OSError, UnicodeError):
+            err(f"Error reading config file '{path}'!", color=fgcolors.WARNING)
+            user_settings = []
+
+        for setting in user_settings:
+            name = setting.split("=")[0].strip()
+            value = setting.split("=")[1].strip()
+            if hasattr(self, name):
+                try:
+                    value = self.determine_value_type(name, value)
+                except ValueError:
+                    err(f"{name}: Value ('{value}') has wrong type!",
+                        color=fgcolors.WARNING)
+                    continue
+                setattr(self, name, value)
+            else:
+                err(f"Unknown option in config file: {name}",
+                    color=fgcolors.WARNING)
+
+    @staticmethod
+    def determine_value_type(option, value):
+        """Convert values from config file (all strings) to the right type."""
+        ints = [
+            "VERBOSITY",
+            "REPEAT",
+            "CONNECT",
+            "RETRIES",
+            "MAX_COUBS",
+            "V_QUALITY",
+            "A_QUALITY",
+            "AAC",
+            "COUBS_PER_PAGE",
+            "CHUNK_SIZE",
+        ]
+        bools = [
+            "KEEP",
+            "SHARE",
+            "RECOUBS",
+            "ONLY_RECOUBS",
+            "A_ONLY",
+            "V_ONLY",
+        ]
+
+        if option in ints:
+            return int(value)
+        if option in bools:
+            if value == "True":
+                return True
+            if value == "False":
+                return False
+            raise ValueError
+        return value
+
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # Classes For Global Variables
