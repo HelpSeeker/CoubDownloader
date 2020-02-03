@@ -156,6 +156,12 @@ class DefaultOptions:
     # Usage of an archive file is recommended in such an instance
     OUT_FORMAT = None
 
+    # Advanced options
+    COUBS_PER_PAGE=25      # allowed: 1-25
+    TAG_SEP="_"
+    WRITE_METHOD="w"       # w -> overwrite, a -> append
+    CHUNK_SIZE=1024        # in Bytes
+
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # Classes For Global Variables
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -1458,10 +1464,10 @@ def parse_cli():
 
     # Advanced Options
     parser.set_defaults(
-        coubs_per_page=25,      # allowed: 1-25
-        tag_sep="_",
-        write_method="w",       # w -> overwrite, a -> append
-        chunk_size=1024,
+        coubs_per_page=defaults.COUBS_PER_PAGE,
+        tag_sep=defaults.TAG_SEP,
+        write_method=defaults.WRITE_METHOD,
+        chunk_size=defaults.CHUNK_SIZE,
     )
 
     if not sys.argv[1:]:
