@@ -1721,10 +1721,7 @@ def get_name(req_json, c_id):
     except (KeyError, TypeError, IndexError):
         name = name.replace("%community%", "")
 
-    tags = ""
-    for t in req_json['tags']:
-        # Don't add tag separator after the last tag
-        tags += f"{t['title']}{opts.tag_sep if t != req_json['tags'][-1] else ''}"
+    tags = opts.tag_sep.join([t['title'] for t in req_json['tags']])
     name = name.replace("%tags%", tags)
 
     # Strip/replace special characters that can lead to script failure (ffmpeg concat)
