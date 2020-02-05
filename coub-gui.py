@@ -26,11 +26,7 @@ class GuiDefaultOptions(coub.DefaultOptions):
     # Some menus also combine options
     QUALITY_LABEL = ["Worst quality", "Best quality"]
     AAC_LABEL = ["Only MP3", "No Bias", "Prefer AAC", "Only AAC"]
-    RECOUB_LABEL = {
-        (True, False): "With Recoubs",
-        (False, False): "No Recoubs",
-        (True, True): "Only Recoubs",
-    }
+    RECOUB_LABEL = ["No Recoubs", "With Recoubs", "Only Recoubs"]
     SPECIAL_LABEL = {
         (True, False, False): "Share",
         (False, True, False): "Video only",
@@ -44,11 +40,7 @@ def translate_to_cli(options):
     # Special dropdown menu labels and what they translate to
     QUALITY_LABEL = {"Worst quality": 0, "Best quality": -1}
     AAC_LABEL = {"Only MP3": 0, "No Bias": 1, "Prefer AAC": 2, "Only AAC": 3}
-    RECOUB_LABEL = {
-        "With Recoubs": (True, False),
-        "No Recoubs": (False, False),
-        "Only Recoubs": (True, True),
-    }
+    RECOUB_LABEL = {"No Recoubs": 0, "With Recoubs": 1, "Only Recoubs": 2}
     SPECIAL_LABEL = {
         "Share": (True, False, False),
         "Video only": (False, True, False),
@@ -60,7 +52,7 @@ def translate_to_cli(options):
     options.v_quality = QUALITY_LABEL[options.v_quality]
     options.a_quality = QUALITY_LABEL[options.a_quality]
     options.aac = AAC_LABEL[options.aac]
-    options.recoubs, options.only_recoubs = RECOUB_LABEL[options.recoubs]
+    options.recoubs = RECOUB_LABEL[options.recoubs]
     options.share, options.v_only, options.a_only = SPECIAL_LABEL[options.special]
 
     return options
@@ -115,8 +107,8 @@ def parse_cli():
     input_.add_argument("--channels", default="", metavar="Channels",
                         help="Download channels with the given names")
     input_.add_argument("--recoubs", metavar="Recoubs",
-                        default=defs.RECOUB_LABEL[(defs.RECOUBS, defs.ONLY_RECOUBS)],
-                        choices=["With Recoubs", "No Recoubs", "Only Recoubs"],
+                        default=defs.RECOUB_LABEL[defs.RECOUBS],
+                        choices=["No Recoubs", "With Recoubs", "Only Recoubs"],
                         help="How to treat recoubs during channel downloads")
     input_.add_argument("--tags", default="", metavar="Tags",
                         help="Download coubs with at least one of the given tags")

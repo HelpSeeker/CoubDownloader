@@ -114,12 +114,10 @@ class DefaultOptions:
     SHARE = False
 
     # How to treat recoubs during channel downloads
-    #   RECOUBS = False     -> Only Original
-    #   RECOUBS = True      -> Original + Recoubs
-    #   ONLY_RECOUBS = True -> Only Recoubs
-    # RECOUBS mustn't be False, when ONLY_RECOUBS is True
-    RECOUBS = True
-    ONLY_RECOUBS = False
+    #   0 -> don't download recoubs
+    #   1 -> download recoubs
+    #   2 -> only download recoubs
+    RECOUBS = 1
 
     # Preview a downloaded coub with the given command
     # Keyboard shortcuts may not work for CLI audio players
@@ -208,14 +206,13 @@ class DefaultOptions:
             "V_QUALITY",
             "A_QUALITY",
             "AAC",
+            "RECOUBS",
             "COUBS_PER_PAGE",
             "CHUNK_SIZE",
         ]
         bools = [
             "KEEP",
             "SHARE",
-            "RECOUBS",
-            "ONLY_RECOUBS",
             "A_ONLY",
             "V_ONLY",
         ]
@@ -657,9 +654,9 @@ class Channel(BaseContainer):
         template = f"https://coub.com/api/v2/timeline/channel/{urlquote(self.id)}"
         template = f"{template}?per_page={opts.coubs_per_page}"
 
-        if not opts.recoubs:
+        if opts.recoubs == 0:
             template = f"{template}&type=simples"
-        elif opts.only_recoubs:
+        elif opts.recoubs == 2:
             template = f"{template}&type=recoubs"
 
         if self.sort in methods:
@@ -1513,11 +1510,12 @@ def parse_cli():
                      default=defaults.AAC)
     # Channel Options
     recoub = parser.add_mutually_exclusive_group()
-    recoub.add_argument("--recoubs", action="store_true", default=defaults.RECOUBS)
-    recoub.add_argument("--no-recoubs", dest="recoubs", action="store_false",
-                        default=defaults.RECOUBS)
-    recoub.add_argument("--only-recoubs", action="store_true",
-                        default=defaults.ONLY_RECOUBS)
+    recoub.add_argument("--recoubs", action="store_const",
+                        const=1, default=defaults.RECOUBS)
+    recoub.add_argument("--no-recoubs", dest="recoubs", action="store_const",
+                        const=0, default=defaults.RECOUBS)
+    recoub.add_argument("--only-recoubs", dest="recoubs", action="store_const",
+                        const=2, default=defaults.RECOUBS)
     # Preview Options
     player = parser.add_mutually_exclusive_group()
     player.add_argument("--preview", default=defaults.PREVIEW)
