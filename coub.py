@@ -1731,9 +1731,10 @@ def get_name(req_json, c_id):
     name = name.replace("\n", " ")
 
     try:
-        f = open(name, "w")
+        # Add example extension to simulate the full name length
+        f = open(f"{name}.ext", "w")
         f.close()
-        os.remove(name)
+        os.remove(f"{name}.ext")
     except OSError:
         err(f"Error: Filename invalid or too long! Falling back to '{c_id}'",
             color=fgcolors.WARNING)
