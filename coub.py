@@ -82,7 +82,6 @@ class DefaultOptions:
     RETRIES = 5
 
     # Limit how many coubs can be downloaded during one script invocation
-    # 0, None, etc. to disable
     MAX_COUBS = None
 
     # What video/audio quality to download
@@ -184,12 +183,7 @@ class DefaultOptions:
             name = setting.split("=")[0].strip()
             value = setting.split("=")[1].strip()
             if hasattr(self, name):
-                try:
-                    value = self.determine_value_type(name, value)
-                except ValueError:
-                    err(f"{name}: Value ('{value}') has wrong type!",
-                        color=fgcolors.WARNING)
-                    continue
+                value = self.guess_string_type(name, value)
                 setattr(self, name, value)
             else:
                 err(f"Unknown option in config file: {name}",
@@ -206,7 +200,7 @@ class DefaultOptions:
             "DUR": (lambda x: isinstance(x, str) or x is None),
             "CONNECT": (lambda x: isinstance(x, int) and x > 0),
             "RETRIES": (lambda x: isinstance(x, int)),
-            "MAX_COUBS": (lambda x: not x or isinstance(x, int) and x > 0),
+            "MAX_COUBS": (lambda x: isinstance(x, int) and x > 0 or x is None),
             "V_QUALITY": (lambda x: x in [0, -1]),
             "A_QUALITY": (lambda x: x in [0, -1]),
             "V_MAX": (lambda x: x in ["higher", "high", "med"]),
@@ -238,46 +232,33 @@ class DefaultOptions:
             sys.exit(status.OPT)
 
     @staticmethod
-    def determine_value_type(option, value):
+    def guess_string_type(option, string):
         """Convert values from config file (all strings) to the right type."""
-        ints = [
-            "VERBOSITY",
-            "REPEAT",
-            "CONNECT",
-            "RETRIES",
-            "MAX_COUBS",
-            "V_QUALITY",
-            "A_QUALITY",
-            "AAC",
-            "RECOUBS",
-            "COUBS_PER_PAGE",
-            "CHUNK_SIZE",
-        ]
-        bools = [
-            "KEEP",
-            "SHARE",
-            "A_ONLY",
-            "V_ONLY",
-        ]
-        none_allowed = [
+        specials = {
+            "None": None,
+            "True": True,
+            "False": False,
+        }
+        # Some options should not follow the above directives
+        # Usually options which are supposed to ONLY take strings
+        exceptions = [
+            "PATH",
             "DUR",
             "PREVIEW",
             "OUT_FILE",
             "ARCHIVE_PATH",
+            "OUT_FORMAT",
+            "TAG_SEP",
         ]
 
-        if option in ints:
-            return int(value)
-        if option in bools:
-            if value == "True":
-                return True
-            if value == "False":
-                return False
-            raise ValueError
-        if option in none_allowed:
-            if value == "None":
-                return None
-        return value
+        if string in specials:
+            return specials[string]
+        if option in exceptions:
+            return string
+        try:
+            return int(string)
+        except ValueError:
+            return string
 
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
