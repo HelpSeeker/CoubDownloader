@@ -168,6 +168,7 @@ class DefaultOptions:
             config_path = os.path.join(d, "coub.conf")
             if os.path.exists(config_path):
                 self.read_from_config(config_path)
+        self.check_values()
 
     def read_from_config(self, path):
         """Change default options based on user config file."""
@@ -193,6 +194,48 @@ class DefaultOptions:
             else:
                 err(f"Unknown option in config file: {name}",
                     color=fgcolors.WARNING)
+
+    def check_values(self):
+        """Test defaults for valid ranges and types."""
+        checks = {
+            "VERBOSITY": (lambda x: x in [0, 1]),
+            "PROMPT": (lambda x: True),     # Anything but yes/no will lead to prompt
+            "PATH": (lambda x: isinstance(x, str)),
+            "KEEP": (lambda x: isinstance(x, bool)),
+            "REPEAT": (lambda x: isinstance(x, int) and x > 0),
+            "DUR": (lambda x: isinstance(x, str) or x is None),
+            "CONNECT": (lambda x: isinstance(x, int) and x > 0),
+            "RETRIES": (lambda x: isinstance(x, int)),
+            "MAX_COUBS": (lambda x: not x or isinstance(x, int) and x > 0),
+            "V_QUALITY": (lambda x: x in [0, -1]),
+            "A_QUALITY": (lambda x: x in [0, -1]),
+            "V_MAX": (lambda x: x in ["higher", "high", "med"]),
+            "V_MIN": (lambda x: x in ["higher", "high", "med"]),
+            "AAC": (lambda x: x in [0, 1, 2, 3]),
+            "SHARE": (lambda x: isinstance(x, bool)),
+            "RECOUBS": (lambda x: x in [0, 1, 2]),
+            "PREVIEW": (lambda x: isinstance(x, str) or x is None),
+            "A_ONLY": (lambda x: isinstance(x, bool)),
+            "V_ONLY": (lambda x: isinstance(x, bool)),
+            "OUT_FILE": (lambda x: isinstance(x, str) or x is None),
+            "ARCHIVE_PATH": (lambda x: isinstance(x, str) or x is None),
+            "MERGE_EXT": (lambda x: x in ["mkv", "mp4", "asf", "avi", "flv", "f4v", "mov"]),
+            "OUT_FORMAT": (lambda x: isinstance(x, str) or x is None),
+            "COUBS_PER_PAGE": (lambda x: x in range(1, 26)),
+            "TAG_SEP": (lambda x: isinstance(x, str)),
+            "WRITE_METHOD": (lambda x: x in ["w", "a"]),
+            "CHUNK_SIZE": (lambda x: isinstance(x, int) and x > 0),
+        }
+
+        errors = []
+        for option in checks:
+            value = getattr(self, option)
+            if not checks[option](value):
+                errors.append((option, value))
+        if errors:
+            for e in errors:
+                err(f"{e[0]}: invalid default value '{e[1]}'")
+            sys.exit(status.OPT)
 
     @staticmethod
     def determine_value_type(option, value):
