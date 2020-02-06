@@ -36,129 +36,93 @@ except ModuleNotFoundError:
         colors = False
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-# Default Options
+# Classes For Global Variables
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+class ExitCodes:
+    """Store exit codes for non-successful execution."""
+
+    DEP = 1         # missing required software
+    OPT = 2         # invalid user-specified option
+    RUN = 3         # misc. runtime error
+    DOWN = 4        # failed to download all input links (existence == success)
+    INT = 5         # early termination was requested by the user (i.e. Ctrl+C)
+    CONN = 6        # connection either couldn't be established or was lost
+
+
+class Colors:
+    """Store ANSI escape codes for colorized output."""
+
+    # https://en.wikipedia.org/wiki/ANSI_escape_code#Colors
+    ERROR = '\033[31m'      # red
+    WARNING = '\033[33m'    # yellow
+    SUCCESS = '\033[32m'    # green
+    RESET = '\033[0m'
+
+    def disable(self):
+        """Disable colorized output by removing escape codes."""
+        # I'm not going to stop addressing these attributes as constants, just
+        # because Windows thinks it needs to be special
+        self.ERROR = ''
+        self.SUCCESS = ''
+        self.WARNING = ''
+        self.RESET = ''
+
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# Global Variables
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+status = ExitCodes()
+fgcolors = Colors()
+if not colors:
+    fgcolors.disable()
+
+total = 0
+count = 0
+done = 0
+
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# Classes
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 class DefaultOptions:
     """Define and store all import user settings."""
 
-    # Change verbosity of the script
-    # 0 for quiet, >= 1 for normal verbosity
+    # Common defaults
     VERBOSITY = 1
-
-    # yes/no will answer prompts automatically
-    # Everything else will lead to a prompt
     PROMPT = None
-
-    # Default download destination
     PATH = "."
-
-    # Keep individual video/audio streams
     KEEP = False
-
-    # How often to loop the video
-    # Only has an effect, if the looped video is shorter than the audio
-    # Otherwise the max. length is limited by the audio duration
     REPEAT = 1000
-
-    # Max. coub duration (FFmpeg syntax)
-    # Can be used in combination with repeat, in which case the shorter
-    # duration will be used
     DUR = None
-
-    # Max no. of connections for aiohttp's ClientSession
-    # Raising this value can lead to shorter download times, but also
-    # increases the risk of Coub throttling or terminating your connections
-    # There's also no benefit in higher values, if your connection is already
-    # fully utilized
+    # Download defaults
     CONNECT = 25
-
-    # How often to retry download when connection is lost
-    # >0 -> retry the specified number of times
-    #  0 -> don't retry
-    # <0 -> retry indefinitely
-    # Retries happen through recursion, so the max. number is theoretically
-    # limited to 1000 retries (although Python's limit could be raised as well)
     RETRIES = 5
-
-    # Limit how many coubs can be downloaded during one script invocation
     MAX_COUBS = None
-
-    # What video/audio quality to download
-    #   0 -> worst quality
-    #  -1 -> best quality
-    # Everything else can lead to undefined behavior
+    # Format defaults
     V_QUALITY = -1
     A_QUALITY = -1
-
-    # Limits for the list of video streams
-    #   V_MAX: limits what counts as best stream
-    #   V_MIN: limits what counts as worst stream
-    # Supported values:
-    #   med    ( ~640px width)
-    #   high   (~1280px width)
-    #   higher (~1600px width)
-    V_MAX = 'higher'
-    V_MIN = 'med'
-
-    # How much to prefer AAC audio
-    #   0 -> never download AAC audio
-    #   1 -> rank it between low and high quality MP3
-    #   2 -> prefer AAC, use MP3 fallback
-    #   3 -> either AAC or no audio
+    V_MAX = "higher"
+    V_MIN = "med"
     AAC = 1
-
-    # Use shared video+audio instead of merging separate streams
-    # Leads to shorter videos, also no further quality selection
     SHARE = False
-
-    # How to treat recoubs during channel downloads
-    #   0 -> don't download recoubs
-    #   1 -> download recoubs
-    #   2 -> only download recoubs
+    # Channel defaults
     RECOUBS = 1
-
-    # Preview a downloaded coub with the given command
-    # Keyboard shortcuts may not work for CLI audio players
+    # Preview defaults
     PREVIEW = None
-
-    # Only download video/audio stream
-    # A_ONLY and V_ONLY are mutually exclusive
+    # Misc. defaults
     A_ONLY = False
     V_ONLY = False
-
-    # Output parsed coubs to file instead of downloading
-    # Values other than None will terminate the script after the initial
-    # parsing process (i.e. no coubs will be downloaded)
     OUT_FILE = None
-
-    # Use an archive file to keep track of downloaded coubs
     ARCHIVE_PATH = None
-
-    # Container to merge separate video/audio streams into
-    # Must support AVC video and AAC/MP3 audio (e.g. mkv or mp4)
-    # See: https://en.wikipedia.org/wiki/Comparison_of_video_container_formats
+    # Output defaults
     MERGE_EXT = "mkv"
-
-    # Output name formatting (default: %id%)
-    # Supports the following special keywords:
-    #   %id%        - coub ID (identifier in the URL)
-    #   %title%     - coub title
-    #   %creation%  - creation date/time
-    #   %community% - coub community
-    #   %channel%   - channel title
-    #   %tags%      - all tags (separated by tag_sep, see below)
-    # All other strings are interpreted literally.
-    #
-    # Setting a custom value increases skip duration for existing coubs
-    # Usage of an archive file is recommended in such an instance
     OUT_FORMAT = "%id%"
-
-    # Advanced options
-    COUBS_PER_PAGE = 25      # allowed: 1-25
+    # Advanced defaults
+    COUBS_PER_PAGE = 25
     TAG_SEP = "_"
-    WRITE_METHOD = "w"       # w -> overwrite, a -> append
-    CHUNK_SIZE = 1024        # in Bytes
+    WRITE_METHOD = "w"
+    CHUNK_SIZE = 1024
 
     def __init__(self):
         # Only supports script's location for now, but write it to be extensible
@@ -239,7 +203,7 @@ class DefaultOptions:
             "True": True,
             "False": False,
         }
-        # Some options should not follow the above directives
+        # Some options should not undergo integer conversion
         # Usually options which are supposed to ONLY take strings
         exceptions = [
             "PATH",
@@ -260,56 +224,6 @@ class DefaultOptions:
         except ValueError:
             return string
 
-
-# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-# Classes For Global Variables
-# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-class ExitCodes:
-    """Store exit codes for non-successful execution."""
-
-    DEP = 1         # missing required software
-    OPT = 2         # invalid user-specified option
-    RUN = 3         # misc. runtime error
-    DOWN = 4        # failed to download all input links (existence == success)
-    INT = 5         # early termination was requested by the user (i.e. Ctrl+C)
-    CONN = 6        # connection either couldn't be established or was lost
-
-
-class Colors:
-    """Store ANSI escape codes for colorized output."""
-
-    # https://en.wikipedia.org/wiki/ANSI_escape_code#Colors
-    ERROR = '\033[31m'      # red
-    WARNING = '\033[33m'    # yellow
-    SUCCESS = '\033[32m'    # green
-    RESET = '\033[0m'
-
-    def disable(self):
-        """Disable colorized output by removing escape codes."""
-        # I'm not going to stop addressing these attributes as constants, just
-        # because Windows thinks it needs to be special
-        self.ERROR = ''
-        self.SUCCESS = ''
-        self.WARNING = ''
-        self.RESET = ''
-
-# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-# Global Variables
-# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-status = ExitCodes()
-fgcolors = Colors()
-if not colors:
-    fgcolors.disable()
-
-total = 0
-count = 0
-done = 0
-
-# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-# Classes
-# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 class InputHelp(argparse.Action):
     """Custom action to print input help."""
