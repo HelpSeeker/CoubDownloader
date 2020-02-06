@@ -28,10 +28,10 @@ class GuiDefaultOptions(coub.DefaultOptions):
     AAC_LABEL = ["Only MP3", "No Bias", "Prefer AAC", "Only AAC"]
     RECOUB_LABEL = ["No Recoubs", "With Recoubs", "Only Recoubs"]
     SPECIAL_LABEL = {
+        (False, False, False): "None",
         (True, False, False): "Share",
         (False, True, False): "Video only",
         (False, False, True): "Audio only",
-        (False, False, False): None,
     }
 
 
@@ -42,10 +42,10 @@ def translate_to_cli(options):
     AAC_LABEL = {"Only MP3": 0, "No Bias": 1, "Prefer AAC": 2, "Only AAC": 3}
     RECOUB_LABEL = {"No Recoubs": 0, "With Recoubs": 1, "Only Recoubs": 2}
     SPECIAL_LABEL = {
+        "None": (False, False, False),
         "Share": (True, False, False),
         "Video only": (False, True, False),
         "Audio only": (False, False, True),
-        None: (False, False, False),
     }
 
     # Convert GUI labels to valid options for the main script
@@ -130,13 +130,13 @@ def parse_cli():
                         metavar="Prompt Behavior", help="How to answer user prompts")
     common.add_argument("--repeat", type=coub.positive_int, default=defs.REPEAT,
                         metavar="Loop Count", help="How often to loop the video stream")
-    common.add_argument("--dur", type=coub.valid_time, default=defs.DUR,
+    common.add_argument("--duration", type=coub.valid_time, default=defs.DURATION,
                         metavar="Limit duration",
                         help="Max. duration of the output (FFmpeg syntax)")
     common.add_argument("--preview", default=defs.PREVIEW, metavar="Preview Command",
                         help="Command to invoke to preview each finished coub")
-    common.add_argument("--archive-path", type=coub.valid_archive,
-                        default=defs.ARCHIVE_PATH, widget="FileSaver",
+    common.add_argument("--archive", type=coub.valid_archive,
+                        default=defs.ARCHIVE, widget="FileSaver",
                         metavar="Archive", gooey_options={'message': "Choose archive file"},
                         help="Use an archive file to keep track of already downloaded coubs")
     common.add_argument("--keep", action=f"store_{'false' if defs.KEEP else 'true'}",
@@ -145,8 +145,8 @@ def parse_cli():
 
     # Download Options
     download = parser.add_argument_group("Download", gooey_options={'columns': 1})
-    download.add_argument("--connect", type=coub.positive_int,
-                          default=defs.CONNECT, metavar="Number of connections",
+    download.add_argument("--connections", type=coub.positive_int,
+                          default=defs.CONNECTIONS, metavar="Number of connections",
                           help="How many connections to use (>100 not recommended)")
     download.add_argument("--retries", type=int, default=defs.RETRIES,
                           metavar="Retry Attempts",
@@ -173,14 +173,14 @@ def parse_cli():
     formats.add_argument("--aac", default=defs.AAC_LABEL[defs.AAC],
                          choices=["Only MP3", "No Bias", "Prefer AAC", "Only AAC"],
                          metavar="Audio Format", help="How much to prefer AAC over MP3")
-    formats.add_argument("--special", choices=["Share", "Video only", "Audio only"],
+    formats.add_argument("--special", choices=["None", "Share", "Video only", "Audio only"],
                          default=defs.SPECIAL_LABEL[(defs.SHARE, defs.V_ONLY, defs.A_ONLY)],
                          metavar="Special Formats", help="Use a special format selection")
 
     # Output
     output = parser.add_argument_group("Output", gooey_options={'columns': 1})
-    output.add_argument("--out-file", type=os.path.abspath, widget="FileSaver",
-                        default=defs.OUT_FILE, metavar="Output to List",
+    output.add_argument("--output-list", type=os.path.abspath, widget="FileSaver",
+                        default=defs.OUTPUT_LIST, metavar="Output to List",
                         gooey_options={'message': "Save link list"},
                         help="Save all parsed links in a list (no download)")
     output.add_argument("--path", type=os.path.abspath, default=defs.PATH,
@@ -195,7 +195,7 @@ def parse_cli():
                         choices=["mkv", "mp4", "asf", "avi", "flv", "f4v", "mov"],
                         help="What extension to use for merged output files "
                              "(has no effect if no merge is required)")
-    output.add_argument("--out-format", default=defs.OUT_FORMAT,
+    output.add_argument("--name-template", default=defs.NAME_TEMPLATE,
                         metavar="Name Template",
                         help=dedent(f"""\
                             Change the naming convention of output files
@@ -237,15 +237,15 @@ def parse_cli():
             args.input.append(coub.RandomCategory())
 
     # Read archive content
-    if args.archive_path and os.path.exists(args.archive_path):
-        with open(args.archive_path, "r") as f:
-            args.archive = [l.strip() for l in f]
+    if args.archive and os.path.exists(args.archive):
+        with open(args.archive, "r") as f:
+            args.archive_content = [l.strip() for l in f]
     else:
-        args.archive = None
+        args.archive_content = None
     # The default naming scheme is the same as using %id%
     # but internally the default value is None
-    if args.out_format == "%id%":
-        args.out_format = None
+    if args.name_template == "%id%":
+        args.name_template = None
 
     return translate_to_cli(args)
 

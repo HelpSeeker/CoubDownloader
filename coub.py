@@ -94,9 +94,9 @@ class DefaultOptions:
     PATH = "."
     KEEP = False
     REPEAT = 1000
-    DUR = None
+    DURATION = None
     # Download defaults
-    CONNECT = 25
+    CONNECTIONS = 25
     RETRIES = 5
     MAX_COUBS = None
     # Format defaults
@@ -113,11 +113,11 @@ class DefaultOptions:
     # Misc. defaults
     A_ONLY = False
     V_ONLY = False
-    OUT_FILE = None
-    ARCHIVE_PATH = None
+    OUTPUT_LIST = None
+    ARCHIVE = None
     # Output defaults
     MERGE_EXT = "mkv"
-    OUT_FORMAT = "%id%"
+    NAME_TEMPLATE = "%id%"
     # Advanced defaults
     COUBS_PER_PAGE = 25
     TAG_SEP = "_"
@@ -161,8 +161,8 @@ class DefaultOptions:
             "PATH": (lambda x: isinstance(x, str)),
             "KEEP": (lambda x: isinstance(x, bool)),
             "REPEAT": (lambda x: isinstance(x, int) and x > 0),
-            "DUR": (lambda x: isinstance(x, str) or x is None),
-            "CONNECT": (lambda x: isinstance(x, int) and x > 0),
+            "DURATION": (lambda x: isinstance(x, str) or x is None),
+            "CONNECTIONS": (lambda x: isinstance(x, int) and x > 0),
             "RETRIES": (lambda x: isinstance(x, int)),
             "MAX_COUBS": (lambda x: isinstance(x, int) and x > 0 or x is None),
             "V_QUALITY": (lambda x: x in [0, -1]),
@@ -175,10 +175,10 @@ class DefaultOptions:
             "PREVIEW": (lambda x: isinstance(x, str) or x is None),
             "A_ONLY": (lambda x: isinstance(x, bool)),
             "V_ONLY": (lambda x: isinstance(x, bool)),
-            "OUT_FILE": (lambda x: isinstance(x, str) or x is None),
-            "ARCHIVE_PATH": (lambda x: isinstance(x, str) or x is None),
+            "OUTPUT_LIST": (lambda x: isinstance(x, str) or x is None),
+            "ARCHIVE": (lambda x: isinstance(x, str) or x is None),
             "MERGE_EXT": (lambda x: x in ["mkv", "mp4", "asf", "avi", "flv", "f4v", "mov"]),
-            "OUT_FORMAT": (lambda x: isinstance(x, str) or x is None),
+            "NAME_TEMPLATE": (lambda x: isinstance(x, str) or x is None),
             "COUBS_PER_PAGE": (lambda x: x in range(1, 26)),
             "TAG_SEP": (lambda x: isinstance(x, str)),
             "WRITE_METHOD": (lambda x: x in ["w", "a"]),
@@ -207,11 +207,11 @@ class DefaultOptions:
         # Usually options which are supposed to ONLY take strings
         exceptions = [
             "PATH",
-            "DUR",
+            "DURATION",
             "PREVIEW",
-            "OUT_FILE",
-            "ARCHIVE_PATH",
-            "OUT_FORMAT",
+            "OUTPUT_LIST",
+            "ARCHIVE",
+            "NAME_TEMPLATE",
             "TAG_SEP",
         ]
 
@@ -280,7 +280,7 @@ class CustomArgumentParser(argparse.ArgumentParser):
           -d, --duration TIME   specify max. coub duration (FFmpeg syntax)
 
         Download options:
-          --connections N       max. number of connections (def: {self.get_default("connect")})
+          --connections N       max. number of connections (def: {self.get_default("connections")})
           --retries N           number of retries when connection is lost (def: {self.get_default("retries")})
                                   0 to disable, <0 to retry indefinitely
           --limit-num LIMIT     limit max. number of downloaded coubs
@@ -316,7 +316,7 @@ class CustomArgumentParser(argparse.ArgumentParser):
         Output:
           --ext EXTENSION       merge output with the given extension (def: {self.get_default("merge_ext")})
                                   ignored if no merge is required
-          -o, --output FORMAT   save output with the given template (def: {self.get_default("out_format")})
+          -o, --output FORMAT   save output with the given template (def: {self.get_default("name_template")})
 
             Special strings:
               %id%        - coub ID (identifier in the URL)
@@ -551,7 +551,7 @@ class BaseContainer:
             msg(f"  {pages} out of {self.pages} pages")
 
             tout = aiohttp.ClientTimeout(total=None)
-            conn = aiohttp.TCPConnector(limit=opts.connect)
+            conn = aiohttp.TCPConnector(limit=opts.connections)
             async with aiohttp.ClientSession(timeout=tout, connector=conn) as session:
                 tasks = [parse_page(req, session) for req in requests]
                 links = await asyncio.gather(*tasks)
@@ -889,14 +889,14 @@ class Coub:
         if self.erroneous():
             return
 
-        if opts.archive and self.id in opts.archive:
+        if opts.archive_content and self.id in opts.archive_content:
             self.exists = True
             return
 
         old_file = None
         # Existence of self.name indicates whether API request was already
         # made (i.e. if 1st or 2nd check)
-        if not opts.out_format:
+        if not opts.name_template:
             if not self.name:
                 old_file = exists(self.id)
         else:
@@ -1013,8 +1013,8 @@ class Coub:
                 "-f", "concat", "-safe", "0",
                 "-i", f"file:{t_name}", "-i", f"file:{self.a_name}",
             ]
-            if opts.dur:
-                command.extend(["-t", opts.dur])
+            if opts.duration:
+                command.extend(["-t", opts.duration])
             command.extend(["-c", "copy", "-shortest", f"file:temp_{m_name}"])
 
             subprocess.run(command)
@@ -1037,7 +1037,7 @@ class Coub:
         if self.erroneous():
             return
 
-        with open(opts.archive_path, "a") as f:
+        with open(opts.archive, "a") as f:
             print(self.id, file=f)
 
     def preview(self):
@@ -1073,7 +1073,7 @@ class Coub:
 
         # 2nd existence check
         # Handles custom names exclusively (slower since API request necessary)
-        if opts.out_format:
+        if opts.name_template:
             self.check_existence()
 
         # Download
@@ -1088,7 +1088,7 @@ class Coub:
         # of valid streams with special format options (e.g. --video-only)
         self.done = True
 
-        if opts.archive_path:
+        if opts.archive:
             self.archive()
         if opts.preview:
             self.preview()
@@ -1419,11 +1419,11 @@ def parse_cli():
     repeat.add_argument("-r", "--repeat", type=positive_int, default=defaults.REPEAT)
     parser.add_argument("-p", "--path", type=os.path.abspath, default=defaults.PATH)
     parser.add_argument("-k", "--keep", action="store_true", default=defaults.KEEP)
-    parser.add_argument("-d", "--duration", dest="dur", type=valid_time,
-                        default=defaults.DUR)
+    parser.add_argument("-d", "--duration", type=valid_time,
+                        default=defaults.DURATION)
     # Download Options
-    parser.add_argument("--connections", dest="connect", type=positive_int,
-                        default=defaults.CONNECT)
+    parser.add_argument("--connections", type=positive_int,
+                        default=defaults.CONNECTIONS)
     parser.add_argument("--retries", type=int, default=defaults.RETRIES)
     parser.add_argument("--limit-num", dest="max_coubs", type=positive_int,
                         default=defaults.MAX_COUBS)
@@ -1466,15 +1466,15 @@ def parse_cli():
     stream.add_argument("--video-only", dest="v_only", action="store_true",
                         default=defaults.V_ONLY)
     stream.add_argument("--share", action="store_true", default=defaults.SHARE)
-    parser.add_argument("--write-list", dest="out_file", type=os.path.abspath,
-                        default=defaults.OUT_FILE)
-    parser.add_argument("--use-archive", dest="archive_path", type=valid_archive,
-                        default=defaults.ARCHIVE_PATH)
+    parser.add_argument("--write-list", dest="output_list", type=os.path.abspath,
+                        default=defaults.OUTPUT_LIST)
+    parser.add_argument("--use-archive", dest="archive", type=valid_archive,
+                        default=defaults.ARCHIVE)
     # Output
     parser.add_argument("--ext", dest="merge_ext", default=defaults.MERGE_EXT,
                         choices=["mkv", "mp4", "asf", "avi", "flv", "f4v", "mov"])
-    parser.add_argument("-o", "--output", dest="out_format",
-                        default=defaults.OUT_FORMAT)
+    parser.add_argument("-o", "--output", dest="name_template",
+                        default=defaults.NAME_TEMPLATE)
 
     # Advanced Options
     parser.set_defaults(
@@ -1496,15 +1496,15 @@ def parse_cli():
     else:
         args.input = args.raw_input
     # Read archive content
-    if args.archive_path and os.path.exists(args.archive_path):
-        with open(args.archive_path, "r") as f:
-            args.archive = [l.strip() for l in f]
+    if args.archive and os.path.exists(args.archive):
+        with open(args.archive, "r") as f:
+            args.archive_content = [l.strip() for l in f]
     else:
-        args.archive = None
+        args.archive_content = None
     # The default naming scheme is the same as using %id%
     # but internally the default value is None
-    if args.out_format == "%id%":
-        args.out_format = None
+    if args.name_template == "%id%":
+        args.name_template = None
 
     return args
 
@@ -1611,19 +1611,19 @@ def parse_input(sources):
 
 def write_list(links):
     """Output parsed links to a list and exit."""
-    with open(opts.out_file, opts.write_method) as f:
+    with open(opts.output_list, opts.write_method) as f:
         for l in links:
             print(l, file=f)
-    msg(f"\nParsed coubs written to '{opts.out_file}'!",
+    msg(f"\nParsed coubs written to '{opts.output_list}'!",
         color=fgcolors.SUCCESS)
 
 
 def get_name(req_json, c_id):
     """Assemble final output name of a given coub."""
-    if not opts.out_format:
+    if not opts.name_template:
         return c_id
 
-    name = opts.out_format
+    name = opts.name_template
 
     name = name.replace("%id%", c_id)
     name = name.replace("%title%", req_json['title'])
@@ -1879,7 +1879,7 @@ async def process(coubs):
     """Call the process function of all parsed coubs."""
     if aio:
         tout = aiohttp.ClientTimeout(total=None)
-        conn = aiohttp.TCPConnector(limit=opts.connect)
+        conn = aiohttp.TCPConnector(limit=opts.connections)
         try:
             async with aiohttp.ClientSession(timeout=tout, connector=conn) as session:
                 tasks = [c.process(session) for c in coubs]
@@ -1938,7 +1938,7 @@ def main():
 
     msg("\n### Parse Input ###")
     links = parse_input(opts.input)
-    if opts.out_file:
+    if opts.output_list:
         write_list(links)
         sys.exit(0)
     total = len(links)
