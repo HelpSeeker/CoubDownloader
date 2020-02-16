@@ -16,11 +16,7 @@ from urllib.request import urlopen
 from urllib.parse import quote as urlquote
 from urllib.parse import unquote as urlunquote
 
-try:
-    import aiohttp
-    aio = True
-except ModuleNotFoundError:
-    aio = False
+import aiohttp
 
 # ANSI escape codes don't work on Windows, unless the user jumps through
 # additional hoops (either by using 3rd-party software or enabling VT100
@@ -547,22 +543,14 @@ class BaseContainer:
         msg(f"\nDownloading {self.type} info"
             f"{f': {self.id}' if self.id else ''}"
             f" (sorted by '{self.sort}')")
+        msg(f"  {pages} out of {self.pages} pages")
 
-        if aio:
-            msg(f"  {pages} out of {self.pages} pages")
-
-            tout = aiohttp.ClientTimeout(total=None)
-            conn = aiohttp.TCPConnector(limit=opts.connections)
-            async with aiohttp.ClientSession(timeout=tout, connector=conn) as session:
-                tasks = [parse_page(req, session) for req in requests]
-                links = await asyncio.gather(*tasks)
-            links = [l for page in links for l in page]
-        else:
-            links = []
-            for i in range(pages):
-                msg(f"  {i+1} out of {self.pages} pages")
-                page = await parse_page(requests[i])
-                links.extend(page)
+        tout = aiohttp.ClientTimeout(total=None)
+        conn = aiohttp.TCPConnector(limit=opts.connections)
+        async with aiohttp.ClientSession(timeout=tout, connector=conn) as session:
+            tasks = [parse_page(req, session) for req in requests]
+            links = await asyncio.gather(*tasks)
+        links = [l for page in links for l in page]
 
         if quantity:
             return links[:quantity]
@@ -912,18 +900,9 @@ class Coub:
         if self.erroneous():
             return
 
-        if aio:
-            async with session.get(self.req) as resp:
-                resp_json = await resp.read()
-                resp_json = json.loads(resp_json)
-        else:
-            try:
-                with urlopen(self.req) as resp:
-                    resp_json = resp.read()
-                    resp_json = json.loads(resp_json)
-            except (urllib.error.HTTPError, urllib.error.URLError):
-                self.unavailable = True
-                return
+        async with session.get(self.req) as resp:
+            resp_json = await resp.read()
+            resp_json = json.loads(resp_json)
 
         v_list, a_list = stream_lists(resp_json)
         if v_list:
@@ -1530,14 +1509,9 @@ def resolve_paths():
 
 async def parse_page(req, session=None):
     """Request a single timeline page and parse its content."""
-    if aio:
-        async with session.get(req) as resp:
-            resp_json = await resp.read()
-            resp_json = json.loads(resp_json)
-    else:
-        with urlopen(req) as resp:
-            resp_json = resp.read()
-            resp_json = json.loads(resp_json)
+    async with session.get(req) as resp:
+        resp_json = await resp.read()
+        resp_json = json.loads(resp_json)
 
     ids = [
         c['recoub_to']['permalink'] if c['recoub_to'] else c['permalink']
@@ -1824,24 +1798,13 @@ def stream_lists(resp_json):
 
 async def save_stream(link, path, session=None):
     """Download a single media stream."""
-    if aio:
-        async with session.get(link) as stream:
-            with open(path, "wb") as f:
-                while True:
-                    chunk = await stream.content.read(opts.chunk_size)
-                    if not chunk:
-                        break
-                    f.write(chunk)
-    else:
-        try:
-            with urlopen(link) as stream, open(path, "wb") as f:
-                while True:
-                    chunk = stream.read(opts.chunk_size)
-                    if not chunk:
-                        break
-                    f.write(chunk)
-        except (urllib.error.HTTPError, urllib.error.URLError):
-            return
+    async with session.get(link) as stream:
+        with open(path, "wb") as f:
+            while True:
+                chunk = await stream.content.read(opts.chunk_size)
+                if not chunk:
+                    break
+                f.write(chunk)
 
 
 def valid_stream(path, attempted_fix=False):
@@ -1881,22 +1844,18 @@ def valid_stream(path, attempted_fix=False):
 
 async def process(coubs):
     """Call the process function of all parsed coubs."""
-    if aio:
-        tout = aiohttp.ClientTimeout(total=None)
-        conn = aiohttp.TCPConnector(limit=opts.connections)
-        try:
-            async with aiohttp.ClientSession(timeout=tout, connector=conn) as session:
-                tasks = [c.process(session) for c in coubs]
-                await asyncio.gather(*tasks)
-        except aiohttp.ClientConnectionError:
-            err("\nLost connection to coub.com!")
-            raise
-        except aiohttp.ClientPayloadError:
-            err("\nReceived malformed data!")
-            raise
-    else:
-        for c in coubs:
-            await c.process()
+    tout = aiohttp.ClientTimeout(total=None)
+    conn = aiohttp.TCPConnector(limit=opts.connections)
+    try:
+        async with aiohttp.ClientSession(timeout=tout, connector=conn) as session:
+            tasks = [c.process(session) for c in coubs]
+            await asyncio.gather(*tasks)
+    except aiohttp.ClientConnectionError:
+        err("\nLost connection to coub.com!")
+        raise
+    except aiohttp.ClientPayloadError:
+        err("\nReceived malformed data!")
+        raise
 
 
 def clean(coubs):
