@@ -239,9 +239,9 @@ def parse_cli():
     # Read archive content
     if args.archive and os.path.exists(args.archive):
         with open(args.archive, "r") as f:
-            args.archive_content = [l.strip() for l in f]
+            args.archive_content = {l.strip() for l in f}
     else:
-        args.archive_content = None
+        args.archive_content = set()
     # The default naming scheme is the same as using %id%
     # but internally the default value is None
     if args.name_template == "%id%":

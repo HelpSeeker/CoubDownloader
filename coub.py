@@ -881,10 +881,6 @@ class Coub:
         if self.erroneous():
             return
 
-        if opts.archive_content and self.id in opts.archive_content:
-            self.exists = True
-            return
-
         old_file = None
         # Existence of self.name indicates whether API request was already
         # made (i.e. if 1st or 2nd check)
@@ -1477,9 +1473,9 @@ def parse_cli():
     # Read archive content
     if args.archive and os.path.exists(args.archive):
         with open(args.archive, "r") as f:
-            args.archive_content = [l.strip() for l in f]
+            args.archive_content = {l.strip() for l in f}
     else:
-        args.archive_content = None
+        args.archive_content = set()
     # The default naming scheme is the same as using %id%
     # but internally the default value is None
     if args.name_template == "%id%":
@@ -1566,13 +1562,16 @@ def parse_input(sources):
 
     before = len(parsed)
     parsed = list(set(parsed))      # Weed out duplicates
+    dupes = before - len(parsed)
+    parsed = [i for i in parsed if i not in opts.archive_content]
+    archived = before - dupes - len(parsed)
     after = len(parsed)
-    dupes = before - after
-    if dupes:
+    if dupes or archived:
         msg(dedent(f"""
             Results:
               {before} input link{'s' if before != 1 else ''}
               {dupes} duplicate{'s' if dupes != 1 else ''}
+              {archived} found in archive file
               {after} final link{'s' if after != 1 else ''}"""))
     else:
         msg(dedent(f"""
@@ -1896,17 +1895,20 @@ def main():
 
     msg("\n### Parse Input ###")
     ids = parse_input(opts.input)
-    if opts.output_list:
-        write_list(ids)
-        sys.exit(0)
-    total = len(ids)
-    coubs = [Coub(i) for i in ids]
+    if ids:
+        if opts.output_list:
+            write_list(ids)
+            sys.exit(0)
+        total = len(ids)
+        coubs = [Coub(i) for i in ids]
 
-    msg("\n### Download Coubs ###\n")
-    try:
-        attempt_process(coubs)
-    finally:
-        clean(coubs)
+        msg("\n### Download Coubs ###\n")
+        try:
+            attempt_process(coubs)
+        finally:
+            clean(coubs)
+    else:
+        msg("\nAll coubs present in archive file!", color=fgcolors.WARNING)
 
     msg("\n### Finished ###\n")
 
