@@ -8,6 +8,7 @@ import subprocess
 import sys
 
 from math import ceil
+from ssl import SSLCertVerificationError
 from textwrap import dedent
 
 import urllib.error
@@ -1154,8 +1155,11 @@ def check_connection():
     """Check if user can connect to coub.com."""
     try:
         urlopen("https://coub.com/")
-    except urllib.error.URLError:
-        err("Unable to connect to coub.com! Please check your connection.")
+    except urllib.error.URLError as error:
+        if isinstance(error.reason, SSLCertVerificationError):
+            err("Certificate verification failed! Please update your CA certificates.")
+        else:
+            err("Unable to connect to coub.com! Please check your connection.")
         sys.exit(status.CONN)
 
 
