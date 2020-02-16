@@ -224,7 +224,7 @@ def parse_cli():
     args = parser.parse_args()
     args.input = []
     args.input.extend([coub.mapped_input(u) for u in args.urls.split(",") if u])
-    args.input.extend([f"https://coub.com/view/{i}" for i in args.ids.split(",") if i])
+    args.input.extend([i for i in args.ids.split(",") if i])
     args.input.extend([coub.LinkList(l) for l in args.lists.split(",") if l])
     args.input.extend([coub.Channel(c) for c in args.channels.split(",") if c])
     args.input.extend([coub.Tag(t) for t in args.tags.split(",") if t])

@@ -549,12 +549,12 @@ class BaseContainer:
         conn = aiohttp.TCPConnector(limit=opts.connections)
         async with aiohttp.ClientSession(timeout=tout, connector=conn) as session:
             tasks = [parse_page(req, session) for req in requests]
-            links = await asyncio.gather(*tasks)
-        links = [l for page in links for l in page]
+            ids = await asyncio.gather(*tasks)
+        ids = [i for page in ids for i in page]
 
         if quantity:
-            return links[:quantity]
-        return links
+            return ids[:quantity]
+        return ids
 
 
 class Channel(BaseContainer):
@@ -841,7 +841,10 @@ class LinkList:
         content = content.replace(" ", "\n")
         content = content.splitlines()
 
-        links = [l for l in content if "https://coub.com/view/" in l]
+        links = [
+            l.partition("https://coub.com/view/")[2]
+            for l in content if "https://coub.com/view/" in l
+        ]
         msg(f"  {len(links)} link{'s' if len(links) != 1 else ''} found")
 
         if quantity:
@@ -852,9 +855,9 @@ class LinkList:
 class Coub:
     """Store all relevant infos and methods to process a single coub."""
 
-    def __init__(self, link):
-        self.link = link
-        self.id = link.split("/")[-1]
+    def __init__(self, c_id):
+        self.id = c_id
+        self.link = f"https://coub.com/view/{self.id}"
         self.req = f"https://coub.com/api/v2/coubs/{self.id}"
 
         self.v_link = None
@@ -1149,13 +1152,6 @@ def no_url(string):
     return string
 
 
-def direct_link(string):
-    """Convert string provided by parse_cli() to a direct coub link."""
-    coub_id = no_url(string)
-    link = f"https://coub.com/view/{coub_id}"
-    return link
-
-
 def positive_int(string):
     """Convert string provided by parse_cli() to a positive int."""
     try:
@@ -1329,7 +1325,7 @@ def mapped_input(string):
     link = normalize_link(string)
 
     if "https://coub.com/view/" in link:
-        source = link
+        source = link.partition("https://coub.com/view/")[2]
     elif "https://coub.com/tags/" in link:
         name = link.partition("https://coub.com/tags/")[2]
         source = Tag(name)
@@ -1370,7 +1366,7 @@ def parse_cli():
     # Input
     parser.add_argument("raw_input", nargs="*", type=mapped_input)
     parser.add_argument("-i", "--id", dest="input", action="append",
-                        type=direct_link)
+                        type=no_url)
     parser.add_argument("-l", "--list", dest="input", action="append",
                         type=LinkList)
     parser.add_argument("-c", "--channel", dest="input", action="append",
@@ -1517,8 +1513,7 @@ async def parse_page(req, session=None):
         c['recoub_to']['permalink'] if c['recoub_to'] else c['permalink']
         for c in resp_json['coubs']
     ]
-
-    return [f"https://coub.com/view/{i}" for i in ids]
+    return ids
 
 
 def remove_container_dupes(containers):
@@ -1538,14 +1533,14 @@ def remove_container_dupes(containers):
 
 def parse_input(sources):
     """Handle the parsing process of all provided input sources."""
-    links = [s for s in sources if isinstance(s, str)]
+    directs = [s for s in sources if isinstance(s, str)]
     containers = [s for s in sources if not isinstance(s, str)]
     containers = remove_container_dupes(containers)
 
     if opts.max_coubs:
-        parsed = links[:opts.max_coubs]
+        parsed = directs[:opts.max_coubs]
     else:
-        parsed = links
+        parsed = directs
 
     if parsed:
         msg("\nReading command line:")
@@ -1587,11 +1582,11 @@ def parse_input(sources):
     return parsed
 
 
-def write_list(links):
+def write_list(ids):
     """Output parsed links to a list and exit."""
     with open(opts.output_list, opts.write_method) as f:
-        for l in links:
-            print(l, file=f)
+        for i in ids:
+            print(f"https://coub.com/view/{i}", file=f)
     msg(f"\nParsed coubs written to '{opts.output_list}'!",
         color=fgcolors.SUCCESS)
 
@@ -1900,12 +1895,12 @@ def main():
     check_connection()
 
     msg("\n### Parse Input ###")
-    links = parse_input(opts.input)
+    ids = parse_input(opts.input)
     if opts.output_list:
-        write_list(links)
+        write_list(ids)
         sys.exit(0)
-    total = len(links)
-    coubs = [Coub(l) for l in links]
+    total = len(ids)
+    coubs = [Coub(i) for i in ids]
 
     msg("\n### Download Coubs ###\n")
     try:
