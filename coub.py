@@ -996,7 +996,7 @@ class Coub:
                 command.extend(["-t", opts.duration])
             command.extend(["-c", "copy", "-shortest", f"file:temp_{m_name}"])
 
-            subprocess.run(command)
+            subprocess.run(command, check=False)
         finally:
             if os.path.exists(t_name):
                 os.remove(t_name)
@@ -1123,7 +1123,7 @@ def check_prereq():
     """Test if all required 3rd-party tools are installed."""
     try:
         subprocess.run(["ffmpeg"], stdout=subprocess.DEVNULL, \
-                                   stderr=subprocess.DEVNULL)
+                                   stderr=subprocess.DEVNULL, check=False)
     except FileNotFoundError:
         err("Error: FFmpeg not found!")
         sys.exit(status.DEP)
@@ -1809,7 +1809,7 @@ def valid_stream(path, attempted_fix=False):
         "-t", "1",
         "-f", "null", "-",
     ]
-    out = subprocess.run(command, capture_output=True, text=True)
+    out = subprocess.run(command, capture_output=True, text=True, check=False)
 
     # Fix broken video stream
     if "moov atom not found" in out.stderr and not attempted_fix:
