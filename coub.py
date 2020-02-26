@@ -116,6 +116,7 @@ class DefaultOptions:
     MERGE_EXT = "mkv"
     NAME_TEMPLATE = "%id%"
     # Advanced defaults
+    FFMPEG_PATH = "ffmpeg"
     COUBS_PER_PAGE = 25
     TAG_SEP = "_"
     WRITE_METHOD = "w"
@@ -176,6 +177,7 @@ class DefaultOptions:
             "ARCHIVE": (lambda x: isinstance(x, str) or x is None),
             "MERGE_EXT": (lambda x: x in ["mkv", "mp4", "asf", "avi", "flv", "f4v", "mov"]),
             "NAME_TEMPLATE": (lambda x: isinstance(x, str) or x is None),
+            "FFMPEG_PATH": (lambda x: isinstance(x, str)),
             "COUBS_PER_PAGE": (lambda x: x in range(1, 26)),
             "TAG_SEP": (lambda x: isinstance(x, str)),
             "WRITE_METHOD": (lambda x: x in ["w", "a"]),
@@ -209,6 +211,7 @@ class DefaultOptions:
             "OUTPUT_LIST",
             "ARCHIVE",
             "NAME_TEMPLATE",
+            "FFMPEG_PATH",
             "TAG_SEP",
         ]
 
@@ -988,7 +991,7 @@ class Coub:
             # Loop footage until shortest stream ends
             # Concatenated video (via list) counts as one long stream
             command = [
-                "ffmpeg", "-y", "-v", "error",
+                opts.ffmpeg_path, "-y", "-v", "error",
                 "-f", "concat", "-safe", "0",
                 "-i", f"file:{t_name}", "-i", f"file:{self.a_name}",
             ]
@@ -1122,8 +1125,10 @@ def msg(*args, color=fgcolors.RESET, **kwargs):
 def check_prereq():
     """Test if all required 3rd-party tools are installed."""
     try:
-        subprocess.run(["ffmpeg"], stdout=subprocess.DEVNULL, \
-                                   stderr=subprocess.DEVNULL, check=False)
+        subprocess.run([opts.ffmpeg_path],
+                       stdout=subprocess.DEVNULL,
+                       stderr=subprocess.DEVNULL,
+                       check=False)
     except FileNotFoundError:
         err("Error: FFmpeg not found!")
         sys.exit(status.DEP)
@@ -1162,7 +1167,7 @@ def positive_int(string):
 def valid_time(string):
     """Test valditiy of time syntax with FFmpeg."""
     command = [
-        "ffmpeg", "-v", "quiet",
+        opts.ffmpeg_path, "-v", "quiet",
         "-f", "lavfi", "-i", "anullsrc",
         "-t", string, "-c", "copy",
         "-f", "null", "-",
@@ -1453,6 +1458,7 @@ def parse_cli():
 
     # Advanced Options
     parser.set_defaults(
+        ffmpeg_path=defaults.FFMPEG_PATH,
         coubs_per_page=defaults.COUBS_PER_PAGE,
         tag_sep=defaults.TAG_SEP,
         write_method=defaults.WRITE_METHOD,
@@ -1804,7 +1810,7 @@ async def save_stream(link, path, session=None):
 def valid_stream(path, attempted_fix=False):
     """Test a given stream for eventual corruption with a test remux (FFmpeg)."""
     command = [
-        "ffmpeg", "-v", "error",
+        opts.ffmpeg_path, "-v", "error",
         "-i", f"file:{path}",
         "-t", "1",
         "-f", "null", "-",
