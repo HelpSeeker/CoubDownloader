@@ -122,9 +122,10 @@ class DefaultOptions:
     WRITE_METHOD = "w"
     CHUNK_SIZE = 1024
 
-    def __init__(self):
-        # Only supports script's location for now, but write it to be extensible
-        config_dirs = [os.path.dirname(os.path.realpath(__file__))]
+    def __init__(self, config_dirs=None):
+        if not config_dirs:
+            # Only supports script's location as default for now
+            config_dirs = [os.path.dirname(os.path.realpath(__file__))]
         for d in config_dirs:
             config_path = os.path.join(d, "coub.conf")
             if os.path.exists(config_path):
@@ -1465,7 +1466,7 @@ def parse_cli():
 
     # Advanced Options
     parser.set_defaults(
-        ffmpeg_path=defaults.FFMPEG_PATH,
+        ffmpeg_path=os.path.abspath(defaults.FFMPEG_PATH),
         coubs_per_page=defaults.COUBS_PER_PAGE,
         tag_sep=defaults.TAG_SEP,
         write_method=defaults.WRITE_METHOD,

@@ -35,6 +35,11 @@ class GuiDefaultOptions(coub.DefaultOptions):
         (False, False, True): "Audio only",
     }
 
+    def __init__(self):
+        # Necessary as __file__ within coub.py would point to the extracted
+        # PyInstaller archive for standalone coub-gui binaries
+        config_dirs = [os.path.dirname(os.path.realpath(__file__))]
+        super(GuiDefaultOptions, self).__init__(config_dirs=config_dirs)
 
 def translate_to_cli(options):
     """Make GUI-specific options object compatible with the main script."""
@@ -223,10 +228,11 @@ def parse_cli():
     # Advanced Options
     parser.set_defaults(
         verbosity=1,
-        coubs_per_page=25,      # allowed: 1-25
-        tag_sep="_",
-        write_method="w",       # w -> overwrite, a -> append
-        chunk_size=1024,
+        ffmpeg_path=os.path.abspath(defs.FFMPEG_PATH),
+        coubs_per_page=defs.COUBS_PER_PAGE,   # allowed: 1-25
+        tag_sep=defs.TAG_SEP,
+        write_method=defs.WRITE_METHOD,       # w -> overwrite, a -> append
+        chunk_size=defs.CHUNK_SIZE,
     )
 
     args = parser.parse_args()
