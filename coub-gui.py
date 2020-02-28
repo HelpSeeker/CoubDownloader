@@ -228,7 +228,7 @@ def parse_cli():
     # Advanced Options
     parser.set_defaults(
         verbosity=1,
-        ffmpeg_path=os.path.abspath(defs.FFMPEG_PATH),
+        ffmpeg_path=defs.FFMPEG_PATH,
         coubs_per_page=defs.COUBS_PER_PAGE,   # allowed: 1-25
         tag_sep=defs.TAG_SEP,
         write_method=defs.WRITE_METHOD,       # w -> overwrite, a -> append

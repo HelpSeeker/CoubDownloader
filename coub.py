@@ -1466,7 +1466,7 @@ def parse_cli():
 
     # Advanced Options
     parser.set_defaults(
-        ffmpeg_path=os.path.abspath(defaults.FFMPEG_PATH),
+        ffmpeg_path=defaults.FFMPEG_PATH,
         coubs_per_page=defaults.COUBS_PER_PAGE,
         tag_sep=defaults.TAG_SEP,
         write_method=defaults.WRITE_METHOD,
