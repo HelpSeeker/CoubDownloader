@@ -1363,14 +1363,7 @@ def mapped_input(string):
 def parse_cli():
     """Parse the command line."""
     defaults = DefaultOptions()
-    if getattr(sys, "frozen", False):
-        # workaround since staticx changes sys.argv[0] to .staticx.prog
-        prog = __file__
-    else:
-        # argparse default
-        prog = os.path.basename(sys.argv[0])
-    parser = CustomArgumentParser(prog=prog,
-                                  usage="%(prog)s [OPTIONS] INPUT [INPUT]...")
+    parser = CustomArgumentParser(usage="%(prog)s [OPTIONS] INPUT [INPUT]...")
 
     # Input
     parser.add_argument("raw_input", nargs="*", type=mapped_input)

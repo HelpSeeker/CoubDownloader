@@ -1,7 +1,6 @@
 #!/usr/bin/env python3
 
 import os
-import sys
 from textwrap import dedent
 
 from gooey import Gooey, GooeyParser
@@ -93,14 +92,7 @@ def translate_to_cli(options):
 def parse_cli():
     """Create Gooey GUI."""
     defs = GuiDefaultOptions()
-    if getattr(sys, "frozen", False):
-        # workaround since staticx changes sys.argv[0] to .staticx.prog
-        prog = __file__
-    else:
-        # argparse default
-        prog = os.path.basename(sys.argv[0])
     parser = GooeyParser(
-        prog=prog,
         description="Download videos from coub.com",
         usage="%(prog)s [OPTIONS] INPUT [INPUT]..."
     )
