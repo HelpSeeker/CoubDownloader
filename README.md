@@ -5,9 +5,11 @@ CoubDownloader is a simple script to download videos (called coubs) from [Coub](
 ## Contents
 
 1. [Usage](#usage)
-2. [Requirements](#requirements)
+2. [Standalone builds](#standalone-builds)
+3. [Requirements](#requirements)
     1. [Optional](#optional)
-3. [Input](#input)
+4. [Configuration](#configuration)
+5. [Input](#input)
     1. [Overview](#overview)
     2. [Direct coub links](#direct-coub-links)
     3. [Lists](#lists)
@@ -17,13 +19,13 @@ CoubDownloader is a simple script to download videos (called coubs) from [Coub](
     7. [Tags](#tags)
     8. [Communities](#communities)
     9. [Hot section](#hot-section)
-4. [GUI](#gui)
-5. [Misc. information](#misc-information)
+6. [GUI](#gui)
+7. [Misc. information](#misc-information)
     1. [Video resolution vs. quality](#video-resolution-vs-quality)
     2. [AAC audio](#aac-audio)
     3. ['share' videos](#share-videos)
-6. [Changes since Coub's database upgrade (watermark & co)](#changes-since-coubs-database-upgrade-watermark--co)
-7. [Changes since switching to Coub's API (previously used youtube-dl)](#changes-since-switching-to-coubs-api-previously-used-youtube-dl)
+8. [Changes since Coub's database upgrade (watermark & co)](#changes-since-coubs-database-upgrade-watermark--co)
+9. [Changes since switching to Coub's API (previously used youtube-dl)](#changes-since-switching-to-coubs-api-previously-used-youtube-dl)
 
 ## Usage
 
@@ -110,16 +112,46 @@ Output:
     This option has no influence on the file extension.
 ```
 
+## Standalone builds
+
+Starting with v3.7 standalone Windows builds are provided on the [release page](https://github.com/HelpSeeker/CoubDownloader/releases). These executables don't require an existing Python environment and the [GUI version](#gui) is a standalone application. FFmpeg is still a mandatory requirement.
+
+#### Why no Mac builds?
+
+Because I lack the necessary build environment.
+
+#### Why no Linux builds?
+
+Because I lack the resources to target a variety of distros individually and my attempts to create universal Linux builds were unsuccessful.
+
+The main problem is the usage of external tools like FFmpeg (but also media players with the `--preview` option) via `subprocess.run`. They either spam the terminal output with warnings or outright fail because of library version mismatches between my build environment and the user's system. It would've required me to ship Linux builds with static FFmpeg binaries and either remove the `--preview` option or make it the user's responsibility to get it working. And even then there's still a plethora of problems regarding the GUI version, which I couldn't reliably get to work across a handful of mainstream distros (Debian, Ubuntu, CentOS, Linux Mint, etc.).
+
 ## Requirements
 
 * Python >= 3.7
 * [aiohttp](https://aiohttp.readthedocs.io/en/stable/)
 * [FFmpeg](https://www.ffmpeg.org/)
 
+Standalone builds only require FFmpeg.
+
 ### Optional
 
 * [colorama](https://github.com/tartley/colorama) for colorized terminal output on Windows
 * [Gooey](https://github.com/chriskiehl/Gooey) to run `coub-gui.py`
+
+## Configuration
+
+CoubDownloader's defaults can be changed via a configuration file.
+
+Simply create a text file with the name `coub.conf` in the same location as the script and specify custom defaults in the following format:
+
+```
+OPTION = value
+```
+
+Lines starting with `#` get treated as comments.
+
+For all available options and their allowed values, please take a look at the [example configuration file](example.conf).
 
 ## Input
 
@@ -489,6 +521,7 @@ Coub started to massively overhaul their database and API. Of course those chang
 - [x] Download random coubs
 - [x] Option to change the container format for stream remuxing
 - [x] Basic GUI frontend
+- [x] Read custom defaults from config file
 
 ## Changes since switching to Coub's API (previously used youtube-dl)
 
