@@ -1160,8 +1160,8 @@ def check_connection():
     """Check if user can connect to coub.com."""
     try:
         urlopen("https://coub.com/")
-    except urllib.error.URLError as error:
-        if isinstance(error.reason, SSLCertVerificationError):
+    except urllib.error.URLError as e:
+        if isinstance(e.reason, SSLCertVerificationError):
             err("Certificate verification failed! Please update your CA certificates.")
         else:
             err("Unable to connect to coub.com! Please check your connection.")
@@ -1920,13 +1920,15 @@ def attempt_process(coubs, level=0):
 
     try:
         asyncio.run(process(coubs), debug=False)
-    except (aiohttp.ClientConnectionError, aiohttp.ClientPayloadError):
-        check_connection()
-        # Reduce the list of coubs to only those yet to finish
-        coubs = [c for c in coubs if not c.done]
-        level += 1
-        attempt_process(coubs, level)
-
+    except Exception as e:
+        if aio and isinstance(e, (aiohttp.ClientConnectionError, aiohttp.ClientPayloadError)):
+            check_connection()
+            # Reduce the list of coubs to only those yet to finish
+            coubs = [c for c in coubs if not c.done]
+            level += 1
+            attempt_process(coubs, level)
+        else:
+            raise
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # Main Function
