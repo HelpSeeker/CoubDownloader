@@ -223,6 +223,7 @@ def parse_cli():
         ffmpeg_path=defs.FFMPEG_PATH,
         coubs_per_page=defs.COUBS_PER_PAGE,   # allowed: 1-25
         tag_sep=defs.TAG_SEP,
+        fallback_char=defs.FALLBACK_CHAR,
         write_method=defs.WRITE_METHOD,       # w -> overwrite, a -> append
         chunk_size=defs.CHUNK_SIZE,
     )

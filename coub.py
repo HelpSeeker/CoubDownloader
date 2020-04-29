@@ -123,6 +123,7 @@ class DefaultOptions:
     FFMPEG_PATH = "ffmpeg"
     COUBS_PER_PAGE = 25
     TAG_SEP = "_"
+    FALLBACK_CHAR = "-"
     WRITE_METHOD = "w"
     CHUNK_SIZE = 1024
 
@@ -185,6 +186,7 @@ class DefaultOptions:
             "FFMPEG_PATH": (lambda x: isinstance(x, str)),
             "COUBS_PER_PAGE": (lambda x: x in range(1, 26)),
             "TAG_SEP": (lambda x: isinstance(x, str)),
+            "FALLBACK_CHAR": (lambda x: isinstance(x, str)),
             "WRITE_METHOD": (lambda x: x in ["w", "a"]),
             "CHUNK_SIZE": (lambda x: isinstance(x, int) and x > 0),
         }
@@ -218,6 +220,7 @@ class DefaultOptions:
             "NAME_TEMPLATE",
             "FFMPEG_PATH",
             "TAG_SEP",
+            "FALLBACK_CHAR",
         ]
 
         if string in specials:
@@ -1483,6 +1486,7 @@ def parse_cli():
         ffmpeg_path=defaults.FFMPEG_PATH,
         coubs_per_page=defaults.COUBS_PER_PAGE,
         tag_sep=defaults.TAG_SEP,
+        fallback_char=defaults.FALLBACK_CHAR,
         write_method=defaults.WRITE_METHOD,
         chunk_size=defaults.CHUNK_SIZE,
     )
@@ -1628,26 +1632,32 @@ def get_name(req_json, c_id):
     if not opts.name_template:
         return c_id
 
-    name = opts.name_template
-
-    name = name.replace("%id%", c_id)
-    name = name.replace("%title%", req_json['title'])
-    name = name.replace("%creation%", req_json['created_at'])
-    name = name.replace("%channel%", req_json['channel']['title'])
+    specials = {
+        '%id%': c_id,
+        '%title%': req_json['title'],
+        '%creation%': req_json['created_at'],
+        '%channel%': req_json['channel']['title'],
+        '%tags%': opts.tag_sep.join([t['title'] for t in req_json['tags']]),
+    }
     # Coubs don't necessarily belong to a community (although it's rare)
     try:
-        name = name.replace("%community%", req_json['communities'][0]['permalink'])
+        specials['%community%'] = req_json['communities'][0]['permalink']
     except (KeyError, TypeError, IndexError):
-        name = name.replace("%community%", "")
+        specials['%community%'] = "undefined"
 
-    tags = opts.tag_sep.join([t['title'] for t in req_json['tags']])
-    name = name.replace("%tags%", tags)
+    name = opts.name_template
+    for to_replace in specials:
+        name = name.replace(to_replace, specials[to_replace])
 
-    # Strip/replace special characters that can lead to script failure (ffmpeg concat)
-    # ' common among coub titles
-    # Newlines can be occasionally found as well
-    name = name.replace("'", "")
-    name = name.replace("\n", " ")
+    # An attempt to remove the most blatant problematic characters
+    # Linux supports all except /, but \n and \t are only asking for trouble
+    # https://dwheeler.com/essays/fixing-unix-linux-filenames.html
+    # ' is problematic as it causes issues with FFmpeg's concat muxer
+    forbidden = ["\n", "\t", "'", "/"]
+    if os.name == "nt":
+        forbidden.extend(["<", ">", ":", "\"", "\\", "|", "?", "*"])
+    for to_replace in forbidden:
+        name = name.replace(to_replace, opts.fallback_char)
 
     try:
         # Add example extension to simulate the full name length
