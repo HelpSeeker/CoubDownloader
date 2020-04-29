@@ -129,13 +129,13 @@ The main problem is the usage of external tools like FFmpeg (but also media play
 ## Requirements
 
 * Python >= 3.7
-* [aiohttp](https://aiohttp.readthedocs.io/en/stable/)
 * [FFmpeg](https://www.ffmpeg.org/)
 
 Standalone builds only require FFmpeg.
 
 ### Optional
 
+* [aiohttp](https://aiohttp.readthedocs.io/en/stable/) for asynchronous execution **(strongly recommended)**
 * [colorama](https://github.com/tartley/colorama) for colorized terminal output on Windows
 * [Gooey](https://github.com/chriskiehl/Gooey) to run `coub-gui.py`
 
