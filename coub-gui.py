@@ -10,17 +10,6 @@ import coub
 
 class GuiDefaultOptions(coub.DefaultOptions):
     """Custom default option class to reflect the differences between CLI and GUI."""
-    # There's no way for the user to enter input if a prompt occurs
-    # So only "yes" or "no" make sense
-    PROMPT = "no"
-
-    # Outputting to the current dir is a viable strategy for a CLI tool
-    # Not so much for a GUI
-    if coub.DefaultOptions.PATH == ".":
-        PATH = os.path.join(os.path.expanduser("~"), "coubs")
-    else:
-        PATH = os.path.abspath(coub.DefaultOptions.PATH)
-
     # Create special labels for dropdown menus
     # Some internally used values would cause confusion
     # Some menus also combine options
@@ -39,6 +28,16 @@ class GuiDefaultOptions(coub.DefaultOptions):
         # PyInstaller archive for standalone coub-gui binaries
         config_dirs = [os.path.dirname(os.path.realpath(__file__))]
         super(GuiDefaultOptions, self).__init__(config_dirs=config_dirs)
+
+        # There's no way for the user to enter input if a prompt occurs
+        # So only "yes" or "no" make sense
+        if self.PROMPT not in {"yes", "no"}:
+            self.PROMPT = "no"
+
+        # Outputting to the current dir (or any relative path) is a viable strategy for a CLI tool
+        # Not so much for a GUI
+        if not os.path.isabs(self.PATH):
+            self.PATH = os.path.join(os.path.expanduser("~"), "coubs")
 
 def translate_to_cli(options):
     """Make GUI-specific options object compatible with the main script."""
