@@ -24,8 +24,7 @@ CoubDownloader is a simple script to download videos (called coubs) from [Coub](
     1. [Video resolution vs. quality](#video-resolution-vs-quality)
     2. [AAC audio](#aac-audio)
     3. ['share' videos](#share-videos)
-8. [Changes since Coub's database upgrade (watermark & co)](#changes-since-coubs-database-upgrade-watermark--co)
-9. [Changes since switching to Coub's API (previously used youtube-dl)](#changes-since-switching-to-coubs-api-previously-used-youtube-dl)
+    4. [Known problems](#known-problems)
 
 ## Usage
 
@@ -402,6 +401,8 @@ The default sort order (most popular coubs of the month) may provide less result
 
 A basic GUI, powered by [Gooey](https://github.com/chriskiehl/Gooey), is provided via `coub-gui.py`.
 
+Please note that this is only a quickly thrown together frontend for convenience. The main focus of this project is the CLI tool.
+
 ![Settings window on Windows](/images/coub-gui_input_Windows.png) ![Progress window on Linux](/images/coub-gui_execution_Linux.png)
 
 It provides the same functionality as the main CLI tool, with a few notable exceptions:
@@ -497,47 +498,8 @@ Also because of the special property of the *share* version, there are some pitf
 
 There's no fallback for *share* videos. If the *share* version is not yet available, then the script will count the coub as unavailable.
 
-## Changes since Coub's database upgrade (watermark & co)
+### Known problems
 
-Coub started to massively overhaul their database and API. Of course those changes aren't documented (why would you document API changes anyway?).
-
-- [x] Only repair video streams that are actually broken
-- [x] Remove mobile option (they now come with a watermark and are the exact same as html5 med)
-- [x] Add AAC mobile audio as another possible audio version (ranked between low and high quality MP3 audio)
-- [x] Add options to prefer AAC or only download AAC audio
-- [x] Add shared option (video+audio already combined)
-- [x] Download coubs from the hot section
-- [x] Download coubs from communities (incl. Featured & Coub of the Day)
-- [x] Asynchronous coub processing
-- [x] Asynchronous timeline parsing
-- [x] Detect stream corruption (incl. old Coub storage method)
-- [x] Workspace cleanup (incomplete coubs) after user interrupt
-- [x] Colorized terminal output
-- [x] Download retries
-- [x] URL input without input options
-- [x] Autocompletion of incomplete/malformed URLs (to some extent)
-- [x] Advanced sorting per input
-- [x] Support for sort order related URLs
-- [x] Download random coubs
-- [x] Option to change the container format for stream remuxing
-- [x] Basic GUI frontend
-- [x] Read custom defaults from config file
-
-## Changes since switching to Coub's API (previously used youtube-dl)
-
-- [x] Download all coubs from a channel
-- [x] Download all recoubs from a channel
-- [x] Limit number of downloaded coubs
-- [x] ~~Wait x seconds between downloads~~ (not supported anymore due to async execution)
-- [x] ~~Limit download speed~~ (was only possible in the Bash version)
-- [x] Download all coubs with a certain tag
-- [x] Check for the existence of a coub before downloading
-- [x] Specify max. coub duration (FFmpeg syntax)
-- [x] Keep track of already downloaded coubs
-- [x] Export parsed coub links (from channels or tags) to a file for later usage
-- [x] Different verbosity levels
-- [x] Choose download order for channels and tags
-- [x] Custom output formatting
-- [x] Download all coubs from a search query
-- [x] Choose what video/audio quality to download
-- [x] ~~Download videos for mobile devices to avoid watermarks~~ (not possible anymore)
+* no error handling or retries if server disconnects during input parsing
+* losing your internet connection while downloading will stall the script indefinitely
+* (GUI only) progress messages don't use monospace fonts on Windows
