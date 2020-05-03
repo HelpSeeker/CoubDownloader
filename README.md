@@ -135,7 +135,7 @@ Standalone builds only require FFmpeg.
 ### Optional
 
 * [aiohttp](https://aiohttp.readthedocs.io/en/stable/) for asynchronous execution **(strongly recommended)**
-* [colorama](https://github.com/tartley/colorama) for colorized terminal output on Windows
+* [colorama](https://github.com/tartley/colorama) for colorized terminal output on Windows (you should also install it if you want to use `coub-gui.py`)
 * [Gooey](https://github.com/chriskiehl/Gooey) to run `coub-gui.py` (be sure to install it with wxPython < 4.1.0)
 
 ## Configuration
