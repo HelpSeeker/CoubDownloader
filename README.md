@@ -4,25 +4,27 @@ CoubDownloader is a simple script to download videos (called coubs) from [Coub](
 
 ## Contents
 
-1. [Usage](https://github.com/HelpSeeker/CoubDownloader#usage)  
-2. [Requirements](https://github.com/HelpSeeker/CoubDownloader#requirements)  
-2.1 [Optional](https://github.com/HelpSeeker/CoubDownloader#optional)  
-3. [Input](https://github.com/HelpSeeker/CoubDownloader#input)  
-3.1. [Overview](https://github.com/HelpSeeker/CoubDownloader#overview)  
-3.2. [Direct coub links](https://github.com/HelpSeeker/CoubDownloader#direct-coub-links)  
-3.3. [Lists](https://github.com/HelpSeeker/CoubDownloader#lists)  
-3.4. [Channels](https://github.com/HelpSeeker/CoubDownloader#channels)  
-3.5. [Searches](https://github.com/HelpSeeker/CoubDownloader#searches)  
-3.6. [Random](https://github.com/HelpSeeker/CoubDownloader#random)  
-3.7. [Tags](https://github.com/HelpSeeker/CoubDownloader#tags)  
-3.8. [Communities](https://github.com/HelpSeeker/CoubDownloader#communities)  
-3.9. [Hot section](https://github.com/HelpSeeker/CoubDownloader#hot-section)  
-4. [Misc. information](https://github.com/HelpSeeker/CoubDownloader#misc-information)  
-4.1. [Video resolution vs. quality](https://github.com/HelpSeeker/CoubDownloader#video-resolution-vs-quality)  
-4.2. [AAC audio](https://github.com/HelpSeeker/CoubDownloader#aac-audio)  
-4.3. ['share' videos](https://github.com/HelpSeeker/CoubDownloader#share-videos)  
-5. [Changes since Coub's database upgrade (watermark & co)](https://github.com/HelpSeeker/CoubDownloader#changes-since-coubs-database-upgrade-watermark--co)  
-6. [Changes since switching to Coub's API (previously used youtube-dl)](https://github.com/HelpSeeker/CoubDownloader#changes-since-switching-to-coubs-api-previously-used-youtube-dl)  
+1. [Usage](#usage)
+2. [Standalone builds](#standalone-builds)
+3. [Requirements](#requirements)
+    1. [Optional](#optional)
+4. [Configuration](#configuration)
+5. [Input](#input)
+    1. [Overview](#overview)
+    2. [Direct coub links](#direct-coub-links)
+    3. [Lists](#lists)
+    4. [Channels](#channels)
+    5. [Searches](#searches)
+    6. [Random](#random)
+    7. [Tags](#tags)
+    8. [Communities](#communities)
+    9. [Hot section](#hot-section)
+6. [GUI](#gui)
+7. [Misc. information](#misc-information)
+    1. [Video resolution vs. quality](#video-resolution-vs-quality)
+    2. [AAC audio](#aac-audio)
+    3. ['share' videos](#share-videos)
+    4. [Known problems](#known-problems)
 
 ## Usage
 
@@ -109,15 +111,46 @@ Output:
     This option has no influence on the file extension.
 ```
 
+## Standalone builds
+
+Starting with v3.7 standalone Windows builds are provided on the [release page](https://github.com/HelpSeeker/CoubDownloader/releases). These executables don't require an existing Python environment and the [GUI version](#gui) is a standalone application. FFmpeg is still a mandatory requirement.
+
+#### Why no Mac builds?
+
+Because I lack the necessary build environment.
+
+#### Why no Linux builds?
+
+Because I lack the resources to target a variety of distros individually and my attempts to create universal Linux builds were unsuccessful.
+
+The main problem is the usage of external tools like FFmpeg (but also media players with the `--preview` option) via `subprocess.run`. They either spam the terminal output with warnings or outright fail because of library version mismatches between my build environment and the user's system. It would've required me to ship Linux builds with static FFmpeg binaries and either remove the `--preview` option or make it the user's responsibility to get it working. And even then there's still a plethora of problems regarding the GUI version, which I couldn't reliably get to work across a handful of mainstream distros (Debian, Ubuntu, CentOS, Linux Mint, etc.).
+
 ## Requirements
 
 * Python >= 3.7
 * [FFmpeg](https://www.ffmpeg.org/)
 
+Standalone builds only require FFmpeg.
+
 ### Optional
 
-* [aiohttp](https://aiohttp.readthedocs.io/en/stable/) for asynchronous execution **(recommended)**
-* [colorama](https://github.com/tartley/colorama) for colorized terminal output on Windows
+* [aiohttp](https://aiohttp.readthedocs.io/en/stable/) for asynchronous execution **(strongly recommended)**
+* [colorama](https://github.com/tartley/colorama) for colorized terminal output on Windows (you should also install it if you want to use `coub-gui.py`)
+* [Gooey](https://github.com/chriskiehl/Gooey) to run `coub-gui.py` (be sure to install it with wxPython < 4.1.0)
+
+## Configuration
+
+CoubDownloader's defaults can be changed via a configuration file.
+
+Simply create a text file with the name `coub.conf` in the same location as the script and specify custom defaults in the following format:
+
+```
+OPTION = value
+```
+
+Lines starting with `#` get treated as comments.
+
+For all available options and their allowed values, please take a look at the [example configuration file](example.conf).
 
 ## Input
 
@@ -364,6 +397,23 @@ refer to the hot section and can be used as input.
 
 The default sort order (most popular coubs of the month) may provide less results than other sort orders.
 
+## GUI
+
+A basic GUI, powered by [Gooey](https://github.com/chriskiehl/Gooey), is provided via `coub-gui.py`.
+
+Please note that this is only a quickly thrown together frontend for convenience. The main focus of this project is the CLI tool.
+
+![Settings window on Windows](/images/coub-gui_input_Windows.png) ![Progress window on Linux](/images/coub-gui_execution_Linux.png)
+
+It provides the same functionality as the main CLI tool, with a few notable exceptions:
+
+* No quiet mode
+* No overwrite prompt (default prompt answer is set to "no")
+* No option equivalent to `--random#top` (direct URL input must be used)
+* The output path defaults to "coubs" in the user's home directory instead of the current one
+
+Another important difference is that `coub-gui.py` is **NOT** a standalone script. It depends on `coub.py` being in the same location.
+
 ## Misc. information
 
 ### Video resolution vs. quality
@@ -448,45 +498,13 @@ Also because of the special property of the *share* version, there are some pitf
 
 There's no fallback for *share* videos. If the *share* version is not yet available, then the script will count the coub as unavailable.
 
-## Changes since Coub's database upgrade (watermark & co)
+### Known problems
 
-Coub started to massively overhaul their database and API. Of course those changes aren't documented (why would you document API changes anyway?).
-
-- [x] Only repair video streams that are actually broken
-- [x] Remove mobile option (they now come with a watermark and are the exact same as html5 med) 
-- [x] Add AAC mobile audio as another possible audio version (ranked between low and high quality MP3 audio)
-- [x] Add options to prefer AAC or only download AAC audio
-- [x] Add shared option (video+audio already combined)
-- [x] Download coubs from the hot section
-- [x] Download coubs from communities (incl. Featured & Coub of the Day)
-- [x] Asynchronous coub processing
-- [x] Asynchronous timeline parsing
-- [x] Detect stream corruption (incl. old Coub storage method)
-- [x] Workspace cleanup (incomplete coubs) after user interrupt 
-- [x] Colorized terminal output
-- [x] Download retries
-- [x] URL input without input options
-- [x] Autocompletion of incomplete/malformed URLs (to some extent)
-- [x] Advanced sorting per input
-- [x] Support for sort order related URLs
-- [x] Download random coubs
-- [x] Option to change the container format for stream remuxing
-
-## Changes since switching to Coub's API (previously used youtube-dl)
-
-- [x] Download all coubs from a channel
-- [x] Download all recoubs from a channel
-- [x] Limit number of downloaded coubs
-- [x] ~~Wait x seconds between downloads~~ (not supported anymore due to async execution)
-- [x] ~~Limit download speed~~ (was only possible in the Bash version)
-- [x] Download all coubs with a certain tag
-- [x] Check for the existence of a coub before downloading
-- [x] Specify max. coub duration (FFmpeg syntax) 
-- [x] Keep track of already downloaded coubs
-- [x] Export parsed coub links (from channels or tags) to a file for later usage
-- [x] Different verbosity levels
-- [x] Choose download order for channels and tags
-- [x] Custom output formatting
-- [x] Download all coubs from a search query
-- [x] Choose what video/audio quality to download
-- [x] ~~Download videos for mobile devices to avoid watermarks~~ (not possible anymore)
+* no error handling or retries if server disconnects during input parsing
+* losing your internet connection while downloading will stall the script indefinitely
+* some enabling switches (e.g. --keep) don't have a disabling counterpart, so activating their options via a config means you can't disable them at runtime
+* using a CLI media player to preview audio files may lead to its keyboard shortcuts not working
+* Python 3.8 and newer will print tracebacks (only warnings) when the user interrupts the program (see the Wiki for more infos)
+* (GUI only) progress messages don't use monospace fonts on Windows
+* (GUI only) having wrong values defined in your config will prevent the GUI from opening (open it from the command line to see the error)
+* (GUI only) Gooey seems to be broken for WxPython 4.1.0

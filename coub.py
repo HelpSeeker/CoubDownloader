@@ -1,5 +1,22 @@
 #!/usr/bin/env python3
 
+"""
+Copyright (C) 2018-2020 HelpSeeker <AlmostSerious@protonmail.ch>
+
+This program is free software: you can redistribute it and/or modify
+it under the terms of the GNU General Public License as published by
+the Free Software Foundation, either version 3 of the License, or
+(at your option) any later version.
+
+This program is distributed in the hope that it will be useful,
+but WITHOUT ANY WARRANTY; without even the implied warranty of
+MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+GNU General Public License for more details.
+
+You should have received a copy of the GNU General Public License
+along with this program.  If not, see <https://www.gnu.org/licenses/>.
+"""
+
 import argparse
 import asyncio
 import json
@@ -8,6 +25,7 @@ import subprocess
 import sys
 
 from math import ceil
+from ssl import SSLCertVerificationError
 from textwrap import dedent
 
 import urllib.error
@@ -34,127 +52,6 @@ try:
 except ModuleNotFoundError:
     if os.name == "nt":
         colors = False
-
-# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-# Default Options
-# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-class DefaultOptions:
-    """Define and store all import user settings."""
-
-    # Change verbosity of the script
-    # 0 for quiet, >= 1 for normal verbosity
-    VERBOSITY = 1
-
-    # yes/no will answer prompts automatically
-    # Everything else will lead to a prompt
-    PROMPT = None
-
-    # Default download destination
-    PATH = "."
-
-    # Keep individual video/audio streams
-    KEEP = False
-
-    # How often to loop the video
-    # Only has an effect, if the looped video is shorter than the audio
-    # Otherwise the max. length is limited by the audio duration
-    REPEAT = 1000
-
-    # Max. coub duration (FFmpeg syntax)
-    # Can be used in combination with repeat, in which case the shorter
-    # duration will be used
-    DUR = None
-
-    # Max no. of connections for aiohttp's ClientSession
-    # Raising this value can lead to shorter download times, but also
-    # increases the risk of Coub throttling or terminating your connections
-    # There's also no benefit in higher values, if your connection is already
-    # fully utilized
-    CONNECT = 25
-
-    # How often to retry download when connection is lost
-    # >0 -> retry the specified number of times
-    #  0 -> don't retry
-    # <0 -> retry indefinitely
-    # Retries happen through recursion, so the max. number is theoretically
-    # limited to 1000 retries (although Python's limit could be raised as well)
-    RETRIES = 5
-
-    # Limit how many coubs can be downloaded during one script invocation
-    MAX_COUBS = None
-
-    # What video/audio quality to download
-    #   0 -> worst quality
-    #  -1 -> best quality
-    # Everything else can lead to undefined behavior
-    V_QUALITY = -1
-    A_QUALITY = -1
-
-    # Limits for the list of video streams
-    #   V_MAX: limits what counts as best stream
-    #   V_MIN: limits what counts as worst stream
-    # Supported values:
-    #   med    ( ~640px width)
-    #   high   (~1280px width)
-    #   higher (~1600px width)
-    V_MAX = 'higher'
-    V_MIN = 'med'
-
-    # How much to prefer AAC audio
-    #   0 -> never download AAC audio
-    #   1 -> rank it between low and high quality MP3
-    #   2 -> prefer AAC, use MP3 fallback
-    #   3 -> either AAC or no audio
-    AAC = 1
-
-    # Use shared video+audio instead of merging separate streams
-    # Leads to shorter videos, also no further quality selection
-    SHARE = False
-
-    # How to treat recoubs during channel downloads
-    #   RECOUBS = False     -> Only Original
-    #   RECOUBS = True      -> Original + Recoubs
-    #   ONLY_RECOUBS = True -> Only Recoubs
-    # RECOUBS mustn't be False, when ONLY_RECOUBS is True
-    RECOUBS = True
-    ONLY_RECOUBS = False
-
-    # Preview a downloaded coub with the given command
-    # Keyboard shortcuts may not work for CLI audio players
-    PREVIEW = None
-
-    # Only download video/audio stream
-    # A_ONLY and V_ONLY are mutually exclusive
-    A_ONLY = False
-    V_ONLY = False
-
-    # Output parsed coubs to file instead of downloading
-    # Values other than None will terminate the script after the initial
-    # parsing process (i.e. no coubs will be downloaded)
-    OUT_FILE = None
-
-    # Use an archive file to keep track of downloaded coubs
-    ARCHIVE_PATH = None
-
-    # Container to merge separate video/audio streams into
-    # Must support AVC video and AAC/MP3 audio (e.g. mkv or mp4)
-    # See: https://en.wikipedia.org/wiki/Comparison_of_video_container_formats
-    MERGE_EXT = "mkv"
-
-    # Output name formatting (default: %id%)
-    # Supports the following special keywords:
-    #   %id%        - coub ID (identifier in the URL)
-    #   %title%     - coub title
-    #   %creation%  - creation date/time
-    #   %community% - coub community
-    #   %channel%   - channel title
-    #   %tags%      - all tags (separated by tag_sep, see below)
-    # All other strings are interpreted literally.
-    #
-    # Setting a custom value increases skip duration for existing coubs
-    # Usage of an archive file is recommended in such an instance
-    OUT_FORMAT = None
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # Classes For Global Variables
@@ -205,6 +102,153 @@ done = 0
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # Classes
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+class DefaultOptions:
+    """Define and store all import user settings."""
+
+    # Common defaults
+    VERBOSITY = 1
+    PROMPT = None
+    PATH = "."
+    KEEP = False
+    REPEAT = 1000
+    DURATION = None
+    # Download defaults
+    CONNECTIONS = 25
+    RETRIES = 5
+    MAX_COUBS = None
+    # Format defaults
+    V_QUALITY = -1
+    A_QUALITY = -1
+    V_MAX = "higher"
+    V_MIN = "med"
+    AAC = 1
+    SHARE = False
+    # Channel defaults
+    RECOUBS = 1
+    # Preview defaults
+    PREVIEW = None
+    # Misc. defaults
+    A_ONLY = False
+    V_ONLY = False
+    OUTPUT_LIST = None
+    ARCHIVE = None
+    # Output defaults
+    MERGE_EXT = "mkv"
+    NAME_TEMPLATE = "%id%"
+    # Advanced defaults
+    FFMPEG_PATH = "ffmpeg"
+    COUBS_PER_PAGE = 25
+    TAG_SEP = "_"
+    FALLBACK_CHAR = "-"
+    WRITE_METHOD = "w"
+    CHUNK_SIZE = 1024
+
+    def __init__(self, config_dirs=None):
+        if not config_dirs:
+            # Only supports script's location as default for now
+            config_dirs = [os.path.dirname(os.path.realpath(__file__))]
+        for d in config_dirs:
+            config_path = os.path.join(d, "coub.conf")
+            if os.path.exists(config_path):
+                self.read_from_config(config_path)
+        self.check_values()
+
+    def read_from_config(self, path):
+        """Change default options based on user config file."""
+        try:
+            with open(path, "r") as f:
+                user_settings = [l for l in f
+                                 if "=" in l and not l.startswith("#")]
+        except (OSError, UnicodeError):
+            err(f"Error reading config file '{path}'!", color=fgcolors.WARNING)
+            user_settings = []
+
+        for setting in user_settings:
+            name = setting.split("=")[0].strip()
+            value = setting.split("=")[1].strip()
+            if hasattr(self, name):
+                value = self.guess_string_type(name, value)
+                setattr(self, name, value)
+            else:
+                err(f"Unknown option in config file: {name}",
+                    color=fgcolors.WARNING)
+
+    def check_values(self):
+        """Test defaults for valid ranges and types."""
+        checks = {
+            "VERBOSITY": (lambda x: x in [0, 1]),
+            "PROMPT": (lambda x: True),     # Anything but yes/no will lead to prompt
+            "PATH": (lambda x: isinstance(x, str)),
+            "KEEP": (lambda x: isinstance(x, bool)),
+            "REPEAT": (lambda x: isinstance(x, int) and x > 0),
+            "DURATION": (lambda x: isinstance(x, str) or x is None),
+            "CONNECTIONS": (lambda x: isinstance(x, int) and x > 0),
+            "RETRIES": (lambda x: isinstance(x, int)),
+            "MAX_COUBS": (lambda x: isinstance(x, int) and x > 0 or x is None),
+            "V_QUALITY": (lambda x: x in [0, -1]),
+            "A_QUALITY": (lambda x: x in [0, -1]),
+            "V_MAX": (lambda x: x in ["higher", "high", "med"]),
+            "V_MIN": (lambda x: x in ["higher", "high", "med"]),
+            "AAC": (lambda x: x in [0, 1, 2, 3]),
+            "SHARE": (lambda x: isinstance(x, bool)),
+            "RECOUBS": (lambda x: x in [0, 1, 2]),
+            "PREVIEW": (lambda x: isinstance(x, str) or x is None),
+            "A_ONLY": (lambda x: isinstance(x, bool)),
+            "V_ONLY": (lambda x: isinstance(x, bool)),
+            "OUTPUT_LIST": (lambda x: isinstance(x, str) or x is None),
+            "ARCHIVE": (lambda x: isinstance(x, str) or x is None),
+            "MERGE_EXT": (lambda x: x in ["mkv", "mp4", "asf", "avi", "flv", "f4v", "mov"]),
+            "NAME_TEMPLATE": (lambda x: isinstance(x, str) or x is None),
+            "FFMPEG_PATH": (lambda x: isinstance(x, str)),
+            "COUBS_PER_PAGE": (lambda x: x in range(1, 26)),
+            "TAG_SEP": (lambda x: isinstance(x, str)),
+            "FALLBACK_CHAR": (lambda x: isinstance(x, str) or x is None),
+            "WRITE_METHOD": (lambda x: x in ["w", "a"]),
+            "CHUNK_SIZE": (lambda x: isinstance(x, int) and x > 0),
+        }
+
+        errors = []
+        for option in checks:
+            value = getattr(self, option)
+            if not checks[option](value):
+                errors.append((option, value))
+        if errors:
+            for e in errors:
+                err(f"{e[0]}: invalid default value '{e[1]}'")
+            sys.exit(status.OPT)
+
+    @staticmethod
+    def guess_string_type(option, string):
+        """Convert values from config file (all strings) to the right type."""
+        specials = {
+            "None": None,
+            "True": True,
+            "False": False,
+        }
+        # Some options should not undergo integer conversion
+        # Usually options which are supposed to ONLY take strings
+        exceptions = [
+            "PATH",
+            "DURATION",
+            "PREVIEW",
+            "OUTPUT_LIST",
+            "ARCHIVE",
+            "NAME_TEMPLATE",
+            "FFMPEG_PATH",
+            "TAG_SEP",
+            "FALLBACK_CHAR",
+        ]
+
+        if string in specials:
+            return specials[string]
+        if option in exceptions:
+            return string
+        try:
+            return int(string)
+        except ValueError:
+            return string
+
 
 class InputHelp(argparse.Action):
     """Custom action to print input help."""
@@ -261,7 +305,7 @@ class CustomArgumentParser(argparse.ArgumentParser):
           -d, --duration TIME   specify max. coub duration (FFmpeg syntax)
 
         Download options:
-          --connections N       max. number of connections (def: {self.get_default("connect")})
+          --connections N       max. number of connections (def: {self.get_default("connections")})
           --retries N           number of retries when connection is lost (def: {self.get_default("retries")})
                                   0 to disable, <0 to retry indefinitely
           --limit-num LIMIT     limit max. number of downloaded coubs
@@ -297,7 +341,7 @@ class CustomArgumentParser(argparse.ArgumentParser):
         Output:
           --ext EXTENSION       merge output with the given extension (def: {self.get_default("merge_ext")})
                                   ignored if no merge is required
-          -o, --output FORMAT   save output with the given template (def: %id%)
+          -o, --output FORMAT   save output with the given template (def: {self.get_default("name_template")})
 
             Special strings:
               %id%        - coub ID (identifier in the URL)
@@ -532,21 +576,21 @@ class BaseContainer:
             msg(f"  {pages} out of {self.pages} pages")
 
             tout = aiohttp.ClientTimeout(total=None)
-            conn = aiohttp.TCPConnector(limit=opts.connect)
+            conn = aiohttp.TCPConnector(limit=opts.connections)
             async with aiohttp.ClientSession(timeout=tout, connector=conn) as session:
                 tasks = [parse_page(req, session) for req in requests]
-                links = await asyncio.gather(*tasks)
-            links = [l for page in links for l in page]
+                ids = await asyncio.gather(*tasks)
+            ids = [i for page in ids for i in page]
         else:
-            links = []
+            ids = []
             for i in range(pages):
                 msg(f"  {i+1} out of {self.pages} pages")
                 page = await parse_page(requests[i])
-                links.extend(page)
+                ids.extend(page)
 
         if quantity:
-            return links[:quantity]
-        return links
+            return ids[:quantity]
+        return ids
 
 
 class Channel(BaseContainer):
@@ -573,9 +617,9 @@ class Channel(BaseContainer):
         template = f"https://coub.com/api/v2/timeline/channel/{urlquote(self.id)}"
         template = f"{template}?per_page={opts.coubs_per_page}"
 
-        if not opts.recoubs:
+        if opts.recoubs == 0:
             template = f"{template}&type=simples"
-        elif opts.only_recoubs:
+        elif opts.recoubs == 2:
             template = f"{template}&type=recoubs"
 
         if self.sort in methods:
@@ -833,7 +877,10 @@ class LinkList:
         content = content.replace(" ", "\n")
         content = content.splitlines()
 
-        links = [l for l in content if "https://coub.com/view/" in l]
+        links = [
+            l.partition("https://coub.com/view/")[2]
+            for l in content if "https://coub.com/view/" in l
+        ]
         msg(f"  {len(links)} link{'s' if len(links) != 1 else ''} found")
 
         if quantity:
@@ -844,9 +891,9 @@ class LinkList:
 class Coub:
     """Store all relevant infos and methods to process a single coub."""
 
-    def __init__(self, link):
-        self.link = link
-        self.id = link.split("/")[-1]
+    def __init__(self, c_id):
+        self.id = c_id
+        self.link = f"https://coub.com/view/{self.id}"
         self.req = f"https://coub.com/api/v2/coubs/{self.id}"
 
         self.v_link = None
@@ -870,14 +917,10 @@ class Coub:
         if self.erroneous():
             return
 
-        if opts.archive and self.id in opts.archive:
-            self.exists = True
-            return
-
         old_file = None
         # Existence of self.name indicates whether API request was already
         # made (i.e. if 1st or 2nd check)
-        if not opts.out_format:
+        if not opts.name_template:
             if not self.name:
                 old_file = exists(self.id)
         else:
@@ -990,15 +1033,15 @@ class Coub:
             # Loop footage until shortest stream ends
             # Concatenated video (via list) counts as one long stream
             command = [
-                "ffmpeg", "-y", "-v", "error",
+                opts.ffmpeg_path, "-y", "-v", "error",
                 "-f", "concat", "-safe", "0",
                 "-i", f"file:{t_name}", "-i", f"file:{self.a_name}",
             ]
-            if opts.dur:
-                command.extend(["-t", opts.dur])
+            if opts.duration:
+                command.extend(["-t", opts.duration])
             command.extend(["-c", "copy", "-shortest", f"file:temp_{m_name}"])
 
-            subprocess.run(command)
+            subprocess.run(command, check=False)
         finally:
             if os.path.exists(t_name):
                 os.remove(t_name)
@@ -1018,7 +1061,7 @@ class Coub:
         if self.erroneous():
             return
 
-        with open(opts.archive_path, "a") as f:
+        with open(opts.archive, "a") as f:
             print(self.id, file=f)
 
     def preview(self):
@@ -1054,7 +1097,7 @@ class Coub:
 
         # 2nd existence check
         # Handles custom names exclusively (slower since API request necessary)
-        if opts.out_format:
+        if opts.name_template:
             self.check_existence()
 
         # Download
@@ -1069,7 +1112,7 @@ class Coub:
         # of valid streams with special format options (e.g. --video-only)
         self.done = True
 
-        if opts.archive_path:
+        if opts.archive:
             self.archive()
         if opts.preview:
             self.preview()
@@ -1124,8 +1167,10 @@ def msg(*args, color=fgcolors.RESET, **kwargs):
 def check_prereq():
     """Test if all required 3rd-party tools are installed."""
     try:
-        subprocess.run(["ffmpeg"], stdout=subprocess.DEVNULL, \
-                                   stderr=subprocess.DEVNULL)
+        subprocess.run([opts.ffmpeg_path],
+                       stdout=subprocess.DEVNULL,
+                       stderr=subprocess.DEVNULL,
+                       check=False)
     except FileNotFoundError:
         err("Error: FFmpeg not found!")
         sys.exit(status.DEP)
@@ -1135,8 +1180,11 @@ def check_connection():
     """Check if user can connect to coub.com."""
     try:
         urlopen("https://coub.com/")
-    except urllib.error.URLError:
-        err("Unable to connect to coub.com! Please check your connection.")
+    except urllib.error.URLError as e:
+        if isinstance(e.reason, SSLCertVerificationError):
+            err("Certificate verification failed! Please update your CA certificates.")
+        else:
+            err("Unable to connect to coub.com! Please check your connection.")
         sys.exit(status.CONN)
 
 
@@ -1145,13 +1193,6 @@ def no_url(string):
     if "coub.com" in string:
         raise argparse.ArgumentTypeError("input options don't support URLs")
     return string
-
-
-def direct_link(string):
-    """Convert string provided by parse_cli() to a direct coub link."""
-    coub_id = no_url(string)
-    link = f"https://coub.com/view/{coub_id}"
-    return link
 
 
 def positive_int(string):
@@ -1167,8 +1208,11 @@ def positive_int(string):
 
 def valid_time(string):
     """Test valditiy of time syntax with FFmpeg."""
+    # Gets called in parse_cli, so opts.ffmpeg_path isn't available yet
+    # Exploits the fact that advanced defaults and options are always the same
+    defaults = DefaultOptions()
     command = [
-        "ffmpeg", "-v", "quiet",
+        defaults.FFMPEG_PATH, "-v", "quiet",
         "-f", "lavfi", "-i", "anullsrc",
         "-t", string, "-c", "copy",
         "-f", "null", "-",
@@ -1327,7 +1371,7 @@ def mapped_input(string):
     link = normalize_link(string)
 
     if "https://coub.com/view/" in link:
-        source = link
+        source = link.partition("https://coub.com/view/")[2]
     elif "https://coub.com/tags/" in link:
         name = link.partition("https://coub.com/tags/")[2]
         source = Tag(name)
@@ -1368,7 +1412,7 @@ def parse_cli():
     # Input
     parser.add_argument("raw_input", nargs="*", type=mapped_input)
     parser.add_argument("-i", "--id", dest="input", action="append",
-                        type=direct_link)
+                        type=no_url)
     parser.add_argument("-l", "--list", dest="input", action="append",
                         type=LinkList)
     parser.add_argument("-c", "--channel", dest="input", action="append",
@@ -1400,11 +1444,11 @@ def parse_cli():
     repeat.add_argument("-r", "--repeat", type=positive_int, default=defaults.REPEAT)
     parser.add_argument("-p", "--path", type=os.path.abspath, default=defaults.PATH)
     parser.add_argument("-k", "--keep", action="store_true", default=defaults.KEEP)
-    parser.add_argument("-d", "--duration", dest="dur", type=valid_time,
-                        default=defaults.DUR)
+    parser.add_argument("-d", "--duration", type=valid_time,
+                        default=defaults.DURATION)
     # Download Options
-    parser.add_argument("--connections", dest="connect", type=positive_int,
-                        default=defaults.CONNECT)
+    parser.add_argument("--connections", type=positive_int,
+                        default=defaults.CONNECTIONS)
     parser.add_argument("--retries", type=int, default=defaults.RETRIES)
     parser.add_argument("--limit-num", dest="max_coubs", type=positive_int,
                         default=defaults.MAX_COUBS)
@@ -1429,11 +1473,12 @@ def parse_cli():
                      default=defaults.AAC)
     # Channel Options
     recoub = parser.add_mutually_exclusive_group()
-    recoub.add_argument("--recoubs", action="store_true", default=defaults.RECOUBS)
-    recoub.add_argument("--no-recoubs", dest="recoubs", action="store_false",
-                        default=defaults.RECOUBS)
-    recoub.add_argument("--only-recoubs", action="store_true",
-                        default=defaults.ONLY_RECOUBS)
+    recoub.add_argument("--recoubs", action="store_const",
+                        const=1, default=defaults.RECOUBS)
+    recoub.add_argument("--no-recoubs", dest="recoubs", action="store_const",
+                        const=0, default=defaults.RECOUBS)
+    recoub.add_argument("--only-recoubs", dest="recoubs", action="store_const",
+                        const=2, default=defaults.RECOUBS)
     # Preview Options
     player = parser.add_mutually_exclusive_group()
     player.add_argument("--preview", default=defaults.PREVIEW)
@@ -1446,21 +1491,24 @@ def parse_cli():
     stream.add_argument("--video-only", dest="v_only", action="store_true",
                         default=defaults.V_ONLY)
     stream.add_argument("--share", action="store_true", default=defaults.SHARE)
-    parser.add_argument("--write-list", dest="out_file", type=os.path.abspath,
-                        default=defaults.OUT_FILE)
-    parser.add_argument("--use-archive", dest="archive_path", type=valid_archive,
-                        default=defaults.ARCHIVE_PATH)
+    parser.add_argument("--write-list", dest="output_list", type=os.path.abspath,
+                        default=defaults.OUTPUT_LIST)
+    parser.add_argument("--use-archive", dest="archive", type=valid_archive,
+                        default=defaults.ARCHIVE)
     # Output
     parser.add_argument("--ext", dest="merge_ext", default=defaults.MERGE_EXT,
                         choices=["mkv", "mp4", "asf", "avi", "flv", "f4v", "mov"])
-    parser.add_argument("-o", "--output", dest="out_format",
-                        default=defaults.OUT_FORMAT)
+    parser.add_argument("-o", "--output", dest="name_template",
+                        default=defaults.NAME_TEMPLATE)
 
     # Advanced Options
     parser.set_defaults(
-        coubs_per_page=25,      # allowed: 1-25
-        tag_sep="_",
-        write_method="w",       # w -> overwrite, a -> append
+        ffmpeg_path=defaults.FFMPEG_PATH,
+        coubs_per_page=defaults.COUBS_PER_PAGE,
+        tag_sep=defaults.TAG_SEP,
+        fallback_char=defaults.FALLBACK_CHAR,
+        write_method=defaults.WRITE_METHOD,
+        chunk_size=defaults.CHUNK_SIZE,
     )
 
     if not sys.argv[1:]:
@@ -1475,15 +1523,23 @@ def parse_cli():
     else:
         args.input = args.raw_input
     # Read archive content
-    if args.archive_path and os.path.exists(args.archive_path):
-        with open(args.archive_path, "r") as f:
-            args.archive = [l.strip() for l in f]
+    if args.archive and os.path.exists(args.archive):
+        with open(args.archive, "r") as f:
+            args.archive_content = {l.strip() for l in f}
     else:
-        args.archive = None
+        args.archive_content = set()
     # The default naming scheme is the same as using %id%
     # but internally the default value is None
-    if args.out_format == "%id%":
-        args.out_format = None
+    if args.name_template == "%id%":
+        args.name_template = None
+    # Defining whitespace or an empty string in the config isn't possible
+    # Instead translate appropriate keywords
+    if args.tag_sep == "space":
+        args.tag_sep = " "
+    if args.fallback_char is None:
+        args.fallback_char = ""
+    elif args.fallback_char == "space":
+        args.fallback_char = " "
 
     return args
 
@@ -1518,8 +1574,7 @@ async def parse_page(req, session=None):
         c['recoub_to']['permalink'] if c['recoub_to'] else c['permalink']
         for c in resp_json['coubs']
     ]
-
-    return [f"https://coub.com/view/{i}" for i in ids]
+    return ids
 
 
 def remove_container_dupes(containers):
@@ -1539,14 +1594,14 @@ def remove_container_dupes(containers):
 
 def parse_input(sources):
     """Handle the parsing process of all provided input sources."""
-    links = [s for s in sources if isinstance(s, str)]
+    directs = [s for s in sources if isinstance(s, str)]
     containers = [s for s in sources if not isinstance(s, str)]
     containers = remove_container_dupes(containers)
 
     if opts.max_coubs:
-        parsed = links[:opts.max_coubs]
+        parsed = directs[:opts.max_coubs]
     else:
-        parsed = links
+        parsed = directs
 
     if parsed:
         msg("\nReading command line:")
@@ -1572,13 +1627,16 @@ def parse_input(sources):
 
     before = len(parsed)
     parsed = list(set(parsed))      # Weed out duplicates
+    dupes = before - len(parsed)
+    parsed = [i for i in parsed if i not in opts.archive_content]
+    archived = before - dupes - len(parsed)
     after = len(parsed)
-    dupes = before - after
-    if dupes:
+    if dupes or archived:
         msg(dedent(f"""
             Results:
               {before} input link{'s' if before != 1 else ''}
               {dupes} duplicate{'s' if dupes != 1 else ''}
+              {archived} found in archive file
               {after} final link{'s' if after != 1 else ''}"""))
     else:
         msg(dedent(f"""
@@ -1588,48 +1646,52 @@ def parse_input(sources):
     return parsed
 
 
-def write_list(links):
+def write_list(ids):
     """Output parsed links to a list and exit."""
-    with open(opts.out_file, opts.write_method) as f:
-        for l in links:
-            print(l, file=f)
-    msg(f"\nParsed coubs written to '{opts.out_file}'!",
+    with open(opts.output_list, opts.write_method) as f:
+        for i in ids:
+            print(f"https://coub.com/view/{i}", file=f)
+    msg(f"\nParsed coubs written to '{opts.output_list}'!",
         color=fgcolors.SUCCESS)
 
 
 def get_name(req_json, c_id):
     """Assemble final output name of a given coub."""
-    if not opts.out_format:
+    if not opts.name_template:
         return c_id
 
-    name = opts.out_format
-
-    name = name.replace("%id%", c_id)
-    name = name.replace("%title%", req_json['title'])
-    name = name.replace("%creation%", req_json['created_at'])
-    name = name.replace("%channel%", req_json['channel']['title'])
+    specials = {
+        '%id%': c_id,
+        '%title%': req_json['title'],
+        '%creation%': req_json['created_at'],
+        '%channel%': req_json['channel']['title'],
+        '%tags%': opts.tag_sep.join([t['title'] for t in req_json['tags']]),
+    }
     # Coubs don't necessarily belong to a community (although it's rare)
     try:
-        name = name.replace("%community%", req_json['communities'][0]['permalink'])
+        specials['%community%'] = req_json['communities'][0]['permalink']
     except (KeyError, TypeError, IndexError):
-        name = name.replace("%community%", "")
+        specials['%community%'] = "undefined"
 
-    tags = ""
-    for t in req_json['tags']:
-        # Don't add tag separator after the last tag
-        tags += f"{t['title']}{opts.tag_sep if t != req_json['tags'][-1] else ''}"
-    name = name.replace("%tags%", tags)
+    name = opts.name_template
+    for to_replace in specials:
+        name = name.replace(to_replace, specials[to_replace])
 
-    # Strip/replace special characters that can lead to script failure (ffmpeg concat)
-    # ' common among coub titles
-    # Newlines can be occasionally found as well
-    name = name.replace("'", "")
-    name = name.replace("\n", " ")
+    # An attempt to remove the most blatant problematic characters
+    # Linux supports all except /, but \n and \t are only asking for trouble
+    # https://dwheeler.com/essays/fixing-unix-linux-filenames.html
+    # ' is problematic as it causes issues with FFmpeg's concat muxer
+    forbidden = ["\n", "\t", "'", "/"]
+    if os.name == "nt":
+        forbidden.extend(["<", ">", ":", "\"", "\\", "|", "?", "*"])
+    for to_replace in forbidden:
+        name = name.replace(to_replace, opts.fallback_char)
 
     try:
-        f = open(name, "w")
+        # Add example extension to simulate the full name length
+        f = open(f"{name}.ext", "w")
         f.close()
-        os.remove(name)
+        os.remove(f"{name}.ext")
     except OSError:
         err(f"Error: Filename invalid or too long! Falling back to '{c_id}'",
             color=fgcolors.WARNING)
@@ -1805,7 +1867,7 @@ async def save_stream(link, path, session=None):
         async with session.get(link) as stream:
             with open(path, "wb") as f:
                 while True:
-                    chunk = await stream.content.read(1024)
+                    chunk = await stream.content.read(opts.chunk_size)
                     if not chunk:
                         break
                     f.write(chunk)
@@ -1813,7 +1875,7 @@ async def save_stream(link, path, session=None):
         try:
             with urlopen(link) as stream, open(path, "wb") as f:
                 while True:
-                    chunk = stream.read(1024)
+                    chunk = stream.read(opts.chunk_size)
                     if not chunk:
                         break
                     f.write(chunk)
@@ -1824,12 +1886,12 @@ async def save_stream(link, path, session=None):
 def valid_stream(path, attempted_fix=False):
     """Test a given stream for eventual corruption with a test remux (FFmpeg)."""
     command = [
-        "ffmpeg", "-v", "error",
+        opts.ffmpeg_path, "-v", "error",
         "-i", f"file:{path}",
         "-t", "1",
         "-f", "null", "-",
     ]
-    out = subprocess.run(command, capture_output=True, text=True)
+    out = subprocess.run(command, capture_output=True, text=True, check=False)
 
     # Fix broken video stream
     if "moov atom not found" in out.stderr and not attempted_fix:
@@ -1860,7 +1922,7 @@ async def process(coubs):
     """Call the process function of all parsed coubs."""
     if aio:
         tout = aiohttp.ClientTimeout(total=None)
-        conn = aiohttp.TCPConnector(limit=opts.connect)
+        conn = aiohttp.TCPConnector(limit=opts.connections)
         try:
             async with aiohttp.ClientSession(timeout=tout, connector=conn) as session:
                 tasks = [c.process(session) for c in coubs]
@@ -1896,13 +1958,15 @@ def attempt_process(coubs, level=0):
 
     try:
         asyncio.run(process(coubs), debug=False)
-    except (aiohttp.ClientConnectionError, aiohttp.ClientPayloadError):
-        check_connection()
-        # Reduce the list of coubs to only those yet to finish
-        coubs = [c for c in coubs if not c.done]
-        level += 1
-        attempt_process(coubs, level)
-
+    except Exception as e:
+        if aio and isinstance(e, (aiohttp.ClientConnectionError, aiohttp.ClientPayloadError)):
+            check_connection()
+            # Reduce the list of coubs to only those yet to finish
+            coubs = [c for c in coubs if not c.done]
+            level += 1
+            attempt_process(coubs, level)
+        else:
+            raise
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # Main Function
@@ -1918,18 +1982,21 @@ def main():
     check_connection()
 
     msg("\n### Parse Input ###")
-    links = parse_input(opts.input)
-    if opts.out_file:
-        write_list(links)
-        sys.exit(0)
-    total = len(links)
-    coubs = [Coub(l) for l in links]
+    ids = parse_input(opts.input)
+    if ids:
+        if opts.output_list:
+            write_list(ids)
+            sys.exit(0)
+        total = len(ids)
+        coubs = [Coub(i) for i in ids]
 
-    msg("\n### Download Coubs ###\n")
-    try:
-        attempt_process(coubs)
-    finally:
-        clean(coubs)
+        msg("\n### Download Coubs ###\n")
+        try:
+            attempt_process(coubs)
+        finally:
+            clean(coubs)
+    else:
+        msg("\nAll coubs present in archive file!", color=fgcolors.WARNING)
 
     msg("\n### Finished ###\n")
 
