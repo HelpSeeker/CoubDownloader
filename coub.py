@@ -1208,8 +1208,11 @@ def positive_int(string):
 
 def valid_time(string):
     """Test valditiy of time syntax with FFmpeg."""
+    # Gets called in parse_cli, so opts.ffmpeg_path isn't available yet
+    # Exploits the fact that advanced defaults and options are always the same
+    defaults = DefaultOptions()
     command = [
-        opts.ffmpeg_path, "-v", "quiet",
+        defaults.FFMPEG_PATH, "-v", "quiet",
         "-f", "lavfi", "-i", "anullsrc",
         "-t", string, "-c", "copy",
         "-f", "null", "-",
