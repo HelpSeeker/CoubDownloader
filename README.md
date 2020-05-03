@@ -502,4 +502,9 @@ There's no fallback for *share* videos. If the *share* version is not yet availa
 
 * no error handling or retries if server disconnects during input parsing
 * losing your internet connection while downloading will stall the script indefinitely
+* some enabling switches (e.g. --keep) don't have a disabling counterpart, so activating their options via a config means you can't disable them at runtime
+* using a CLI media player to preview audio files may lead to its keyboard shortcuts not working
+* Python 3.8 and newer will print tracebacks (only warnings) when the user interrupts the program (see the Wiki for more infos)
 * (GUI only) progress messages don't use monospace fonts on Windows
+* (GUI only) having wrong values defined in your config will prevent the GUI from opening (open it from the command line to see the error)
+* (GUI only) Gooey seems to be broken for WxPython 4.1.0
