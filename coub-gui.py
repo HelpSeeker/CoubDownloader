@@ -177,7 +177,7 @@ def parse_cli():
                         default=defs.ARCHIVE, widget="FileSaver",
                         metavar="Archive", gooey_options={'message': "Choose archive file"},
                         help="Use an archive file to keep track of already downloaded coubs")
-    common.add_argument("--keep", action=f"store_{'false' if defs.KEEP else 'true'}",
+    common.add_argument("--keep", action="store_const", const=True, default=defs.KEEP,                            
                         widget="BlockCheckbox", metavar="Keep streams",
                         help="Whether to keep the individual streams after merging")
 
