@@ -203,7 +203,7 @@ class DefaultOptions:
             "FFMPEG_PATH": (lambda x: isinstance(x, str)),
             "COUBS_PER_PAGE": (lambda x: x in range(1, 26)),
             "TAG_SEP": (lambda x: isinstance(x, str)),
-            "FALLBACK_CHAR": (lambda x: isinstance(x, str)),
+            "FALLBACK_CHAR": (lambda x: isinstance(x, str) or x is None),
             "WRITE_METHOD": (lambda x: x in ["w", "a"]),
             "CHUNK_SIZE": (lambda x: isinstance(x, int) and x > 0),
         }
@@ -1529,6 +1529,14 @@ def parse_cli():
     # but internally the default value is None
     if args.name_template == "%id%":
         args.name_template = None
+    # Defining whitespace or an empty string in the config isn't possible
+    # Instead translate appropriate keywords
+    if args.tag_sep == "space":
+        args.tag_sep = " "
+    if args.fallback_char is None:
+        args.fallback_char = ""
+    elif args.fallback_char == "space":
+        args.fallback_char = " "
 
     return args
 

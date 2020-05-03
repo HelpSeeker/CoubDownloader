@@ -286,6 +286,14 @@ def parse_cli():
     # but internally the default value is None
     if args.name_template == "%id%":
         args.name_template = None
+    # Defining whitespace or an empty string in the config isn't possible
+    # Instead translate appropriate keywords
+    if args.tag_sep == "space":
+        args.tag_sep = " "
+    if args.fallback_char is None:
+        args.fallback_char = ""
+    elif args.fallback_char == "space":
+        args.fallback_char = " "
 
     return translate_to_cli(args)
 
