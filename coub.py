@@ -544,13 +544,17 @@ class BaseContainer:
 
         self.pages = resp_json['total_pages']
 
-    async def process(self, quantity=None):
+    async def process(self, quantity=None, level=0):
         """
         Parse the coub links from tags, channels, etc.
 
         The Coub API refers to the list of coubs from a tag, channel,
         community, etc. as a timeline.
         """
+        if -1 < opts.retries < level:
+            err(f"  Can't fetch {self.type} info! Please check your connection.")
+            sys.exit(status.CONN)
+
         self.get_template()
         self.get_page_count()
         if not self.valid:
@@ -568,25 +572,38 @@ class BaseContainer:
 
         requests = [f"{self.template}&page={p}" for p in range(1, pages+1)]
 
-        msg(f"\nDownloading {self.type} info"
-            f"{f': {self.id}' if self.id else ''}"
-            f" (sorted by '{self.sort}')")
+        if not level:
+            msg(f"\nDownloading {self.type} info"
+                f"{f': {self.id}' if self.id else ''}"
+                f" (sorted by '{self.sort}')")
 
-        if aio:
-            msg(f"  {pages} out of {self.pages} pages")
+        try:
+            if aio:
+                msg(f"  {pages} out of {self.pages} pages")
 
-            tout = aiohttp.ClientTimeout(total=None)
-            conn = aiohttp.TCPConnector(limit=opts.connections)
-            async with aiohttp.ClientSession(timeout=tout, connector=conn) as session:
-                tasks = [parse_page(req, session) for req in requests]
-                ids = await asyncio.gather(*tasks)
-            ids = [i for page in ids for i in page]
-        else:
-            ids = []
-            for i in range(pages):
-                msg(f"  {i+1} out of {self.pages} pages")
-                page = await parse_page(requests[i])
-                ids.extend(page)
+                tout = aiohttp.ClientTimeout(total=None)
+                conn = aiohttp.TCPConnector(limit=opts.connections)
+                async with aiohttp.ClientSession(timeout=tout, connector=conn) as session:
+                    tasks = [parse_page(req, session) for req in requests]
+                    ids = await asyncio.gather(*tasks)
+                ids = [i for page in ids for i in page]
+            else:
+                ids = []
+                for i in range(pages):
+                    msg(f"  {i+1} out of {self.pages} pages")
+                    page = await parse_page(requests[i])
+                    ids.extend(page)
+        except Exception as e:
+            if isinstance(e, (urllib.error.HTTPError, urllib.error.URLError)) or \
+               aio and isinstance(e, (aiohttp.ClientConnectionError, aiohttp.ClientPayloadError)):
+                check_connection()
+                level += 1
+                err(f"  Retrying... ({level} of "
+                    f"{opts.retries if opts.retries > 0 else 'Inf'} attempts)",
+                    color=fgcolors.WARNING)
+                ids = await self.process(quantity, level)
+            else:
+                raise
 
         if quantity:
             return ids[:quantity]
