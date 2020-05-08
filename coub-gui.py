@@ -18,6 +18,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 """
 
 import os
+import sys
 from textwrap import dedent
 
 from gooey import Gooey, GooeyParser
@@ -177,7 +178,7 @@ def parse_cli():
                         default=defs.ARCHIVE, widget="FileSaver",
                         metavar="Archive", gooey_options={'message': "Choose archive file"},
                         help="Use an archive file to keep track of already downloaded coubs")
-    common.add_argument("--keep", action="store_const", const=True, default=defs.KEEP,                            
+    common.add_argument("--keep", action="store_const", const=True, default=defs.KEEP,
                         widget="BlockCheckbox", metavar="Keep streams",
                         help="Whether to keep the individual streams after merging")
 
@@ -262,6 +263,11 @@ def parse_cli():
     )
 
     args = parser.parse_args()
+
+    # Exit only after parsing to not hinder GUI creation
+    if defs.error:
+        sys.exit(coub.ExitCodes.OPT)
+
     args.input = []
     args.input.extend([coub.mapped_input(u) for u in args.urls.split(",") if u])
     args.input.extend([i for i in args.ids.split(",") if i])

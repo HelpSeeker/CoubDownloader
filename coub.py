@@ -145,6 +145,8 @@ class DefaultOptions:
     CHUNK_SIZE = 1024
 
     def __init__(self, config_dirs=None):
+        self.error = False
+
         if not config_dirs:
             # Only supports script's location as default for now
             config_dirs = [os.path.dirname(os.path.realpath(__file__))]
@@ -161,8 +163,9 @@ class DefaultOptions:
                 user_settings = [l for l in f
                                  if "=" in l and not l.startswith("#")]
         except (OSError, UnicodeError):
-            err(f"Error reading config file '{path}'!", color=fgcolors.WARNING)
+            err(f"Error reading config file '{path}'!", color=fgcolors.ERROR)
             user_settings = []
+            self.error = True
 
         for setting in user_settings:
             name = setting.split("=")[0].strip()
@@ -172,7 +175,8 @@ class DefaultOptions:
                 setattr(self, name, value)
             else:
                 err(f"Unknown option in config file: {name}",
-                    color=fgcolors.WARNING)
+                    color=fgcolors.ERROR)
+                self.error = True
 
     def check_values(self):
         """Test defaults for valid ranges and types."""
@@ -216,7 +220,7 @@ class DefaultOptions:
         if errors:
             for e in errors:
                 err(f"{e[0]}: invalid default value '{e[1]}'")
-            sys.exit(status.OPT)
+            self.error = True
 
     @staticmethod
     def guess_string_type(option, string):
@@ -1424,6 +1428,8 @@ def mapped_input(string):
 def parse_cli():
     """Parse the command line."""
     defaults = DefaultOptions()
+    if defaults.error:
+        sys.exit(status.OPT)
     parser = CustomArgumentParser(usage="%(prog)s [OPTIONS] INPUT [INPUT]...")
 
     # Input
