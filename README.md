@@ -12,13 +12,14 @@ CoubDownloader is a simple script to download videos (called coubs) from [Coub](
 5. [Input](#input)
     1. [Overview](#overview)
     2. [Direct coub links](#direct-coub-links)
-    3. [Lists](#lists)
-    4. [Channels](#channels)
-    5. [Searches](#searches)
-    6. [Random](#random)
-    7. [Tags](#tags)
-    8. [Communities](#communities)
-    9. [Hot section](#hot-section)
+    3. [Stories](#stories)
+    4. [Lists](#lists)
+    5. [Channels](#channels)
+    6. [Searches](#searches)
+    7. [Random](#random)
+    8. [Tags](#tags)
+    9. [Communities](#communities)
+    10. [Hot section](#hot-section)
 6. [GUI](#gui)
 7. [Misc. information](#misc-information)
     1. [Video resolution vs. quality](#video-resolution-vs-quality)
@@ -42,6 +43,8 @@ Input:
   -e, --search TERM     download search results for the given term
   -m, --community NAME  download coubs from a community
                           NAME as seen in the URL (e.g. animals-pets)
+  --story ID            download coubs from the story with the given ID
+                          ID as seen in the URL (e.g. 12345-example-story)
   --hot                 download coubs from the hot section (default sorting)
   --random              download random coubs
   --input-help          show full input help
@@ -177,6 +180,7 @@ Contents
   -) Searches
   -) Tags
   -) Communities (incl. Featured & Coub of the Day)
+  -) Stories
   -) Hot section
   -) Random
 
@@ -191,6 +195,7 @@ Contents
     Search:       https://coub.com/search?q=example-term
     Tag:          https://coub.com/tags/example-tag
     Community:    https://coub.com/community/example-community
+    Story:        https://coub.com/stories/example-story
     Hot section:  https://coub.com or https://coub.com/hot
     Random:       https://coub.com/random
 
@@ -204,6 +209,7 @@ Contents
     Search:       -e example-term       or  --search example-term
     Tag:          -t example-tag        or  --tag example-tag
     Community:    -m example-community  or  --community example-community
+    Story:        --story example-story
     Hot section:  --hot
     Random:       --random
 
@@ -217,6 +223,7 @@ Contents
     Search:       search?q=example-term
     Tag:          tags/example-tag
     Community:    community/example-community
+    Story:        stories/example-story
     Hot section:  hot
     Random:       random
 
@@ -246,6 +253,8 @@ Contents
   This is supported by all input methods, except the --hot option.
   Please note that a manually specified sort order will overwrite the
   sort order as indicated by the URL.
+
+  Input types not mentioned in the following list don't support sorting.
 
   Supported sort orders
   ---------------------
@@ -295,7 +304,6 @@ Contents
 
     Random:           popular (default)
                       top
-
 ```
 
 ***
@@ -307,6 +315,12 @@ The following points provide more in-depth information about the different input
 #### Direct coub links
 
 A link to a single coub (e.g. https://coub.com/view/123456). This is the most basic form of input and what the other input types boil down to once parsed.
+
+#### Stories
+
+Stories are user-made lists of coubs. They don't support sorting or any other advanced selection method.
+
+Story IDs (as seen in the URL) start with a 5 digit code, followed by the story's title. Code and title are separated by a dash. To specify a story as input you can either use the full ID (code + title) or just the code.
 
 #### Lists
 
@@ -506,3 +520,4 @@ There's no fallback for *share* videos. If the *share* version is not yet availa
 * Python 3.8 and newer will print tracebacks (only warnings) when the user interrupts the program (see the Wiki for more infos)
 * (GUI only) progress messages don't use monospace fonts on Windows
 * (GUI only) Gooey seems to be broken for WxPython 4.1.0
+* (GUI only) Workspace doesn't get cleaned if the user stops the script manually

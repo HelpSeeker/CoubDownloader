@@ -290,6 +290,8 @@ class CustomArgumentParser(argparse.ArgumentParser):
           -e, --search TERM     download search results for the given term
           -m, --community NAME  download coubs from a community
                                   NAME as seen in the URL (e.g. animals-pets)
+          --story ID            download coubs from the story with the given ID
+                                  ID as seen in the URL (e.g. 12345-example-story)
           --hot                 download coubs from the hot section (default sorting)
           --random              download random coubs
           --input-help          show full input help
@@ -383,6 +385,7 @@ class CustomArgumentParser(argparse.ArgumentParser):
           -) Searches
           -) Tags
           -) Communities (incl. Featured & Coub of the Day)
+          -) Stories
           -) Hot section
           -) Random
 
@@ -397,6 +400,7 @@ class CustomArgumentParser(argparse.ArgumentParser):
             Search:       https://coub.com/search?q=example-term
             Tag:          https://coub.com/tags/example-tag
             Community:    https://coub.com/community/example-community
+            Story:        https://coub.com/stories/example-story
             Hot section:  https://coub.com or https://coub.com/hot
             Random:       https://coub.com/random
 
@@ -410,6 +414,7 @@ class CustomArgumentParser(argparse.ArgumentParser):
             Search:       -e example-term       or  --search example-term
             Tag:          -t example-tag        or  --tag example-tag
             Community:    -m example-community  or  --community example-community
+            Story:        --story example-story
             Hot section:  --hot
             Random:       --random
 
@@ -423,6 +428,7 @@ class CustomArgumentParser(argparse.ArgumentParser):
             Search:       search?q=example-term
             Tag:          tags/example-tag
             Community:    community/example-community
+            Story:        stories/example-story
             Hot section:  hot
             Random:       random
 
@@ -452,6 +458,8 @@ class CustomArgumentParser(argparse.ArgumentParser):
           This is supported by all input methods, except the --hot option.
           Please note that a manually specified sort order will overwrite the
           sort order as indicated by the URL.
+
+          Input types not mentioned in the following list don't support sorting.
 
           Supported sort orders
           ---------------------
@@ -577,9 +585,9 @@ class BaseContainer:
         requests = [f"{self.template}&page={p}" for p in range(1, pages+1)]
 
         if not level:
-            msg(f"\nDownloading {self.type} info"
-                f"{f': {self.id}' if self.id else ''}"
-                f" (sorted by '{self.sort}')")
+            msg(f"\nDownloading {self.type} info",
+                f": {self.id}"*bool(self.id),
+                f" (sorted by '{self.sort}')"*bool(self.sort), sep="")
 
         try:
             if aio:
@@ -797,6 +805,22 @@ class Community(BaseContainer):
         # API limits communities to 99 pages
         if self.pages > 99:
             self.pages = 99
+
+
+class Story(BaseContainer):
+    """Store and parse stories."""
+    type = "story"
+
+    def __init__(self, id_):
+        super(Story, self).__init__(id_)
+        self.sort = None
+
+    def get_template(self):
+        # Story URL contains ID + title separated by a dash
+        template = f"https://coub.com/api/v2/stories/{self.id.split('-')[0]}/coubs"
+        template = f"{template}?per_page={opts.coubs_per_page}"
+
+        self.template = template
 
 
 class HotSection(BaseContainer):
@@ -1343,6 +1367,8 @@ def normalize_link(string):
                 if not sort:
                     sort = to_replace['community'][r]
                 info = parts[0]
+    elif "stories/" in info:
+        pass
     elif "featured" in info:
         for r in to_replace['featured']:
             parts = info.partition(r)
@@ -1402,6 +1428,9 @@ def mapped_input(string):
     elif "https://coub.com/community/" in link:
         name = link.partition("https://coub.com/community/")[2]
         source = Community(name)
+    elif "https://coub.com/stories/" in link:
+        name = link.partition("https://coub.com/stories/")[2]
+        source = Story(name)
     elif "https://coub.com/random" in link:
         try:
             _, sort = link.split("#")
@@ -1446,6 +1475,8 @@ def parse_cli():
                         type=Search)
     parser.add_argument("-m", "--community", dest="input", action="append",
                         type=Community)
+    parser.add_argument("--story", dest="input", action="append",
+                        type=Story)
     parser.add_argument("--hot", dest="input", action="append_const",
                         const=HotSection())
     parser.add_argument("--random", "--random#popular", dest="input",

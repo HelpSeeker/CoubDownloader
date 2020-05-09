@@ -155,6 +155,8 @@ def parse_cli():
                         help="Download search results for the given terms")
     input_.add_argument("--communities", default="", metavar="Communities",
                         help="Download coubs from the given communities")
+    input_.add_argument("--stories", default="", metavar="Stories",
+                        help="Download coubs from the given stories")
     input_.add_argument("--lists", default="", widget="MultiFileChooser",
                         metavar="Link Lists", help="Read coub links from input lists",
                         gooey_options={'message': "Choose link lists"})
@@ -276,6 +278,7 @@ def parse_cli():
     args.input.extend([coub.Tag(t) for t in args.tags.split(",") if t])
     args.input.extend([coub.Search(s) for s in args.searches.split(",") if s])
     args.input.extend([coub.Community(c) for c in args.communities.split(",") if c])
+    args.input.extend([coub.Story(s) for s in args.stories.split(",") if s])
     if args.hot:
         args.input.append(coub.HotSection())
     if args.random:
