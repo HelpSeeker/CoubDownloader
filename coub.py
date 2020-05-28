@@ -1086,7 +1086,7 @@ class Coub:
                 command.extend(["-t", opts.duration])
             command.extend(["-c", "copy", "-shortest", f"file:temp_{m_name}"])
 
-            subprocess.run(command, check=False)
+            subprocess.run(command, env=env, check=False)
         finally:
             if os.path.exists(t_name):
                 os.remove(t_name)
@@ -1125,8 +1125,8 @@ class Coub:
             # Need to split command string into list for check_call
             command = opts.preview.split(" ")
             command.append(play)
-            subprocess.check_call(command, stdout=subprocess.DEVNULL, \
-                                           stderr=subprocess.DEVNULL)
+            subprocess.run(command, env=env, check=True,
+                           stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         except (subprocess.CalledProcessError, FileNotFoundError):
             err("Warning: Preview command failed!", color=fgcolors.WARNING)
 
@@ -1215,7 +1215,7 @@ def check_prereq():
         subprocess.run([opts.ffmpeg_path],
                        stdout=subprocess.DEVNULL,
                        stderr=subprocess.DEVNULL,
-                       check=False)
+                       env=env, check=False)
     except FileNotFoundError:
         err("Error: FFmpeg not found!")
         sys.exit(status.DEP)
@@ -1263,7 +1263,7 @@ def valid_time(string):
         "-f", "null", "-",
     ]
     try:
-        subprocess.check_call(command)
+        subprocess.run(command, env=env, check=True)
     except subprocess.CalledProcessError:
         raise argparse.ArgumentTypeError("invalid time syntax")
 
@@ -1945,7 +1945,7 @@ def valid_stream(path, attempted_fix=False):
         "-t", "1",
         "-f", "null", "-",
     ]
-    out = subprocess.run(command, capture_output=True, text=True, check=False)
+    out = subprocess.run(command, capture_output=True, text=True, env=env, check=False)
 
     # Fix broken video stream
     if "moov atom not found" in out.stderr and not attempted_fix:
@@ -2057,6 +2057,17 @@ def main():
 
 # Execute main function
 if __name__ == '__main__':
+    env = dict(os.environ)
+    # Change library search path based on script usage
+    # https://pyinstaller.readthedocs.io/en/stable/runtime-information.html#ld-library-path-libpath-considerations
+    if hasattr(sys, 'frozen') and hasattr(sys, '_MEIPASS'):
+        lp_key = 'LD_LIBRARY_PATH'  # for GNU/Linux and *BSD.
+        lp_orig = env.get(lp_key + '_ORIG')
+        if lp_orig is not None:
+            env[lp_key] = lp_orig
+        else:
+            env.pop(lp_key, None)   # LD_LIBRARY_PATH was not set
+
     opts = parse_cli()
     try:
         main()
