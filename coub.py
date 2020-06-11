@@ -53,6 +53,9 @@ except ModuleNotFoundError:
     if os.name == "nt":
         colors = False
 
+# Trigger keyboard interrupt from the outside
+cancelled = False
+
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # Classes For Global Variables
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -1615,6 +1618,9 @@ def resolve_paths():
 
 async def parse_page(req, session=None):
     """Request a single timeline page and parse its content."""
+    if cancelled:
+        raise KeyboardInterrupt
+
     if aio:
         async with session.get(req) as resp:
             resp_json = await resp.read()
@@ -1921,6 +1927,8 @@ async def save_stream(link, path, session=None):
         async with session.get(link) as stream:
             with open(path, "wb") as f:
                 while True:
+                    if cancelled:
+                        raise KeyboardInterrupt
                     chunk = await stream.content.read(opts.chunk_size)
                     if not chunk:
                         break
@@ -1929,6 +1937,8 @@ async def save_stream(link, path, session=None):
         try:
             with urlopen(link) as stream, open(path, "wb") as f:
                 while True:
+                    if cancelled:
+                        raise KeyboardInterrupt
                     chunk = stream.read(opts.chunk_size)
                     if not chunk:
                         break
@@ -2036,7 +2046,11 @@ def main():
     check_connection()
 
     msg("\n### Parse Input ###")
-    ids = parse_input(opts.input)
+    try:
+        ids = parse_input(opts.input)
+    except KeyboardInterrupt:
+        err("\nUser Interrupt!", color=fgcolors.WARNING)
+        sys.exit(status.INT)
     if ids:
         if opts.output_list:
             write_list(ids)
@@ -2047,6 +2061,10 @@ def main():
         msg("\n### Download Coubs ###\n")
         try:
             attempt_process(coubs)
+        except KeyboardInterrupt:
+            clean(coubs)
+            err("\nUser Interrupt!", color=fgcolors.WARNING)
+            sys.exit(status.INT)
         finally:
             clean(coubs)
     else:
