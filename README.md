@@ -1,6 +1,8 @@
 # CoubDownloader
 
-CoubDownloader is a simple script to download videos (called coubs) from [Coub](https://coub.com).
+CoubDownloader is a simple downloader for videos (called coubs) from [coub.com](https://coub.com).
+
+It is available as CLI and [GUI](#gui) version.
 
 ## Contents
 
@@ -116,17 +118,15 @@ Output:
 
 ## Standalone builds
 
-Starting with v3.7 standalone Windows builds are provided on the [release page](https://github.com/HelpSeeker/CoubDownloader/releases). These executables don't require an existing Python environment and the [GUI version](#gui) is a standalone application. FFmpeg is still a mandatory requirement.
+Starting with v3.7 for Windows and v3.8 for Linux, standalone builds are provided on the [release page](https://github.com/HelpSeeker/CoubDownloader/releases). These executables don't require an existing Python environment and the [GUI version](#gui) is a standalone application. FFmpeg is still a mandatory requirement.
 
 #### Why no Mac builds?
 
 Because I lack the necessary build environment.
 
-#### Why no Linux builds?
+#### Why no 32-bit Linux builds?
 
-Because I lack the resources to target a variety of distros individually and my attempts to create universal Linux builds were unsuccessful.
-
-The main problem is the usage of external tools like FFmpeg (but also media players with the `--preview` option) via `subprocess.run`. They either spam the terminal output with warnings or outright fail because of library version mismatches between my build environment and the user's system. It would've required me to ship Linux builds with static FFmpeg binaries and either remove the `--preview` option or make it the user's responsibility to get it working. And even then there's still a plethora of problems regarding the GUI version, which I couldn't reliably get to work across a handful of mainstream distros (Debian, Ubuntu, CentOS, Linux Mint, etc.).
+Because [staticx](https://github.com/JonathonReinhart/staticx/) only supports 64-bit executables for now.
 
 ## Requirements
 
@@ -138,8 +138,7 @@ Standalone builds only require FFmpeg.
 ### Optional
 
 * [aiohttp](https://aiohttp.readthedocs.io/en/stable/) for asynchronous execution **(strongly recommended)**
-* [colorama](https://github.com/tartley/colorama) for colorized terminal output on Windows (you should also install it if you want to use `coub-gui.py`)
-* [Gooey](https://github.com/chriskiehl/Gooey) to run `coub-gui.py` (be sure to install it with wxPython < 4.1.0)
+* [colorama](https://github.com/tartley/colorama) for colorized terminal output on Windows
 
 ## Configuration
 
@@ -413,20 +412,11 @@ The default sort order (most popular coubs of the month) may provide less result
 
 ## GUI
 
-A basic GUI, powered by [Gooey](https://github.com/chriskiehl/Gooey), is provided via `coub-gui.py`.
+A basic GUI is provided via `coub-gui.py`.
 
-Please note that this is only a quickly thrown together frontend for convenience. The main focus of this project is the CLI tool.
+![GUI on Windows](/images/Download_Windows.png) ![GUI on Linux](/images/Download_Linux.png)
 
-![Settings window on Windows](/images/coub-gui_input_Windows.png) ![Progress window on Linux](/images/coub-gui_execution_Linux.png)
-
-It provides the same functionality as the main CLI tool, with a few notable exceptions:
-
-* No quiet mode
-* No overwrite prompt (default prompt answer is set to "no")
-* No option equivalent to `--random#top` (direct URL input must be used)
-* The output path defaults to "coubs" in the user's home directory instead of the current one
-
-Another important difference is that `coub-gui.py` is **NOT** a standalone script. It depends on `coub.py` being in the same location.
+Please note that when running from source `coub-gui.py` depends on `coub.py` being in the same location.
 
 ## Misc. information
 
@@ -518,6 +508,3 @@ There's no fallback for *share* videos. If the *share* version is not yet availa
 * some enabling switches (e.g. --keep) don't have a disabling counterpart, so activating their options via a config means you can't disable them at runtime
 * using a CLI media player to preview audio files may lead to its keyboard shortcuts not working
 * Python 3.8 and newer will print tracebacks (only warnings) when the user interrupts the program (see the Wiki for more infos)
-* (GUI only) progress messages don't use monospace fonts on Windows
-* (GUI only) Gooey seems to be broken for WxPython 4.1.0
-* (GUI only) Workspace doesn't get cleaned if the user stops the script manually
