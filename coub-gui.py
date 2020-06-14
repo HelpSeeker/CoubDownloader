@@ -1,4 +1,4 @@
-#!/usr/env/bin python3
+#!/usr/bin/env python3
 
 """
 Copyright (C) 2018-2020 HelpSeeker <AlmostSerious@protonmail.ch>
