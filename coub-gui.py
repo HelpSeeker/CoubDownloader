@@ -214,6 +214,7 @@ class NewItemWindow(Toplevel):
         # Initialize default Combobox lists
         self.itype.set("Link")
         self.update_widgets()
+        self.name_e1.focus_set()
 
         type_l1.grid(row=0, columnspan=3, sticky="w")
         type_b1.grid(row=1, columnspan=3, sticky="ew", pady=PADDING)
