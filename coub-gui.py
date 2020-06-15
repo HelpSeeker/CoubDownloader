@@ -22,11 +22,10 @@ import sys
 
 from textwrap import dedent
 from threading import Thread
-from tkinter import Tk, Toplevel, StringVar, IntVar, BooleanVar
+from tkinter import Tk, Toplevel, Text, StringVar, IntVar, BooleanVar
 from tkinter import filedialog
 from tkinter import messagebox
 from tkinter import ttk
-from tkinter.scrolledtext import ScrolledText
 
 import coub
 
@@ -798,6 +797,22 @@ class SettingsWindow(Toplevel):
         self.destroy()
 
 
+class ScrolledText(ttk.Frame):
+    """Custom version of ScrolledText with less hacks and modern Scrollbar."""
+
+    def __init__(self, master, **kwargs):
+        super(ScrolledText, self).__init__(master)
+        self.rowconfigure(0, weight=1)
+        self.columnconfigure(0, weight=1)
+
+        self.text = Text(self, **kwargs)
+        self.scroll = ttk.Scrollbar(self, command=self.text.yview)
+        self.text.configure(yscrollcommand=self.scroll.set)
+
+        self.text.grid(sticky="nesw")
+        self.scroll.grid(row=0, column=1, sticky="ns")
+
+
 class HelpWindow(Toplevel):
     """Window to hold help and about text."""
 
@@ -844,15 +859,15 @@ class HelpWindow(Toplevel):
 
         #basic.insert("1.0", self.GENERAL_HELP)
         #input.insert("1.0", self.INPUT_HELP)
-        about.insert("1.0", self.ABOUT, ("centered"))
-        gplv3.insert("1.0", self.LICENSE)
+        about.text.insert("1.0", self.ABOUT, ("centered"))
+        gplv3.text.insert("1.0", self.LICENSE)
 
-        about.tag_configure("centered", justify="center")
+        about.text.tag_configure("centered", justify="center")
 
         #self.basic.configure(state="disabled")
         #self.input.configure(state="disabled")
-        about.configure(state="disabled")
-        gplv3.configure(state="disabled")
+        about.text.configure(state="disabled")
+        gplv3.text.configure(state="disabled")
 
         #notebook.add(basic_tab, text="General", sticky="nsew")
         #notebook.add(input_tab, text="Input", sticky="nesw")
@@ -958,28 +973,26 @@ class OutputFrame(ScrolledText):
 
     def __init__(self, master):
         super(OutputFrame, self).__init__(master)
-        self.configure(height=15, width=50, state="disabled")
-        self.rowconfigure(0, weight=1)
-        self.columnconfigure(0, weight=1)
+        self.text.configure(height=15, width=50, state="disabled")
 
     def write(self, text):
         """Print received text."""
         # Disabling a textbox also deactivates its insert method
-        self.configure(state="normal")
-        self.insert("end", text)
-        self.see("end")
+        self.text.configure(state="normal")
+        self.text.insert("end", text)
+        self.text.see("end")
         self.flush()
-        self.configure(state="disabled")
+        self.text.configure(state="disabled")
 
     def flush(self):
         """Refresh textbox to print in realtime."""
-        self.update_idletasks()
+        self.text.update_idletasks()
 
     def clear(self):
         """Clear all text from the textbox."""
-        self.configure(state="normal")
-        self.delete("1.0", "end")
-        self.configure(state="disabled")
+        self.text.configure(state="normal")
+        self.text.delete("1.0", "end")
+        self.text.configure(state="disabled")
 
 
 class MainWindow(ttk.Frame):
