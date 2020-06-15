@@ -366,6 +366,9 @@ class EditItemWindow(NewItemWindow):
         self.itype.set(t)
         self.iname.set(n)
         self.isort.set(s)
+        self.type.set(t)
+        self.name.set(n)
+        self.sort.set(s)
         self.update_widgets()
 
     def remove_press(self):
@@ -882,10 +885,15 @@ class InputTree(ttk.Treeview):
 
         self.tag_configure("alternate", background="#f0f0ff")
 
-        self.bind('<Delete>', self.delete_item)
-        self.bind('<Double-1>', self.edit_item)
+    def update_format(self):
+        """Update colorized lines for newest changes."""
+        for row, item in enumerate(self.get_children(), start=1):
+            if not row % 2:
+                self.item(item, tags=("alternate"))
+            else:
+                self.item(item, tags=())
 
-    def update_items(self, source=None):
+    def add_item(self, source=None):
         """Add new item and/or update list view."""
         if source:
             item = self.insert("", "end")
@@ -897,12 +905,7 @@ class InputTree(ttk.Treeview):
                 self.set(item, "name", source.id)
                 self.set(item, "sort", source.sort)
             self.sources[item] = source
-
-        for row, item in enumerate(self.get_children(), start=1):
-            if not row % 2:
-                self.item(item, tags=("alternate"))
-            else:
-                self.item(item, tags=())
+            self.update_format()
 
     def delete_item(self, *args):
         """Remove selected source from list."""
@@ -910,28 +913,44 @@ class InputTree(ttk.Treeview):
         if selection:
             self.delete(selection)
             del self.sources[selection]
-        self.update_items()
+            self.update_format()
 
-    def edit_item(self, *args):
+    def edit_item(self, old=None, new=None):
         """Edit already existing source."""
-        selection = self.focus()
-        if selection:
-            dialog = EditItemWindow(self.item(selection))
-            self.wait_window(dialog)
-            new = dialog.get()
-
+        if old:
             if not new:
-                self.delete(selection)
-                del self.sources[selection]
+                self.delete(old)
+                del self.sources[old]
             elif isinstance(new, str):
-                self.set(selection, "type", "link")
-                self.set(selection, "name", new)
-                self.sources[selection] = new
+                self.set(old, "type", "link")
+                self.set(old, "name", new)
+                self.sources[old] = new
             else:
-                self.set(selection, "type", new.type)
-                self.set(selection, "name", new.id)
-                self.set(selection, "sort", new.sort)
-                self.sources[selection] = new
+                self.set(old, "type", new.type)
+                self.set(old, "name", new.id)
+                self.set(old, "sort", new.sort)
+                self.sources[old] = new
+            self.update_format()
+
+
+class InputFrame(ttk.Frame):
+    """Frame to hold InputTree and its scrollbar widget."""
+
+    def __init__(self, master):
+        super(InputFrame, self).__init__(master)
+        self.columnconfigure(0, weight=1)
+
+        self.tree = InputTree(self)
+        self.scroll = ttk.Scrollbar(self, orient="vertical", command=self.tree.yview)
+        self.tree.configure(yscrollcommand=self.scroll.set)
+        self.tree.grid(sticky="nesw")
+
+    def update_widgets(self):
+        """Enable/disable scrollbar based on treeview item quantity."""
+        if len(self.tree.get_children()) > self.tree['height']:
+            self.scroll.grid(row=0, column=1, sticky="ns")
+        else:
+            self.scroll.grid_forget()
 
 
 class OutputFrame(ScrolledText):
@@ -973,11 +992,11 @@ class MainWindow(ttk.Frame):
         self.columnconfigure(3, weight=1)
         self.grid(sticky="news")
 
-        self.source = InputTree(self)
+        self.input = InputFrame(self)
         new_url = ttk.Button(self, text="New URL", command=self.new_url_press)
         new_item = ttk.Button(self, text="New Item", command=self.new_item_press)
         self.edit_item = ttk.Button(self, text="Edit Item",
-                                    command=self.source.edit_item)
+                                    command=self.edit_item_press)
         prefs = ttk.Button(self, text="Settings", command=self.settings_press)
         about = ttk.Button(self, text="About", command=HelpWindow)
         output = OutputFrame(self)
@@ -988,7 +1007,7 @@ class MainWindow(ttk.Frame):
         start = ttk.Button(self, text="Start", command=self.start_press)
         cancel = ttk.Button(self, text="Cancel", command=self.cancel_press)
 
-        self.source.grid(row=0, columnspan=6, sticky="news")
+        self.input.grid(row=0, columnspan=6, sticky="news")
         new_url.grid(row=1, pady=PADDING)
         new_item.grid(row=1, column=1, padx=PADDING, pady=PADDING)
         prefs.grid(row=1, column=4, padx=PADDING, pady=PADDING)
@@ -999,28 +1018,48 @@ class MainWindow(ttk.Frame):
         start.grid(row=3, column=4, padx=PADDING, pady=PADDING)
         cancel.grid(row=3, column=5, pady=PADDING)
 
-        self.source.bind('<<TreeviewSelect>>', self.update_widgets)
+        self.master.bind('u', self.new_url_press)
+        self.master.bind('i', self.new_item_press)
+        self.master.bind('e', self.edit_item_press)
+        self.input.tree.bind('<<TreeviewSelect>>', self.update_widgets)
+        self.input.tree.bind('<Delete>', self.input.tree.delete_item)
+        self.input.tree.bind('<Double-1>', self.edit_item_press)
 
         self.thread = Thread(target=coub.main)
 
     def update_widgets(self, *args):
-        """Update widgets based on source selection."""
-        if self.source.focus():
+        """Update widgets based on source selection/quantity."""
+        # Show "Edit Item" button if any item is selected
+        if self.input.tree.focus():
             self.edit_item.grid(row=1, column=2, pady=PADDING)
         else:
             self.edit_item.grid_forget()
 
-    def new_url_press(self):
+        # Update widgets for input frame to show scrollbar if necessary
+        self.input.update_widgets()
+
+    def new_url_press(self, *args):
         """Open new URL window."""
         dialog = NewURLWindow()
         self.wait_window(dialog)
-        self.source.update_items(dialog.get())
+        self.input.tree.add_item(dialog.get())
+        self.update_widgets()
 
-    def new_item_press(self):
+    def new_item_press(self, *args):
         """"Open new item window."""
         dialog = NewItemWindow()
         self.wait_window(dialog)
-        self.source.update_items(dialog.get())
+        self.input.tree.add_item(dialog.get())
+        self.update_widgets()
+
+    def edit_item_press(self, *args):
+        """Open edit item window."""
+        selection = self.input.tree.focus()
+        if selection:
+            dialog = EditItemWindow(self.input.tree.item(selection))
+            self.wait_window(dialog)
+            self.input.tree.edit_item(selection, dialog.get())
+            self.update_widgets()
 
     def settings_press(self):
         """Open settings window."""
@@ -1034,8 +1073,8 @@ class MainWindow(ttk.Frame):
         coub.done = 0
         coub.cancelled = False
 
-        if self.source.sources:
-            coub.opts.input = list(self.source.sources.values())
+        if self.input.tree.sources:
+            coub.opts.input = list(self.input.tree.sources.values())
             self.thread = Thread(target=coub.main)
             self.thread.start()
 
