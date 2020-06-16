@@ -1,4 +1,5 @@
 /*
+*.pyc
 
 !.gitignore
 !COPYING
@@ -6,4 +7,5 @@
 !coub.py
 !coub-gui.py
 !example.conf
+!/utils/
 !/images/

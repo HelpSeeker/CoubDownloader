@@ -29,6 +29,12 @@ from tkinter import ttk
 
 import coub
 
+try:
+    from utils import manual
+    help_button = True
+except ModuleNotFoundError:
+    help_button = False
+
 PADDING = 5
 
 
@@ -847,34 +853,36 @@ class HelpWindow(Toplevel):
 
     def __init__(self):
         super(HelpWindow, self).__init__(padx=PADDING, pady=PADDING)
-        self.title("About")
+        self.title("Help" if help_button else "About")
         self.rowconfigure(0, weight=1)
         self.columnconfigure(0, weight=1)
 
         notebook = ttk.Notebook(self)
-        #self.basic = ScrolledText(basic_tab, width=72, height=20, wrap="word")
-        #selt.input = ScrolledText(input_tab, width=72, height=20)
+        notebook.grid(sticky="nesw")
+
         about = ScrolledText(self, width=72, height=16)
-        gplv3 = ScrolledText(self, width=72, height=16)
-
-        #basic.insert("1.0", self.GENERAL_HELP)
-        #input.insert("1.0", self.INPUT_HELP)
         about.text.insert("1.0", self.ABOUT, ("centered"))
-        gplv3.text.insert("1.0", self.LICENSE)
-
         about.text.tag_configure("centered", justify="center")
-
-        #self.basic.configure(state="disabled")
-        #self.input.configure(state="disabled")
         about.text.configure(state="disabled")
+
+        gplv3 = ScrolledText(self, width=72, height=16)
+        gplv3.text.insert("1.0", self.LICENSE)
         gplv3.text.configure(state="disabled")
 
-        #notebook.add(basic_tab, text="General", sticky="nsew")
-        #notebook.add(input_tab, text="Input", sticky="nesw")
+        if help_button:
+            basic = ScrolledText(self, width=72, height=16, wrap="word")
+            basic.text.insert("1.0", manual.GENERAL)
+            basic.text.configure(state="disabled")
+
+            sources = ScrolledText(self, width=72, height=16, wrap="word")
+            sources.text.insert("1.0", manual.INPUT)
+            sources.text.configure(state="disabled")
+
+            notebook.add(basic, text="General", sticky="nesw", padding=PADDING)
+            notebook.add(sources, text="Input", sticky="nesw", padding=PADDING)
+
         notebook.add(about, text="About", sticky="nesw", padding=PADDING)
         notebook.add(gplv3, text="License", sticky="nesw", padding=PADDING)
-
-        notebook.grid(sticky="nesw")
 
 
 class InputTree(ttk.Treeview):
@@ -1011,7 +1019,7 @@ class MainWindow(ttk.Frame):
         self.edit_item = ttk.Button(self, text="Edit Item",
                                     command=self.edit_item_press)
         prefs = ttk.Button(self, text="Settings", command=self.settings_press)
-        about = ttk.Button(self, text="About", command=HelpWindow)
+        about = ttk.Button(self, text="Help" if help_button else "About", command=HelpWindow)
         output = OutputFrame(self)
         sys.stdout = output
         sys.stderr = output
