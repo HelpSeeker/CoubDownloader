@@ -132,12 +132,12 @@ Because [staticx](https://github.com/JonathonReinhart/staticx/) only supports 64
 
 * Python >= 3.7
 * [FFmpeg](https://www.ffmpeg.org/)
+* [aiohttp](https://aiohttp.readthedocs.io/en/stable/)
 
 Standalone builds only require FFmpeg.
 
 ### Optional
 
-* [aiohttp](https://aiohttp.readthedocs.io/en/stable/) for asynchronous execution **(strongly recommended)**
 * [colorama](https://github.com/tartley/colorama) for colorized terminal output on Windows
 
 ## Configuration

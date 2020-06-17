@@ -33,11 +33,7 @@ from urllib.request import urlopen
 from urllib.parse import quote as urlquote
 from urllib.parse import unquote as urlunquote
 
-try:
-    import aiohttp
-    aio = True
-except ModuleNotFoundError:
-    aio = False
+import aiohttp
 
 # ANSI escape codes don't work on Windows, unless the user jumps through
 # additional hoops (either by using 3rd-party software or enabling VT100
@@ -593,32 +589,21 @@ class BaseContainer:
                 f" (sorted by '{self.sort}')"*bool(self.sort), sep="")
 
         try:
-            if aio:
-                msg(f"  {pages} out of {self.pages} pages")
+            msg(f"  {pages} out of {self.pages} pages")
 
-                tout = aiohttp.ClientTimeout(total=None)
-                conn = aiohttp.TCPConnector(limit=opts.connections)
-                async with aiohttp.ClientSession(timeout=tout, connector=conn) as session:
-                    tasks = [parse_page(req, session) for req in requests]
-                    ids = await asyncio.gather(*tasks)
-                ids = [i for page in ids for i in page]
-            else:
-                ids = []
-                for i in range(pages):
-                    msg(f"  {i+1} out of {self.pages} pages")
-                    page = await parse_page(requests[i])
-                    ids.extend(page)
-        except Exception as e:
-            if isinstance(e, (urllib.error.HTTPError, urllib.error.URLError)) or \
-               aio and isinstance(e, (aiohttp.ClientConnectionError, aiohttp.ClientPayloadError)):
-                check_connection()
-                level += 1
-                err(f"  Retrying... ({level} of "
-                    f"{opts.retries if opts.retries > 0 else 'Inf'} attempts)",
-                    color=fgcolors.WARNING)
-                ids = await self.process(quantity, level)
-            else:
-                raise
+            tout = aiohttp.ClientTimeout(total=None)
+            conn = aiohttp.TCPConnector(limit=opts.connections)
+            async with aiohttp.ClientSession(timeout=tout, connector=conn) as session:
+                tasks = [parse_page(req, session) for req in requests]
+                ids = await asyncio.gather(*tasks)
+            ids = [i for page in ids for i in page]
+        except (aiohttp.ClientConnectionError, aiohttp.ClientPayloadError):
+            check_connection()
+            level += 1
+            err(f"  Retrying... ({level} of "
+                f"{opts.retries if opts.retries > 0 else 'Inf'} attempts)",
+                color=fgcolors.WARNING)
+            ids = await self.process(quantity, level)
 
         if quantity:
             return ids[:quantity]
@@ -978,23 +963,14 @@ class Coub:
         if old_file and not overwrite(old_file):
             self.exists = True
 
-    async def parse(self, session=None):
+    async def parse(self, session):
         """Get all necessary coub infos from the Coub API."""
         if self.erroneous():
             return
 
-        if aio:
-            async with session.get(self.req) as resp:
-                resp_json = await resp.read()
-                resp_json = json.loads(resp_json)
-        else:
-            try:
-                with urlopen(self.req) as resp:
-                    resp_json = resp.read()
-                    resp_json = json.loads(resp_json)
-            except (urllib.error.HTTPError, urllib.error.URLError):
-                self.unavailable = True
-                return
+        async with session.get(self.req) as resp:
+            resp_json = await resp.read()
+            resp_json = json.loads(resp_json)
 
         v_list, a_list = stream_lists(resp_json)
         if v_list:
@@ -1017,7 +993,7 @@ class Coub:
             a_ext = self.a_link.split(".")[-1]
             self.a_name = f"{self.name}.{a_ext}"
 
-    async def download(self, session=None):
+    async def download(self, session):
         """Download all requested streams."""
         if self.erroneous():
             return
@@ -1133,7 +1109,7 @@ class Coub:
         except (subprocess.CalledProcessError, FileNotFoundError):
             err("Warning: Preview command failed!", color=fgcolors.WARNING)
 
-    async def process(self, session=None):
+    async def process(self, session):
         """Process a single coub."""
         global count, done
 
@@ -1616,19 +1592,14 @@ def resolve_paths():
     os.chdir(opts.path)
 
 
-async def parse_page(req, session=None):
+async def parse_page(req, session):
     """Request a single timeline page and parse its content."""
     if cancelled:
         raise KeyboardInterrupt
 
-    if aio:
-        async with session.get(req) as resp:
-            resp_json = await resp.read()
-            resp_json = json.loads(resp_json)
-    else:
-        with urlopen(req) as resp:
-            resp_json = resp.read()
-            resp_json = json.loads(resp_json)
+    async with session.get(req) as resp:
+        resp_json = await resp.read()
+        resp_json = json.loads(resp_json)
 
     ids = [
         c['recoub_to']['permalink'] if c['recoub_to'] else c['permalink']
@@ -1921,30 +1892,17 @@ def stream_lists(resp_json):
     return (video, audio)
 
 
-async def save_stream(link, path, session=None):
+async def save_stream(link, path, session):
     """Download a single media stream."""
-    if aio:
-        async with session.get(link) as stream:
-            with open(path, "wb") as f:
-                while True:
-                    if cancelled:
-                        raise KeyboardInterrupt
-                    chunk = await stream.content.read(opts.chunk_size)
-                    if not chunk:
-                        break
-                    f.write(chunk)
-    else:
-        try:
-            with urlopen(link) as stream, open(path, "wb") as f:
-                while True:
-                    if cancelled:
-                        raise KeyboardInterrupt
-                    chunk = stream.read(opts.chunk_size)
-                    if not chunk:
-                        break
-                    f.write(chunk)
-        except (urllib.error.HTTPError, urllib.error.URLError):
-            return
+    async with session.get(link) as stream:
+        with open(path, "wb") as f:
+            while True:
+                if cancelled:
+                    raise KeyboardInterrupt
+                chunk = await stream.content.read(opts.chunk_size)
+                if not chunk:
+                    break
+                f.write(chunk)
 
 
 def valid_stream(path, attempted_fix=False):
@@ -1984,22 +1942,18 @@ def valid_stream(path, attempted_fix=False):
 
 async def process(coubs):
     """Call the process function of all parsed coubs."""
-    if aio:
-        tout = aiohttp.ClientTimeout(total=None)
-        conn = aiohttp.TCPConnector(limit=opts.connections)
-        try:
-            async with aiohttp.ClientSession(timeout=tout, connector=conn) as session:
-                tasks = [c.process(session) for c in coubs]
-                await asyncio.gather(*tasks)
-        except aiohttp.ClientConnectionError:
-            err("\nLost connection to coub.com!")
-            raise
-        except aiohttp.ClientPayloadError:
-            err("\nReceived malformed data!")
-            raise
-    else:
-        for c in coubs:
-            await c.process()
+    tout = aiohttp.ClientTimeout(total=None)
+    conn = aiohttp.TCPConnector(limit=opts.connections)
+    try:
+        async with aiohttp.ClientSession(timeout=tout, connector=conn) as session:
+            tasks = [c.process(session) for c in coubs]
+            await asyncio.gather(*tasks)
+    except aiohttp.ClientConnectionError:
+        err("\nLost connection to coub.com!")
+        raise
+    except aiohttp.ClientPayloadError:
+        err("\nReceived malformed data!")
+        raise
 
 
 def clean(coubs):
@@ -2022,15 +1976,12 @@ def attempt_process(coubs, level=0):
 
     try:
         asyncio.run(process(coubs), debug=False)
-    except Exception as e:
-        if aio and isinstance(e, (aiohttp.ClientConnectionError, aiohttp.ClientPayloadError)):
-            check_connection()
-            # Reduce the list of coubs to only those yet to finish
-            coubs = [c for c in coubs if not c.done]
-            level += 1
-            attempt_process(coubs, level)
-        else:
-            raise
+    except (aiohttp.ClientConnectionError, aiohttp.ClientPayloadError):
+        check_connection()
+        # Reduce the list of coubs to only those yet to finish
+        coubs = [c for c in coubs if not c.done]
+        level += 1
+        attempt_process(coubs, level)
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # Main Function
