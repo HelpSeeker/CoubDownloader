@@ -20,6 +20,7 @@ along with this program.  If not, see <https://www.gnu.org/licenses/>.
 import os
 import sys
 
+from ssl import SSLContext
 from textwrap import dedent
 from threading import Thread
 from tkinter import Tk, Toplevel, Text, StringVar, IntVar, BooleanVar
@@ -1150,6 +1151,7 @@ if __name__ == '__main__':
         else:
             env.pop(lp_key, None)   # LD_LIBRARY_PATH was not set
     coub.env = env
+    coub.sslcontext = SSLContext()
 
     coub.status = coub.ExitCodes()
     coub.fgcolors = coub.Colors()

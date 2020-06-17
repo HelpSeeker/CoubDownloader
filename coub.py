@@ -25,7 +25,7 @@ import subprocess
 import sys
 
 from math import ceil
-from ssl import SSLCertVerificationError
+from ssl import SSLCertVerificationError, SSLContext
 from textwrap import dedent
 
 import urllib.error
@@ -545,7 +545,7 @@ class BaseContainer:
             return
 
         try:
-            with urlopen(self.template) as resp:
+            with urlopen(self.template, context=sslcontext) as resp:
                 resp_json = json.loads(resp.read())
         except urllib.error.HTTPError:
             err(f"\nInvalid {self.type} ('{self.id}')!",
@@ -592,7 +592,7 @@ class BaseContainer:
             msg(f"  {pages} out of {self.pages} pages")
 
             tout = aiohttp.ClientTimeout(total=None)
-            conn = aiohttp.TCPConnector(limit=opts.connections)
+            conn = aiohttp.TCPConnector(limit=opts.connections, ssl_context=sslcontext)
             async with aiohttp.ClientSession(timeout=tout, connector=conn) as session:
                 tasks = [parse_page(req, session) for req in requests]
                 ids = await asyncio.gather(*tasks)
@@ -1203,7 +1203,7 @@ def check_prereq():
 def check_connection():
     """Check if user can connect to coub.com."""
     try:
-        urlopen("https://coub.com/")
+        urlopen("https://coub.com/", context=sslcontext)
     except urllib.error.URLError as e:
         if isinstance(e.reason, SSLCertVerificationError):
             err("Certificate verification failed! Please update your CA certificates.")
@@ -1943,7 +1943,7 @@ def valid_stream(path, attempted_fix=False):
 async def process(coubs):
     """Call the process function of all parsed coubs."""
     tout = aiohttp.ClientTimeout(total=None)
-    conn = aiohttp.TCPConnector(limit=opts.connections)
+    conn = aiohttp.TCPConnector(limit=opts.connections, ssl_context=sslcontext)
     try:
         async with aiohttp.ClientSession(timeout=tout, connector=conn) as session:
             tasks = [c.process(session) for c in coubs]
@@ -2026,6 +2026,7 @@ def main():
 
 # Execute main function
 if __name__ == '__main__':
+    sslcontext = SSLContext()
     env = dict(os.environ)
     # Change library search path based on script usage
     # https://pyinstaller.readthedocs.io/en/stable/runtime-information.html#ld-library-path-libpath-considerations
