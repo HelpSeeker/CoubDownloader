@@ -1234,7 +1234,7 @@ def parse_input(sources):
         if isinstance(c, container.LinkList):
             msg(f"  {c.length} link{'s' if c.length != 1 else ''} found")
 
-        if level > opts.retries:
+        if level > opts.retries >= 0:
             err(f"  Can't fetch {c.type} info! Please check your connection.")
             sys.exit(status.CONN)
 
