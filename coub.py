@@ -578,7 +578,7 @@ class BaseContainer:
         requests = [f"{self.template}&page={p}" for p in range(1, self.max_pages+1)]
 
         tout = aiohttp.ClientTimeout(total=None)
-        conn = aiohttp.TCPConnector(limit=opts.connections, ssl_context=sslcontext)
+        conn = aiohttp.TCPConnector(limit=opts.connections, ssl=sslcontext)
         async with aiohttp.ClientSession(timeout=tout, connector=conn) as session:
             tasks = [parse_page(req, session) for req in requests]
             ids = await asyncio.gather(*tasks)
@@ -1936,7 +1936,7 @@ def valid_stream(path, attempted_fix=False):
 async def process(coubs):
     """Call the process function of all parsed coubs."""
     tout = aiohttp.ClientTimeout(total=None)
-    conn = aiohttp.TCPConnector(limit=opts.connections, ssl_context=sslcontext)
+    conn = aiohttp.TCPConnector(limit=opts.connections, ssl=sslcontext)
     try:
         async with aiohttp.ClientSession(timeout=tout, connector=conn) as session:
             tasks = [c.process(session) for c in coubs]
