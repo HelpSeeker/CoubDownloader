@@ -519,10 +519,11 @@ class BaseContainer:
 
     def __init__(self, id_):
         self.valid = True
+        self.error = ""
         self.pages = 0
+        self.max_pages = 0
         self.template = ""
 
-        id_ = no_url(id_)
         try:
             self.id, self.sort = id_.split("#")
         except ValueError:
@@ -539,8 +540,9 @@ class BaseContainer:
         """Placeholder function, which must be overwritten by subclasses."""
         self.template = ""
 
-    def get_page_count(self):
+    def get_pages(self):
         """Contact API once to get page count and check validity."""
+        # BaseContainer cannot be invalid at this point, but its ancestors can
         if not self.valid:
             return
 
@@ -548,62 +550,39 @@ class BaseContainer:
             with urlopen(self.template, context=sslcontext) as resp:
                 resp_json = json.loads(resp.read())
         except urllib.error.HTTPError:
-            err(f"\nInvalid {self.type} ('{self.id}')!",
-                color=fgcolors.WARNING)
+            self.error = f"Invalid {self.type} ('{self.id}')!"
             self.valid = False
             return
 
         self.pages = resp_json['total_pages']
 
-    async def process(self, quantity=None, level=0):
+    def prepare(self, quantity):
+        """Get all relevant values for processing."""
+        self.get_template()
+        self.get_pages()
+
+        if quantity:
+            self.max_pages = ceil(quantity / opts.coubs_per_page)
+            if self.pages < self.max_pages:
+                self.max_pages = self.pages
+        else:
+            self.max_pages = self.pages
+
+    async def process(self, quantity):
         """
         Parse the coub links from tags, channels, etc.
 
         The Coub API refers to the list of coubs from a tag, channel,
         community, etc. as a timeline.
         """
-        if -1 < opts.retries < level:
-            err(f"  Can't fetch {self.type} info! Please check your connection.")
-            sys.exit(status.CONN)
+        requests = [f"{self.template}&page={p}" for p in range(1, self.max_pages+1)]
 
-        self.get_template()
-        self.get_page_count()
-        if not self.valid:
-            return []
-
-        pages = self.pages
-
-        # Limit max. number of requested pages
-        # Necessary as self.parse_page() returns when limit
-        # is reached, but only AFTER the request was made
-        if quantity:
-            max_pages = ceil(quantity / opts.coubs_per_page)
-            if pages > max_pages:
-                pages = max_pages
-
-        requests = [f"{self.template}&page={p}" for p in range(1, pages+1)]
-
-        if not level:
-            msg(f"\nDownloading {self.type} info",
-                f": {self.id}"*bool(self.id),
-                f" (sorted by '{self.sort}')"*bool(self.sort), sep="")
-
-        try:
-            msg(f"  {pages} out of {self.pages} pages")
-
-            tout = aiohttp.ClientTimeout(total=None)
-            conn = aiohttp.TCPConnector(limit=opts.connections, ssl_context=sslcontext)
-            async with aiohttp.ClientSession(timeout=tout, connector=conn) as session:
-                tasks = [parse_page(req, session) for req in requests]
-                ids = await asyncio.gather(*tasks)
-            ids = [i for page in ids for i in page]
-        except (aiohttp.ClientConnectionError, aiohttp.ClientPayloadError):
-            check_connection()
-            level += 1
-            err(f"  Retrying... ({level} of "
-                f"{opts.retries if opts.retries > 0 else 'Inf'} attempts)",
-                color=fgcolors.WARNING)
-            ids = await self.process(quantity, level)
+        tout = aiohttp.ClientTimeout(total=None)
+        conn = aiohttp.TCPConnector(limit=opts.connections, ssl_context=sslcontext)
+        async with aiohttp.ClientSession(timeout=tout, connector=conn) as session:
+            tasks = [parse_page(req, session) for req in requests]
+            ids = await asyncio.gather(*tasks)
+        ids = [i for page in ids for i in page]
 
         if quantity:
             return ids[:quantity]
@@ -642,8 +621,7 @@ class Channel(BaseContainer):
         if self.sort in methods:
             template = f"{template}&order_by={methods[self.sort]}"
         else:
-            err(f"\nInvalid channel sort order '{self.sort}' ({self.id})!",
-                color=fgcolors.WARNING)
+            self.error = f"Invalid channel sort order '{self.sort}' ({self.id})!"
             self.valid = False
 
         self.template = template
@@ -675,14 +653,13 @@ class Tag(BaseContainer):
         if self.sort in methods:
             template = f"{template}&order_by={methods[self.sort]}"
         else:
-            err(f"\nInvalid tag sort order '{self.sort}' ({self.id})!",
-                color=fgcolors.WARNING)
+            self.error = f"Invalid tag sort order '{self.sort}' ({self.id})!"
             self.valid = False
 
         self.template = template
 
-    def get_page_count(self):
-        super(Tag, self).get_page_count()
+    def get_pages(self):
+        super(Tag, self).get_pages()
         # API limits tags to 99 pages
         if self.pages > 99:
             self.pages = 99
@@ -712,8 +689,7 @@ class Search(BaseContainer):
         template = f"{template}&per_page={opts.coubs_per_page}"
 
         if self.sort not in methods:
-            err(f"\nInvalid search sort order '{self.sort}' ({self.id})!",
-                color=fgcolors.WARNING)
+            self.error = f"Invalid search sort order '{self.sort}' ({self.id})!"
             self.valid = False
         # The default tab on coub.com is labelled "Relevance", but the
         # default sort order is actually no sort order
@@ -770,8 +746,7 @@ class Community(BaseContainer):
             template = f"https://coub.com/api/v2/timeline/community/{urlquote(self.id)}"
 
         if self.sort not in methods:
-            err(f"\nInvalid community sort order '{self.sort}' ({self.id})!",
-                color=fgcolors.WARNING)
+            self.error = f"Invalid community sort order '{self.sort}' ({self.id})!"
             self.valid = False
             return
 
@@ -788,8 +763,8 @@ class Community(BaseContainer):
 
         self.template = f"{template}per_page={opts.coubs_per_page}"
 
-    def get_page_count(self):
-        super(Community, self).get_page_count()
+    def get_pages(self):
+        super(Community, self).get_pages()
         # API limits communities to 99 pages
         if self.pages > 99:
             self.pages = 99
@@ -842,16 +817,15 @@ class HotSection(BaseContainer):
         if self.sort in methods:
             template = f"{template}/{methods[self.sort]}"
         else:
-            err(f"\nInvalid hot section sort order '{self.sort}'!",
-                color=fgcolors.WARNING)
+            self.error = f"Invalid hot section sort order '{self.sort}'!"
             self.valid = False
 
         template = f"{template}?per_page={opts.coubs_per_page}"
 
         self.template = template
 
-    def get_page_count(self):
-        super(HotSection, self).get_page_count()
+    def get_pages(self):
+        super(HotSection, self).get_pages()
         # API limits hot section to 99 pages
         if self.pages > 99:
             self.pages = 99
@@ -879,8 +853,7 @@ class RandomCategory(BaseContainer):
         template = "https://coub.com/api/v2/timeline/explore/random?"
 
         if self.sort not in methods:
-            err(f"\nInvalid random sort order '{self.sort}'!",
-                color=fgcolors.WARNING)
+            self.error = f"Invalid random sort order '{self.sort}'!"
             self.valid = False
             return
         if self.sort == "top":
@@ -894,13 +867,23 @@ class LinkList:
     type = "list"
 
     def __init__(self, path):
-        self.id = valid_list(path)
+        self.valid = True
+        self.id = os.path.abspath(path)
+        try:
+            with open(self.id, "r") as f:
+                _ = f.read(1)
+        except FileNotFoundError:
+            self.error = f"Input list {self.id} doesn't exist!"
+            self.valid = False
+        except (OSError, UnicodeError):
+            self.error = f"Invalid input list {self.id}!"
+            self.valid = False
+
         self.sort = None
+        self.length = 0
 
-    async def process(self, quantity=None):
+    async def process(self, quantity):
         """Parse coub links provided in via an external text file."""
-        msg(f"\nReading input list ({self.id}):")
-
         with open(self.id, "r") as f:
             content = f.read()
 
@@ -914,7 +897,7 @@ class LinkList:
             l.partition("https://coub.com/view/")[2]
             for l in content if "https://coub.com/view/" in l
         ]
-        msg(f"  {len(links)} link{'s' if len(links) != 1 else ''} found")
+        self.length = len(links)
 
         if quantity:
             return links[:quantity]
@@ -1212,13 +1195,6 @@ def check_connection():
         sys.exit(status.CONN)
 
 
-def no_url(string):
-    """Test if direct input is an URL."""
-    if "coub.com" in string:
-        raise argparse.ArgumentTypeError("input options don't support URLs")
-    return string
-
-
 def positive_int(string):
     """Convert string provided by parse_cli() to a positive int."""
     try:
@@ -1247,20 +1223,6 @@ def valid_time(string):
         raise argparse.ArgumentTypeError("invalid time syntax")
 
     return string
-
-
-def valid_list(string):
-    """Convert string provided by parse_cli() to an absolute path."""
-    path = os.path.abspath(string)
-    try:
-        with open(path, "r") as f:
-            _ = f.read(1)
-    except FileNotFoundError:
-        raise argparse.ArgumentTypeError("path doesn't exist")
-    except (OSError, UnicodeError):
-        raise argparse.ArgumentTypeError("invalid list")
-
-    return path
 
 
 def valid_archive(string):
@@ -1391,8 +1353,7 @@ def mapped_input(string):
     # Otherwise the paths would be forced into a coub link like form
     # which obviously leads to garbled nonsense
     if os.path.exists(string):
-        path = valid_list(string)
-        return LinkList(path)
+        return LinkList(string)
 
     link = normalize_link(string)
 
@@ -1442,8 +1403,7 @@ def parse_cli():
 
     # Input
     parser.add_argument("raw_input", nargs="*", type=mapped_input)
-    parser.add_argument("-i", "--id", dest="input", action="append",
-                        type=no_url)
+    parser.add_argument("-i", "--id", dest="input", action="append")
     parser.add_argument("-l", "--list", dest="input", action="append",
                         type=LinkList)
     parser.add_argument("-c", "--channel", dest="input", action="append",
@@ -1644,9 +1604,42 @@ def parse_input(sources):
             rest = opts.max_coubs - len(parsed)
             if not rest:
                 break
-            parsed.extend(asyncio.run(c.process(rest)))
         else:
-            parsed.extend(asyncio.run(c.process()))
+            rest = None
+
+        if not isinstance(c, LinkList):
+            c.prepare(rest)
+
+        if not c.valid:
+            err("\n", c.error, color=fgcolors.WARNING, sep="")
+            continue
+
+        if isinstance(c, LinkList):
+            msg(f"\nReading input list ({c.id}):")
+        else:
+            msg(f"\nDownloading {c.type} info",
+                f": {c.id}"*bool(c.id),
+                f" (sorted by '{c.sort}')"*bool(c.sort), sep="")
+            msg(f"  {c.max_pages} out of {c.pages} pages")
+
+        level = 0
+        while opts.retries < 0 or level <= opts.retries:
+            try:
+                parsed.extend(asyncio.run(c.process(rest)))
+                break   # Exit loop on successful completion
+            except (aiohttp.ClientConnectionError, aiohttp.ClientPayloadError):
+                check_connection()
+                level += 1
+                err(f"  Retrying... ({level} of "
+                    f"{opts.retries if opts.retries > 0 else 'Inf'} attempts)",
+                    color=fgcolors.WARNING)
+
+        if isinstance(c, LinkList):
+            msg(f"  {c.length} link{'s' if c.length != 1 else ''} found")
+
+        if level > opts.retries:
+            err(f"  Can't fetch {c.type} info! Please check your connection.")
+            sys.exit(status.CONN)
 
     if not parsed:
         err("\nNo coub links specified!", color=fgcolors.WARNING)
