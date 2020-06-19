@@ -3,18 +3,20 @@
 """
 Copyright (C) 2018-2020 HelpSeeker <AlmostSerious@protonmail.ch>
 
-This program is free software: you can redistribute it and/or modify
+This file is part of CoubDownloader.
+
+CoubDownloader is free software: you can redistribute it and/or modify
 it under the terms of the GNU General Public License as published by
 the Free Software Foundation, either version 3 of the License, or
 (at your option) any later version.
 
-This program is distributed in the hope that it will be useful,
+CoubDownloader is distributed in the hope that it will be useful,
 but WITHOUT ANY WARRANTY; without even the implied warranty of
 MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
 GNU General Public License for more details.
 
 You should have received a copy of the GNU General Public License
-along with this program.  If not, see <https://www.gnu.org/licenses/>.
+along with CoubDownloader.  If not, see <https://www.gnu.org/licenses/>.
 """
 
 import os
@@ -29,6 +31,7 @@ from tkinter import messagebox
 from tkinter import ttk
 
 import coub
+from utils import container
 
 try:
     from utils import manual
@@ -70,7 +73,6 @@ class Options:
         self.merge_ext = defaults.MERGE_EXT
         self.name_template = defaults.NAME_TEMPLATE
         self.ffmpeg_path = defaults.FFMPEG_PATH
-        self.coubs_per_page = defaults.COUBS_PER_PAGE
         self.tag_sep = defaults.TAG_SEP
         self.fallback_char = defaults.FALLBACK_CHAR
         self.write_method = defaults.WRITE_METHOD
@@ -310,25 +312,25 @@ class NewItemWindow(Toplevel):
             if t == "Link":
                 source = n
             if t == "List":
-                source = coub.LinkList(n)
+                source = container.LinkList(n)
             if t == "Channel":
-                source = coub.Channel(n)
+                source = container.Channel(n)
             if t == "Search":
-                source = coub.Search(n)
+                source = container.Search(n)
             if t == "Tag":
-                source = coub.Tag(n)
+                source = container.Tag(n)
             if t == "Community":
-                source = coub.Community(n)
+                source = container.Community(n)
             if t == "Featured":
-                source = coub.Community(f"featured#{s}")
+                source = container.Community(f"featured#{s}")
             if t == "Coub of the Day":
-                source = coub.Community(f"coub-of-the-day#{s}")
+                source = container.Community(f"coub-of-the-day#{s}")
             if t == "Story":
-                source = coub.Story(n)
+                source = container.Story(n)
             if t == "Hot section":
-                source = coub.HotSection(s)
+                source = container.HotSection(s)
             if t == "Random":
-                source = coub.RandomCategory(s)
+                source = container.RandomCategory(s)
         else:
             source = None
 
@@ -1093,6 +1095,7 @@ class MainWindow(ttk.Frame):
         coub.total = 0
         coub.count = 0
         coub.done = 0
+        container.CANCELLED = False
         coub.cancelled = False
 
         if self.input.tree.sources:
@@ -1103,6 +1106,7 @@ class MainWindow(ttk.Frame):
     @staticmethod
     def cancel_press():
         """Signal cancelation to coub processing thread."""
+        container.CANCELLED = True
         coub.cancelled = True
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
