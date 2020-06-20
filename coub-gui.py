@@ -32,7 +32,7 @@ from tkinter import ttk
 
 import coub
 from utils import container
-from utils.options import DefaultOptions
+from utils.options import DefaultOptions, mapped_input
 
 try:
     from utils import manual
@@ -156,7 +156,7 @@ class NewURLWindow(Toplevel):
         """Extract entered URL."""
         url = self.url.get()
         if url:
-            return coub.mapped_input(url)
+            return mapped_input(url)
         return None
 
 
