@@ -35,6 +35,7 @@ from urllib.request import urlopen
 import aiohttp
 
 from utils import container
+from utils import options
 
 # ANSI escape codes don't work on Windows, unless the user jumps through
 # additional hoops (either by using 3rd-party software or enabling VT100
@@ -91,6 +92,10 @@ class Colors:
 # Trigger keyboard interrupt from the outside
 cancelled = False
 
+# List of directories to scan for config files
+# Only script's dir for now
+CONF_DIRS = [os.path.dirname(os.path.realpath(__file__))]
+
 status = ExitCodes()
 fgcolors = Colors()
 if not colors:
@@ -103,155 +108,6 @@ done = 0
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # Classes
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-class DefaultOptions:
-    """Define and store all import user settings."""
-
-    # Common defaults
-    VERBOSITY = 1
-    PROMPT = None
-    PATH = "."
-    KEEP = False
-    REPEAT = 1000
-    DURATION = None
-    # Download defaults
-    CONNECTIONS = 25
-    RETRIES = 5
-    MAX_COUBS = None
-    # Format defaults
-    V_QUALITY = -1
-    A_QUALITY = -1
-    V_MAX = "higher"
-    V_MIN = "med"
-    AAC = 1
-    SHARE = False
-    # Channel defaults
-    RECOUBS = 1
-    # Preview defaults
-    PREVIEW = None
-    # Misc. defaults
-    A_ONLY = False
-    V_ONLY = False
-    OUTPUT_LIST = None
-    ARCHIVE = None
-    # Output defaults
-    MERGE_EXT = "mkv"
-    NAME_TEMPLATE = "%id%"
-    # Advanced defaults
-    FFMPEG_PATH = "ffmpeg"
-    TAG_SEP = "_"
-    FALLBACK_CHAR = "-"
-    WRITE_METHOD = "w"
-    CHUNK_SIZE = 1024
-
-    def __init__(self, config_dirs=None):
-        self.error = False
-
-        if not config_dirs:
-            # Only supports script's location as default for now
-            config_dirs = [os.path.dirname(os.path.realpath(__file__))]
-        for d in config_dirs:
-            config_path = os.path.join(d, "coub.conf")
-            if os.path.exists(config_path):
-                self.read_from_config(config_path)
-        self.check_values()
-
-    def read_from_config(self, path):
-        """Change default options based on user config file."""
-        try:
-            with open(path, "r") as f:
-                user_settings = [l for l in f
-                                 if "=" in l and not l.startswith("#")]
-        except (OSError, UnicodeError):
-            err(f"Error reading config file '{path}'!", color=fgcolors.ERROR)
-            user_settings = []
-            self.error = True
-
-        for setting in user_settings:
-            name = setting.split("=")[0].strip()
-            value = setting.split("=")[1].strip()
-            if hasattr(self, name):
-                value = self.guess_string_type(name, value)
-                setattr(self, name, value)
-            else:
-                err(f"Unknown option in config file: {name}",
-                    color=fgcolors.ERROR)
-                self.error = True
-
-    def check_values(self):
-        """Test defaults for valid ranges and types."""
-        checks = {
-            "VERBOSITY": (lambda x: x in [0, 1]),
-            "PROMPT": (lambda x: True),     # Anything but yes/no will lead to prompt
-            "PATH": (lambda x: isinstance(x, str)),
-            "KEEP": (lambda x: isinstance(x, bool)),
-            "REPEAT": (lambda x: isinstance(x, int) and x > 0),
-            "DURATION": (lambda x: isinstance(x, str) or x is None),
-            "CONNECTIONS": (lambda x: isinstance(x, int) and x > 0),
-            "RETRIES": (lambda x: isinstance(x, int)),
-            "MAX_COUBS": (lambda x: isinstance(x, int) and x > 0 or x is None),
-            "V_QUALITY": (lambda x: x in [0, -1]),
-            "A_QUALITY": (lambda x: x in [0, -1]),
-            "V_MAX": (lambda x: x in ["higher", "high", "med"]),
-            "V_MIN": (lambda x: x in ["higher", "high", "med"]),
-            "AAC": (lambda x: x in [0, 1, 2, 3]),
-            "SHARE": (lambda x: isinstance(x, bool)),
-            "RECOUBS": (lambda x: x in [0, 1, 2]),
-            "PREVIEW": (lambda x: isinstance(x, str) or x is None),
-            "A_ONLY": (lambda x: isinstance(x, bool)),
-            "V_ONLY": (lambda x: isinstance(x, bool)),
-            "OUTPUT_LIST": (lambda x: isinstance(x, str) or x is None),
-            "ARCHIVE": (lambda x: isinstance(x, str) or x is None),
-            "MERGE_EXT": (lambda x: x in ["mkv", "mp4", "asf", "avi", "flv", "f4v", "mov"]),
-            "NAME_TEMPLATE": (lambda x: isinstance(x, str) or x is None),
-            "FFMPEG_PATH": (lambda x: isinstance(x, str)),
-            "TAG_SEP": (lambda x: isinstance(x, str)),
-            "FALLBACK_CHAR": (lambda x: isinstance(x, str) or x is None),
-            "WRITE_METHOD": (lambda x: x in ["w", "a"]),
-            "CHUNK_SIZE": (lambda x: isinstance(x, int) and x > 0),
-        }
-
-        errors = []
-        for option in checks:
-            value = getattr(self, option)
-            if not checks[option](value):
-                errors.append((option, value))
-        if errors:
-            for e in errors:
-                err(f"{e[0]}: invalid default value '{e[1]}'")
-            self.error = True
-
-    @staticmethod
-    def guess_string_type(option, string):
-        """Convert values from config file (all strings) to the right type."""
-        specials = {
-            "None": None,
-            "True": True,
-            "False": False,
-        }
-        # Some options should not undergo integer conversion
-        # Usually options which are supposed to ONLY take strings
-        exceptions = [
-            "PATH",
-            "DURATION",
-            "PREVIEW",
-            "OUTPUT_LIST",
-            "ARCHIVE",
-            "NAME_TEMPLATE",
-            "FFMPEG_PATH",
-            "TAG_SEP",
-            "FALLBACK_CHAR",
-        ]
-
-        if string in specials:
-            return specials[string]
-        if option in exceptions:
-            return string
-        try:
-            return int(string)
-        except ValueError:
-            return string
-
 
 class InputHelp(argparse.Action):
     """Custom action to print input help."""
@@ -819,7 +675,7 @@ def valid_time(string):
     """Test valditiy of time syntax with FFmpeg."""
     # Gets called in parse_cli, so opts.ffmpeg_path isn't available yet
     # Exploits the fact that advanced defaults and options are always the same
-    defaults = DefaultOptions()
+    defaults = options.DefaultOptions(CONF_DIRS)
     command = [
         defaults.FFMPEG_PATH, "-v", "quiet",
         "-f", "lavfi", "-i", "anullsrc",
@@ -1005,8 +861,9 @@ def mapped_input(string):
 
 def parse_cli():
     """Parse the command line."""
-    defaults = DefaultOptions()
+    defaults = options.DefaultOptions(CONF_DIRS)
     if defaults.error:
+        err("\n".join(defaults.error))
         sys.exit(status.OPT)
     parser = CustomArgumentParser(usage="%(prog)s [OPTIONS] INPUT [INPUT]...")
 

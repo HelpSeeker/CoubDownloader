@@ -32,6 +32,7 @@ from tkinter import ttk
 
 import coub
 from utils import container
+from utils.options import DefaultOptions
 
 try:
     from utils import manual
@@ -39,14 +40,28 @@ try:
 except ModuleNotFoundError:
     help_button = False
 
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# Global Variables
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+# List of directories to scan for config files
+# Only script's dir for now
+CONF_DIRS = [os.path.dirname(os.path.realpath(__file__))]
+
 PADDING = 5
 
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+# Classes
+# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 class Options:
     """Class to hold all available options."""
 
     def __init__(self):
-        defaults = coub.DefaultOptions()
+        defaults = DefaultOptions(CONF_DIRS)
+        if defaults.error:
+            err("\n".join(defaults.error))
+            sys.exit(coub.ExitCodes.OPT)
 
         # Actually unnecessary as overwritten msg functions just ignore the level
         self.verbosity = 1
