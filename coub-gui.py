@@ -33,13 +33,8 @@ from tkinter import ttk
 import coub
 from utils import container
 from utils import exitcodes as status
+from utils import manual
 from utils.options import DefaultOptions, mapped_input
-
-try:
-    from utils import manual
-    help_button = True
-except ModuleNotFoundError:
-    help_button = False
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # Global Variables
@@ -872,7 +867,7 @@ class HelpWindow(Toplevel):
 
     def __init__(self):
         super(HelpWindow, self).__init__(padx=PADDING, pady=PADDING)
-        self.title("Help" if help_button else "About")
+        self.title("Help")
         self.rowconfigure(0, weight=1)
         self.columnconfigure(0, weight=1)
 
@@ -888,18 +883,16 @@ class HelpWindow(Toplevel):
         gplv3.text.insert("1.0", self.LICENSE)
         gplv3.text.configure(state="disabled")
 
-        if help_button:
-            basic = ScrolledText(self, width=72, height=16, wrap="word")
-            basic.text.insert("1.0", manual.GENERAL)
-            basic.text.configure(state="disabled")
+        basic = ScrolledText(self, width=72, height=16, wrap="word")
+        basic.text.insert("1.0", manual.GENERAL)
+        basic.text.configure(state="disabled")
 
-            sources = ScrolledText(self, width=72, height=16, wrap="word")
-            sources.text.insert("1.0", manual.INPUT)
-            sources.text.configure(state="disabled")
+        sources = ScrolledText(self, width=72, height=16, wrap="word")
+        sources.text.insert("1.0", manual.INPUT)
+        sources.text.configure(state="disabled")
 
-            notebook.add(basic, text="General", sticky="nesw", padding=PADDING)
-            notebook.add(sources, text="Input", sticky="nesw", padding=PADDING)
-
+        notebook.add(basic, text="General", sticky="nesw", padding=PADDING)
+        notebook.add(sources, text="Input", sticky="nesw", padding=PADDING)
         notebook.add(about, text="About", sticky="nesw", padding=PADDING)
         notebook.add(gplv3, text="License", sticky="nesw", padding=PADDING)
 
@@ -1038,7 +1031,7 @@ class MainWindow(ttk.Frame):
         self.edit_item = ttk.Button(self, text="Edit Item",
                                     command=self.edit_item_press)
         prefs = ttk.Button(self, text="Settings", command=self.settings_press)
-        about = ttk.Button(self, text="Help" if help_button else "About", command=HelpWindow)
+        about = ttk.Button(self, text="Help", command=HelpWindow)
         output = OutputFrame(self)
         sys.stdout = output
         sys.stderr = output
