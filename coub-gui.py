@@ -1173,8 +1173,6 @@ if __name__ == '__main__':
     coub.env = env
     coub.sslcontext = SSLContext()
 
-    coub.fgcolors = coub.Colors()
-
     coub.msg = msg
     coub.err = err
     coub.overwrite = overwrite

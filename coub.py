@@ -33,46 +33,10 @@ from urllib.request import urlopen
 
 import aiohttp
 
+from utils import colors
 from utils import container
 from utils import exitcodes as status
 from utils.options import parse_cli
-
-# ANSI escape codes don't work on Windows, unless the user jumps through
-# additional hoops (either by using 3rd-party software or enabling VT100
-# emulation with Windows 10)
-# colorama solves this issue by converting ANSI escape codes into the
-# appropriate win32 calls (only on Windows)
-# If colorama isn't available, disable colorized output on Windows
-colors = True
-try:
-    import colorama
-    colorama.init()
-except ModuleNotFoundError:
-    if os.name == "nt":
-        colors = False
-
-
-# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-# Classes For Global Variables
-# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-class Colors:
-    """Store ANSI escape codes for colorized output."""
-
-    # https://en.wikipedia.org/wiki/ANSI_escape_code#Colors
-    ERROR = '\033[31m'      # red
-    WARNING = '\033[33m'    # yellow
-    SUCCESS = '\033[32m'    # green
-    RESET = '\033[0m'
-
-    def disable(self):
-        """Disable colorized output by removing escape codes."""
-        # I'm not going to stop addressing these attributes as constants, just
-        # because Windows thinks it needs to be special
-        self.ERROR = ''
-        self.SUCCESS = ''
-        self.WARNING = ''
-        self.RESET = ''
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # Global Variables
@@ -84,10 +48,6 @@ cancelled = False
 # List of directories to scan for config files
 # Only script's dir for now
 CONF_DIRS = [os.path.dirname(os.path.realpath(__file__))]
-
-fgcolors = Colors()
-if not colors:
-    fgcolors.disable()
 
 total = 0
 count = 0
@@ -283,7 +243,7 @@ class Coub:
             subprocess.run(command, env=env, check=True,
                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         except (subprocess.CalledProcessError, FileNotFoundError):
-            err("Warning: Preview command failed!", color=fgcolors.WARNING)
+            err("Warning: Preview command failed!", color=colors.WARNING)
 
     async def process(self, session):
         """Process a single coub."""
@@ -321,19 +281,19 @@ class Coub:
         count += 1
         progress = f"[{count: >{len(str(total))}}/{total}]"
         if self.unavailable:
-            err(f"  {progress} {self.link: <30} ... ", color=fgcolors.RESET, end="")
+            err(f"  {progress} {self.link: <30} ... ", color=colors.RESET, end="")
             err("unavailable")
         elif self.corrupted:
-            err(f"  {progress} {self.link: <30} ... ", color=fgcolors.RESET, end="")
+            err(f"  {progress} {self.link: <30} ... ", color=colors.RESET, end="")
             err("failed to download")
         elif self.exists:
             done += 1
             msg(f"  {progress} {self.link: <30} ... ", end="")
-            msg("exists", color=fgcolors.WARNING)
+            msg("exists", color=colors.WARNING)
         else:
             done += 1
             msg(f"  {progress} {self.link: <30} ... ", end="")
-            msg("finished", color=fgcolors.SUCCESS)
+            msg("finished", color=colors.SUCCESS)
 
     def delete(self):
         """Delete any leftover streams."""
@@ -347,21 +307,21 @@ class Coub:
 # Functions
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-def err(*args, color=fgcolors.ERROR, **kwargs):
+def err(*args, color=colors.ERROR, **kwargs):
     """Print to stderr."""
     sys.stderr.write(color)
     print(*args, file=sys.stderr, **kwargs)
-    sys.stderr.write(fgcolors.RESET)
-    sys.stdout.write(fgcolors.RESET)
+    sys.stderr.write(colors.RESET)
+    sys.stdout.write(colors.RESET)
 
 
-def msg(*args, color=fgcolors.RESET, **kwargs):
+def msg(*args, color=colors.RESET, **kwargs):
     """Print to stdout based on verbosity level."""
     if opts.verbosity >= 1:
         sys.stdout.write(color)
         print(*args, **kwargs)
-        sys.stderr.write(fgcolors.RESET)
-        sys.stdout.write(fgcolors.RESET)
+        sys.stderr.write(colors.RESET)
+        sys.stdout.write(colors.RESET)
 
 
 def check_prereq():
@@ -440,7 +400,7 @@ def parse_input(sources):
             c.prepare(rest)
 
         if not c.valid:
-            err("\n", c.error, color=fgcolors.WARNING, sep="")
+            err("\n", c.error, color=colors.WARNING, sep="")
             continue
 
         if isinstance(c, container.LinkList):
@@ -464,7 +424,7 @@ def parse_input(sources):
                 level += 1
                 err(f"  Retrying... ({level} of "
                     f"{opts.retries if opts.retries > 0 else 'Inf'} attempts)",
-                    color=fgcolors.WARNING)
+                    color=colors.WARNING)
 
         if isinstance(c, container.LinkList):
             msg(f"  {c.length} link{'s' if c.length != 1 else ''} found")
@@ -474,12 +434,12 @@ def parse_input(sources):
             sys.exit(status.CONN)
 
     if not parsed:
-        err("\nNo coub links specified!", color=fgcolors.WARNING)
+        err("\nNo coub links specified!", color=colors.WARNING)
         sys.exit(status.OPT)
 
     if opts.max_coubs and len(parsed) >= opts.max_coubs:
         msg(f"\nDownload limit ({opts.max_coubs}) reached!",
-            color=fgcolors.WARNING)
+            color=colors.WARNING)
 
     before = len(parsed)
     parsed = list(set(parsed))      # Weed out duplicates
@@ -508,7 +468,7 @@ def write_list(ids):
         for i in ids:
             print(f"https://coub.com/view/{i}", file=f)
     msg(f"\nParsed coubs written to '{opts.output_list}'!",
-        color=fgcolors.SUCCESS)
+        color=colors.SUCCESS)
 
 
 def get_name(req_json, c_id):
@@ -550,7 +510,7 @@ def get_name(req_json, c_id):
         os.remove(f"{name}.ext")
     except OSError:
         err(f"Error: Filename invalid or too long! Falling back to '{c_id}'",
-            color=fgcolors.WARNING)
+            color=colors.WARNING)
         name = c_id
 
     return name
@@ -797,7 +757,7 @@ def attempt_process(coubs, level=0):
     if level > 0:
         err(f"Retrying... ({level} of "
             f"{opts.retries if opts.retries > 0 else 'Inf'} attempts)",
-            color=fgcolors.WARNING)
+            color=colors.WARNING)
 
     try:
         asyncio.run(process(coubs), debug=False)
@@ -824,7 +784,7 @@ def main():
     try:
         ids = parse_input(opts.input)
     except KeyboardInterrupt:
-        err("\nUser Interrupt!", color=fgcolors.WARNING)
+        err("\nUser Interrupt!", color=colors.WARNING)
         sys.exit(status.INT)
     if ids:
         if opts.output_list:
@@ -838,12 +798,12 @@ def main():
             attempt_process(coubs)
         except KeyboardInterrupt:
             clean(coubs)
-            err("\nUser Interrupt!", color=fgcolors.WARNING)
+            err("\nUser Interrupt!", color=colors.WARNING)
             sys.exit(status.INT)
         finally:
             clean(coubs)
     else:
-        msg("\nAll coubs present in archive file!", color=fgcolors.WARNING)
+        msg("\nAll coubs present in archive file!", color=colors.WARNING)
 
     msg("\n### Finished ###\n")
 
@@ -871,7 +831,7 @@ if __name__ == '__main__':
     try:
         main()
     except KeyboardInterrupt:
-        err("\nUser Interrupt!", color=fgcolors.WARNING)
+        err("\nUser Interrupt!", color=colors.WARNING)
         sys.exit(status.INT)
 
     # Indicate failure if not all input coubs exist after execution
