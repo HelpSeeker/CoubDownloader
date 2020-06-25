@@ -32,6 +32,7 @@ from tkinter import ttk
 
 import coub
 from utils import container
+from utils import exitcodes as status
 from utils.options import DefaultOptions, mapped_input
 
 try:
@@ -61,7 +62,7 @@ class Options:
         defaults = DefaultOptions(CONF_DIRS)
         if defaults.error:
             err("\n".join(defaults.error))
-            sys.exit(coub.ExitCodes.OPT)
+            sys.exit(status.OPT)
 
         # Actually unnecessary as overwritten msg functions just ignore the level
         self.verbosity = 1
@@ -1172,7 +1173,6 @@ if __name__ == '__main__':
     coub.env = env
     coub.sslcontext = SSLContext()
 
-    coub.status = coub.ExitCodes()
     coub.fgcolors = coub.Colors()
 
     coub.msg = msg

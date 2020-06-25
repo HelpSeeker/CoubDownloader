@@ -34,6 +34,7 @@ from urllib.request import urlopen
 import aiohttp
 
 from utils import container
+from utils import exitcodes as status
 from utils.options import parse_cli
 
 # ANSI escape codes don't work on Windows, unless the user jumps through
@@ -54,17 +55,6 @@ except ModuleNotFoundError:
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # Classes For Global Variables
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-class ExitCodes:
-    """Store exit codes for non-successful execution."""
-
-    DEP = 1         # missing required software
-    OPT = 2         # invalid user-specified option
-    RUN = 3         # misc. runtime error
-    DOWN = 4        # failed to download all input links (existence == success)
-    INT = 5         # early termination was requested by the user (i.e. Ctrl+C)
-    CONN = 6        # connection either couldn't be established or was lost
-
 
 class Colors:
     """Store ANSI escape codes for colorized output."""
@@ -95,7 +85,6 @@ cancelled = False
 # Only script's dir for now
 CONF_DIRS = [os.path.dirname(os.path.realpath(__file__))]
 
-status = ExitCodes()
 fgcolors = Colors()
 if not colors:
     fgcolors.disable()
