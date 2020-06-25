@@ -36,6 +36,7 @@ import aiohttp
 from utils import colors
 from utils import container
 from utils import exitcodes as status
+from utils.messaging import err, msg, set_message_verbosity
 from utils.options import parse_cli
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -281,11 +282,11 @@ class Coub:
         count += 1
         progress = f"[{count: >{len(str(total))}}/{total}]"
         if self.unavailable:
-            err(f"  {progress} {self.link: <30} ... ", color=colors.RESET, end="")
-            err("unavailable")
+            err(f"  {progress} {self.link: <30} ... ", end="")
+            err("unavailable", color=colors.ERROR)
         elif self.corrupted:
-            err(f"  {progress} {self.link: <30} ... ", color=colors.RESET, end="")
-            err("failed to download")
+            err(f"  {progress} {self.link: <30} ... ", end="")
+            err("failed to download", color=colors.ERROR)
         elif self.exists:
             done += 1
             msg(f"  {progress} {self.link: <30} ... ", end="")
@@ -307,23 +308,6 @@ class Coub:
 # Functions
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-def err(*args, color=colors.ERROR, **kwargs):
-    """Print to stderr."""
-    sys.stderr.write(color)
-    print(*args, file=sys.stderr, **kwargs)
-    sys.stderr.write(colors.RESET)
-    sys.stdout.write(colors.RESET)
-
-
-def msg(*args, color=colors.RESET, **kwargs):
-    """Print to stdout based on verbosity level."""
-    if opts.verbosity >= 1:
-        sys.stdout.write(color)
-        print(*args, **kwargs)
-        sys.stderr.write(colors.RESET)
-        sys.stdout.write(colors.RESET)
-
-
 def check_prereq():
     """Test if all required 3rd-party tools are installed."""
     try:
@@ -332,7 +316,7 @@ def check_prereq():
                        stderr=subprocess.DEVNULL,
                        env=env, check=False)
     except FileNotFoundError:
-        err("Error: FFmpeg not found!")
+        err("Error: FFmpeg not found!", color=colors.ERROR)
         sys.exit(status.DEP)
 
 
@@ -342,9 +326,11 @@ def check_connection():
         urlopen("https://coub.com/", context=sslcontext)
     except urllib.error.URLError as e:
         if isinstance(e.reason, SSLCertVerificationError):
-            err("Certificate verification failed! Please update your CA certificates.")
+            err("Certificate verification failed! Please update your CA certificates.",
+                color=colors.ERROR)
         else:
-            err("Unable to connect to coub.com! Please check your connection.")
+            err("Unable to connect to coub.com! Please check your connection.",
+                color=colors.ERROR)
         sys.exit(status.CONN)
 
 
@@ -430,7 +416,8 @@ def parse_input(sources):
             msg(f"  {c.length} link{'s' if c.length != 1 else ''} found")
 
         if level > opts.retries >= 0:
-            err(f"  Can't fetch {c.type} info! Please check your connection.")
+            err(f"  Can't fetch {c.type} info! Please check your connection.",
+                color=colors.ERROR)
             sys.exit(status.CONN)
 
     if not parsed:
@@ -734,10 +721,10 @@ async def process(coubs):
             tasks = [c.process(session) for c in coubs]
             await asyncio.gather(*tasks)
     except aiohttp.ClientConnectionError:
-        err("\nLost connection to coub.com!")
+        err("\nLost connection to coub.com!", color=colors.ERROR)
         raise
     except aiohttp.ClientPayloadError:
-        err("\nReceived malformed data!")
+        err("\nReceived malformed data!", color=colors.ERROR)
         raise
 
 
@@ -750,7 +737,8 @@ def clean(coubs):
 def attempt_process(coubs, level=0):
     """Attempt to run the process function."""
     if -1 < opts.retries < level:
-        err("Ran out of connection retries! Please check your connection.")
+        err("Ran out of connection retries! Please check your connection.",
+            color=colors.ERROR)
         clean(coubs)
         sys.exit(status.CONN)
 
@@ -825,8 +813,10 @@ if __name__ == '__main__':
     opts = parse_cli(CONF_DIRS)
     # parse_cli returns list with error messages on non-argparse failure
     if isinstance(opts, list):
-        err("\n".join(opts))
+        err("\n".join(opts), color=colors.ERROR)
         sys.exit(status.OPT)
+
+    set_message_verbosity(opts.verbosity)
 
     try:
         main()

@@ -31,9 +31,11 @@ from tkinter import messagebox
 from tkinter import ttk
 
 import coub
+from utils import colors
 from utils import container
 from utils import exitcodes as status
 from utils import manual
+from utils.messaging import err, set_message_verbosity
 from utils.options import DefaultOptions, mapped_input
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -1122,16 +1124,6 @@ class MainWindow(ttk.Frame):
 # Functions
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-def err(*args, color="", **kwargs):
-    """Print to stderr while ignoring color codes."""
-    print(*args, file=sys.stderr, **kwargs)
-
-
-def msg(*args, color="", **kwargs):
-    """Print to stdout while ignoring color codes."""
-    print(*args, **kwargs)
-
-
 def overwrite(name):
     """Prompt the user if they want to overwrite an existing coub."""
     if coub.opts.prompt == "yes":
@@ -1165,12 +1157,13 @@ if __name__ == '__main__':
             env.pop(lp_key, None)   # LD_LIBRARY_PATH was not set
     coub.env = env
     coub.sslcontext = SSLContext()
-
-    coub.msg = msg
-    coub.err = err
     coub.overwrite = overwrite
 
     coub.opts = Options()
+
+    # Adjust messaging system for GUI
+    colors.disable()
+    set_message_verbosity(coub.opts.verbosity)
 
     root = Tk()
     root.title("CoubDownloader")
