@@ -33,6 +33,7 @@ from tkinter import ttk
 import coub
 from utils import colors
 from utils import container
+from utils import download
 from utils import exitcodes as status
 from utils import manual
 from utils.messaging import err, set_message_verbosity
@@ -796,14 +797,14 @@ class SettingsWindow(Toplevel):
 
         notebook = ttk.Notebook(self)
         general = GeneralSettings(self)
-        download = DownloadSettings(self)
+        down = DownloadSettings(self)
         quality = QualitySettings(self)
         output = OutputSettings(self)
         ok = ttk.Button(self, text="OK", command=self.ok_press)
         cancel = ttk.Button(self, text="Cancel", command=self.destroy)
 
         notebook.add(general, text="General", sticky="nesw")
-        notebook.add(download, text="Download", sticky="nesw")
+        notebook.add(down, text="Download", sticky="nesw")
         notebook.add(quality, text="Quality", sticky="nesw")
         notebook.add(output, text="Output", sticky="nesw")
 
@@ -1107,7 +1108,7 @@ class MainWindow(ttk.Frame):
         coub.count = 0
         coub.done = 0
         container.CANCELLED = False
-        coub.cancelled = False
+        download.CANCELLED = False
 
         if self.input.tree.sources:
             coub.opts.input = list(self.input.tree.sources.values())
@@ -1118,17 +1119,17 @@ class MainWindow(ttk.Frame):
     def cancel_press():
         """Signal cancelation to coub processing thread."""
         container.CANCELLED = True
-        coub.cancelled = True
+        download.CANCELLED = True
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # Functions
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-def overwrite(name):
+def overwrite(name, opts):
     """Prompt the user if they want to overwrite an existing coub."""
-    if coub.opts.prompt == "yes":
+    if opts.prompt == "yes":
         return True
-    if coub.opts.prompt == "no":
+    if opts.prompt == "no":
         return False
 
     return messagebox.askyesno(title="File exists", icon="question",
@@ -1157,7 +1158,7 @@ if __name__ == '__main__':
             env.pop(lp_key, None)   # LD_LIBRARY_PATH was not set
     coub.env = env
     coub.sslcontext = SSLContext()
-    coub.overwrite = overwrite
+    download.overwrite = overwrite
 
     coub.opts = Options()
 
