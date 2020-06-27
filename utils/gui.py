@@ -21,7 +21,6 @@ along with CoubDownloader.  If not, see <https://www.gnu.org/licenses/>.
 
 import os
 
-from textwrap import dedent
 from tkinter import Toplevel, Text, StringVar, IntVar, BooleanVar
 from tkinter import filedialog
 from tkinter import ttk
@@ -774,35 +773,6 @@ class ScrolledText(ttk.Frame):
 class HelpWindow(Toplevel):
     """Window to hold help and about text."""
 
-    ABOUT = dedent(
-        """
-        CoubDownloader
-
-        A simple downloader for coub.com
-
-        https://github.com/HelpSeeker/CoubDownloader
-        """
-    )
-
-    LICENSE = dedent(
-        """
-        Copyright (C) 2018-2020 HelpSeeker <AlmostSerious@protonmail.ch>
-
-        This program is free software: you can redistribute it and/or modify
-        it under the terms of the GNU General Public License as published by
-        the Free Software Foundation, either version 3 of the License, or
-        (at your option) any later version.
-
-        This program is distributed in the hope that it will be useful,
-        but WITHOUT ANY WARRANTY; without even the implied warranty of
-        MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-        GNU General Public License for more details.
-
-        You should have received a copy of the GNU General Public License
-        along with this program.  If not, see <https://www.gnu.org/licenses/>.
-        """
-    )
-
     def __init__(self):
         super(HelpWindow, self).__init__(padx=PADDING, pady=PADDING)
         self.title("Help")
@@ -813,12 +783,12 @@ class HelpWindow(Toplevel):
         notebook.grid(sticky="nesw")
 
         about = ScrolledText(self, width=72, height=16)
-        about.text.insert("1.0", self.ABOUT, ("centered"))
+        about.text.insert("1.0", manual.ABOUT, ("centered"))
         about.text.tag_configure("centered", justify="center")
         about.text.configure(state="disabled")
 
         gplv3 = ScrolledText(self, width=72, height=16)
-        gplv3.text.insert("1.0", self.LICENSE)
+        gplv3.text.insert("1.0", manual.LICENSE)
         gplv3.text.configure(state="disabled")
 
         basic = ScrolledText(self, width=72, height=16, wrap="word")
