@@ -21,7 +21,7 @@ along with CoubDownloader.  If not, see <https://www.gnu.org/licenses/>.
 
 import os
 
-from tkinter import Toplevel, StringVar
+from tkinter import Toplevel, StringVar, IntVar, BooleanVar
 from tkinter import filedialog
 from tkinter import ttk
 
@@ -324,3 +324,430 @@ class EditItemWindow(NewItemWindow):
         self.type.set("")
         self.name.set("")
         self.destroy()
+
+
+class GeneralSettings(ttk.Frame):
+    """Frame holding general options in the settings window."""
+
+    def __init__(self, master):
+        super(GeneralSettings, self).__init__(master, padding=PADDING)
+        self.columnconfigure(0, weight=1)
+
+        self.prompt = StringVar()
+        self.repeat = IntVar()
+        self.dur = StringVar()
+        self.preview = StringVar()
+        self.archive = StringVar()
+        self.keep = BooleanVar()
+        self.recoubs = IntVar()
+
+        self.prompt.set("" if not self.master.opts.prompt else self.master.opts.prompt)
+        self.repeat.set(self.master.opts.repeat)
+        self.dur.set("" if not self.master.opts.duration else self.master.opts.duration)
+        self.preview.set("" if not self.master.opts.preview else self.master.opts.preview)
+        self.archive.set("" if not self.master.opts.archive else self.master.opts.archive)
+        self.keep.set(self.master.opts.keep)
+        self.recoubs.set(self.master.opts.recoubs)
+
+        # Prompt behavior
+        ttk.Label(self, text="Prompt Behavior", style="Heading.TLabel")
+        ttk.Label(self, text="How to answer user prompts")
+        ttk.Radiobutton(self, text="Prompt", value="", variable=self.prompt)
+        ttk.Radiobutton(self, text="Yes", value="yes", variable=self.prompt)
+        ttk.Radiobutton(self, text="No", value="no", variable=self.prompt)
+        # Loop count
+        ttk.Label(self, text="Loop Count", style="Heading.TLabel")
+        ttk.Label(self, text="How often to loop the video stream")
+        ttk.Spinbox(self, from_=1, textvariable=self.repeat)
+        # Duration
+        ttk.Label(self, text="Limit Duration", style="Heading.TLabel")
+        ttk.Label(self, text="Max. output duration (FFmpeg syntax)")
+        ttk.Entry(self, textvariable=self.dur)
+        # Preview
+        ttk.Label(self, text="Preview Command", style="Heading.TLabel")
+        ttk.Label(self, text="Command to preview each finished coub")
+        ttk.Entry(self, textvariable=self.preview)
+        # Archive
+        ttk.Label(self, text="Archive", style="Heading.TLabel")
+        ttk.Label(self, text="Use an archive file to keep track of "
+                             "already downloaded coubs")
+        archive_e1 = ttk.Entry(self, textvariable=self.archive)
+        archive_b1 = ttk.Button(self, text="Browse", command=self.ask_archive)
+        # Recoub handling
+        ttk.Label(self, text="Recoubs", style="Heading.TLabel")
+        ttk.Label(self, text="How to treat recoubs during channel downloads")
+        ttk.Radiobutton(self, text="No Recoubs", value=0, variable=self.recoubs)
+        ttk.Radiobutton(self, text="With Recoubs", value=1, variable=self.recoubs)
+        ttk.Radiobutton(self, text="Only Recoubs", value=2, variable=self.recoubs)
+        # Keep streams
+        ttk.Label(self, text="Keep Streams", style="Heading.TLabel")
+        ttk.Checkbutton(self, variable=self.keep,
+                        text="Keep individual streams after merging")
+
+        for row, child in enumerate(self.winfo_children()):
+            child.grid(row=row, sticky="w")
+            if isinstance(child, ttk.Label) and child['style'] == "Heading.TLabel":
+                child.grid(pady=PADDING)
+            if isinstance(child, ttk.Entry) and not isinstance(child, ttk.Spinbox):
+                child.grid(columnspan=2, sticky="ew")
+        archive_e1.grid(columnspan=1)
+        archive_b1.grid(row=16, column=1, sticky="e")
+
+    def ask_archive(self):
+        """Open file picker to get path of archive file."""
+        a = self.archive.get()
+        a_path = os.path.abspath(a)
+        if a and os.path.exists(a_path):
+            init = a_path
+        else:
+            init = os.path.expanduser("~")
+
+        if os.path.isfile(init):
+            path = filedialog.asksaveasfilename(
+                parent=self,
+                title="Open archive file",
+                initialfile=init
+            )
+        else:
+            path = filedialog.asksaveasfilename(
+                parent=self,
+                title="Open archive file",
+                initialdir=init
+            )
+
+        if path:
+            # For now no safe guard is in place, so just give visual feedback
+            try:
+                with open(path, "r") as f:
+                    _ = f.read(1)
+            except FileNotFoundError:
+                pass
+            except (OSError, UnicodeError):
+                path = "Error: Can't decode file"
+
+            self.archive.set(path)
+
+    def apply_values(self):
+        """Apply internal values to global options."""
+        self.master.opts.prompt = None if not self.prompt.get() else self.prompt.get()
+        self.master.opts.repeat = self.repeat.get()
+        self.master.opts.duration = None if not self.dur.get() else self.dur.get()
+        self.master.opts.preview = None if not self.preview.get() else self.preview.get()
+        self.master.opts.archive = None if not self.archive.get() else self.archive.get()
+        self.master.opts.keep = self.keep.get()
+        self.master.opts.recoubs = self.recoubs.get()
+
+
+class DownloadSettings(ttk.Frame):
+    """Frame holding download options in the settings window."""
+
+    def __init__(self, master):
+        super(DownloadSettings, self).__init__(master, padding=PADDING)
+        self.columnconfigure(0, weight=1)
+
+        self.conn = IntVar()
+        self.retry = IntVar()
+        self.max = IntVar()
+
+        self.conn.set(self.master.opts.connections)
+        self.retry.set(self.master.opts.retries)
+        self.max.set(0 if not self.master.opts.max_coubs else self.master.opts.max_coubs)
+
+        # Connections
+        ttk.Label(self, text="Connections", style="Heading.TLabel")
+        ttk.Label(self, text="How many connections to use (>100 not recommended)")
+        ttk.Spinbox(self, from_=1, textvariable=self.conn)
+        # Retries
+        ttk.Label(self, text="Retries", style="Heading.TLabel")
+        ttk.Label(self, text="How often to reconnect to Coub after connection loss"
+                             " (<0 for infinite retries)")
+        ttk.Spinbox(self, from_=-9999, textvariable=self.retry)
+        # Limit coubs
+        ttk.Label(self, text="Limit Quantity", style="Heading.TLabel")
+        ttk.Label(self, text="How many coub links to parse (0 for no limit)")
+        ttk.Spinbox(self, from_=0, textvariable=self.max)
+
+        for row, child in enumerate(self.winfo_children()):
+            child.grid(row=row, sticky="w")
+            if isinstance(child, ttk.Label) and child['style'] == "Heading.TLabel":
+                child.grid(pady=PADDING)
+
+    def apply_values(self):
+        """Apply internal values to global options."""
+        self.master.opts.connections = self.conn.get()
+        self.master.opts.retries = self.retry.get()
+        self.master.opts.max_coubs = None if not self.max.get() else self.max.get()
+
+
+class QualitySettings(ttk.Frame):
+    """Frame holding quality options in the settings window."""
+
+    def __init__(self, master):
+        super(QualitySettings, self).__init__(master, padding=PADDING)
+        self.columnconfigure(0, weight=1)
+
+        self.vq = IntVar()
+        self.aq = IntVar()
+        self.vmax = StringVar()
+        self.vmin = StringVar()
+        self.aac = IntVar()
+        self.a_only = BooleanVar()
+        self.v_only = BooleanVar()
+        self.share = BooleanVar()
+
+        self.vq.set(self.master.opts.v_quality)
+        self.aq.set(self.master.opts.v_quality)
+        self.vmax.set(self.master.opts.v_max)
+        self.vmin.set(self.master.opts.v_min)
+        self.aac.set(self.master.opts.aac)
+        self.a_only.set(self.master.opts.a_only)
+        self.v_only.set(self.master.opts.v_only)
+        self.share.set(self.master.opts.share)
+
+        # Video quality
+        ttk.Label(self, text="Video Quality", style="Heading.TLabel")
+        ttk.Label(self, text="Which video quality to download")
+        self.vq_r1 = ttk.Radiobutton(self, text="Best quality", value=-1)
+        self.vq_r2 = ttk.Radiobutton(self, text="Worst quality", value=0)
+        for widget in [self.vq_r1, self.vq_r2]:
+            widget.configure(variable=self.vq)
+        # Max video quality
+        ttk.Label(self, text="Limit max. video quality")
+        self.vmax_r1 = ttk.Radiobutton(self, text="higher", value="higher")
+        self.vmax_r2 = ttk.Radiobutton(self, text="high", value="high")
+        self.vmax_r3 = ttk.Radiobutton(self, text="med", value="med")
+        for rad in [self.vmax_r1, self.vmax_r2, self.vmax_r3]:
+            rad.configure(variable=self.vmax, command=self.update_widgets)
+        # Min video quality
+        ttk.Label(self, text="Limit min. video quality")
+        self.vmin_r1 = ttk.Radiobutton(self, text="higher", value="higher")
+        self.vmin_r2 = ttk.Radiobutton(self, text="high", value="high")
+        self.vmin_r3 = ttk.Radiobutton(self, text="med", value="med")
+        for widget in [self.vmin_r1, self.vmin_r2, self.vmin_r3]:
+            widget.configure(variable=self.vmin, command=self.update_widgets)
+        # Audio quality
+        ttk.Label(self, text="Audio Quality", style="Heading.TLabel")
+        ttk.Label(self, text="Which audio quality to download")
+        self.aq_r1 = ttk.Radiobutton(self, text="Best quality", value=-1)
+        self.aq_r2 = ttk.Radiobutton(self, text="Worst quality", value=0)
+        for widget in [self.aq_r1, self.aq_r2]:
+            widget.configure(variable=self.aq)
+        # Audio format
+        ttk.Label(self, text="How much to prefer AAC over MP3")
+        self.aac_r1 = ttk.Radiobutton(self, text="Only MP3", value=0)
+        self.aac_r2 = ttk.Radiobutton(self, text="No Bias", value=1)
+        self.aac_r3 = ttk.Radiobutton(self, text="Prefer AAC", value=2)
+        self.aac_r4 = ttk.Radiobutton(self, text="Only AAC", value=3)
+        for widget in [self.aac_r1, self.aac_r2, self.aac_r3, self.aac_r4]:
+            widget.configure(variable=self.aac)
+        # Special formats
+        ttk.Label(self, text="Special Download Formats", style="Heading.TLabel")
+        self.a_only_b1 = ttk.Checkbutton(self, text="Download only audio streams",
+                                         variable=self.a_only)
+        self.v_only_b1 = ttk.Checkbutton(self, text="Download only video streams",
+                                         variable=self.v_only)
+        self.share_b1 = ttk.Checkbutton(self, text="Download 'share' version",
+                                        variable=self.share)
+        for widget in [self.a_only_b1, self.v_only_b1, self.share_b1]:
+            widget.configure(command=self.update_widgets)
+
+        # Update widgets in case of v_only/a_only/share via config file
+        self.update_widgets()
+
+        for row, child in enumerate(self.winfo_children()):
+            child.grid(row=row, sticky="w")
+            if isinstance(child, ttk.Label):
+                child.grid(pady=PADDING)
+
+    def update_widgets(self):
+        """Update widgets to avoid mutually exclusive value pairings."""
+        v_state = "disabled" if self.a_only.get() or self.share.get() else "normal"
+        a_state = "disabled" if self.v_only.get() or self.share.get() else "normal"
+        s_state = "disabled" if self.a_only.get() or self.v_only.get() else "normal"
+
+        vmax_high = v_state if self.vmin.get() not in {"higher"} else "disabled"
+        vmax_med = v_state if self.vmin.get() not in {"higher", "high"} else "disabled"
+        vmin_high = v_state if self.vmax.get() not in {"med"} else "disabled"
+        vmin_higher = v_state if self.vmax.get() not in {"high", "med"} else "disabled"
+
+        self.vq_r1.configure(state=v_state)
+        self.vq_r2.configure(state=v_state)
+        self.aq_r1.configure(state=a_state)
+        self.aq_r2.configure(state=a_state)
+        self.vmax_r1.configure(state=v_state)
+        self.vmax_r2.configure(state=vmax_high)
+        self.vmax_r3.configure(state=vmax_med)
+        self.vmin_r1.configure(state=vmin_higher)
+        self.vmin_r2.configure(state=vmin_high)
+        self.vmin_r3.configure(state=v_state)
+        self.aac_r1.configure(state=a_state)
+        self.aac_r2.configure(state=a_state)
+        self.aac_r3.configure(state=a_state)
+        self.aac_r4.configure(state=a_state)
+        self.a_only_b1.configure(state=a_state)
+        self.v_only_b1.configure(state=v_state)
+        self.share_b1.configure(state=s_state)
+
+    def apply_values(self):
+        """Apply internal values to global options."""
+        self.master.opts.v_quality = self.vq.get()
+        self.master.opts.a_quality = self.aq.get()
+        self.master.opts.v_max = self.vmax.get()
+        self.master.opts.v_min = self.vmin.get()
+        self.master.opts.aac = self.aac.get()
+        self.master.opts.a_only = self.a_only.get()
+        self.master.opts.v_only = self.v_only.get()
+        self.master.opts.share = self.share.get()
+
+
+class OutputSettings(ttk.Frame):
+    """Frame holding output options in the settings window."""
+
+    def __init__(self, master):
+        super(OutputSettings, self).__init__(master, padding=PADDING)
+        self.columnconfigure(0, weight=1)
+
+        self.o_list = StringVar()
+        self.path = StringVar()
+        self.ext = StringVar()
+        self.name = StringVar()
+
+        self.o_list.set("" if not self.master.opts.output_list
+                        else self.master.opts.output_list)
+        self.path.set(self.master.opts.path)
+        self.ext.set(self.master.opts.merge_ext)
+        self.name.set("%id%" if not self.master.opts.name_template
+                      else self.master.opts.name_template)
+
+        # Output list
+        ttk.Label(self, text="Output to List", style="Heading.TLabel")
+        ttk.Label(self, text="Output all parsed links to a list (no download)")
+        ttk.Entry(self, textvariable=self.o_list)
+        ttk.Button(self, text="Browse", command=self.ask_list)
+        # Output path
+        ttk.Label(self, text="Output Directory", style="Heading.TLabel")
+        ttk.Label(self, text="Where to save downloaded coubs")
+        ttk.Entry(self, textvariable=self.path)
+        ttk.Button(self, text="Browse", command=self.ask_path)
+        # Merge extension
+        ttk.Label(self, text="Output Container", style="Heading.TLabel")
+        ttk.Label(self, text="What extension to use for merged output files\n"
+                             "(has no effect if no merge is required)")
+        ttk.Combobox(self, textvariable=self.ext, state="readonly",
+                     values=("mkv", "mp4", "asf", "avi", "flv", "f4v", "mov"))
+        # Name template
+        ttk.Label(self, text="Name Template", style="Heading.TLabel")
+        ttk.Label(self, text="Change the naming convention of output files")
+        ttk.Entry(self, textvariable=self.name).grid(columnspan=2)
+
+        for row, child in enumerate(self.winfo_children()):
+            child.grid(row=row, sticky="w")
+            if isinstance(child, ttk.Label) and child['style'] == "Heading.TLabel":
+                child.grid(pady=PADDING)
+            elif isinstance(child, ttk.Entry) and not isinstance(child, ttk.Combobox):
+                child.grid(sticky="ew")
+            elif isinstance(child, ttk.Button):
+                child.grid(row=row-1, column=1, sticky="e")
+
+    def ask_list(self):
+        """Open filepicker to get output list path."""
+        l = self.o_list.get()
+        l_path = os.path.abspath(l)
+        if l and os.path.exists(l_path):
+            init = l_path
+        else:
+            init = os.path.expanduser("~")
+
+        if os.path.isfile(init):
+            path = filedialog.asksaveasfilename(
+                parent=self,
+                title="Save links to file",
+                initialfile=init,
+            )
+        else:
+            path = filedialog.asksaveasfilename(
+                parent=self,
+                title="Save links to file",
+                initialdir=init,
+            )
+
+        if path:
+            # For now no safe guard is in place, so just give visual feedback
+            try:
+                with open(path, "r") as f:
+                    _ = f.read(1)
+            except FileNotFoundError:
+                pass
+            except (OSError, UnicodeError):
+                path = "Error: Can't decode file"
+
+            self.o_list.set(path)
+
+    def ask_path(self):
+        """Open directory picker to get output directory."""
+        p = self.path.get()
+        if p and os.path.exists(os.path.abspath(p)):
+            init = os.path.abspath(p)
+        else:
+            init = os.path.join(os.path.expanduser("~"), "coubs")
+        path = filedialog.askdirectory(
+            parent=self,
+            title="Choose output destination",
+            initialdir=init
+        )
+        if path:
+            self.path.set(path)
+
+    def apply_values(self):
+        """Apply internal values to global options."""
+        o_list = self.o_list.get()
+        path = self.path.get()
+        name = self.name.get()
+
+        # Last safeguard to prevent empty path
+        fallback_path = os.path.join(os.path.expanduser("~"), "coubs")
+
+        self.master.opts.output_list = None if not o_list else o_list
+        self.master.opts.path = fallback_path if not path else path
+        self.master.opts.merge_ext = self.ext.get()
+        self.master.opts.name_template = None if name == "%id%" else name
+
+
+class SettingsWindow(Toplevel):
+    """Window to allow user to change settings."""
+
+    def __init__(self, opts):
+        super(SettingsWindow, self).__init__(padx=PADDING, pady=PADDING/2)
+        self.title("Settings")
+        self.rowconfigure(0, weight=1)
+        self.columnconfigure(0, weight=1)
+
+        self.opts = opts
+
+        notebook = ttk.Notebook(self)
+        general = GeneralSettings(self)
+        down = DownloadSettings(self)
+        quality = QualitySettings(self)
+        output = OutputSettings(self)
+        ok = ttk.Button(self, text="OK", command=self.ok_press)
+        cancel = ttk.Button(self, text="Cancel", command=self.destroy)
+
+        notebook.add(general, text="General", sticky="nesw")
+        notebook.add(down, text="Download", sticky="nesw")
+        notebook.add(quality, text="Quality", sticky="nesw")
+        notebook.add(output, text="Output", sticky="nesw")
+
+        notebook.grid(row=0, columnspan=3, sticky="news", pady=PADDING/2)
+        ok.grid(row=1, column=1, padx=PADDING, pady=PADDING/2)
+        cancel.grid(row=1, column=2, pady=PADDING/2)
+
+    def ok_press(self):
+        """Apply values of all settings frames to global options."""
+        for child in self.winfo_children():
+            if isinstance(child, ttk.Frame):
+                child.apply_values()
+        self.destroy()
+
+    def get_settings(self):
+        """Retrieve (possibly changed) options object."""
+        return self.opts
