@@ -23,9 +23,8 @@ import os
 import sys
 
 from ssl import SSLContext
-from textwrap import dedent
 from threading import Thread
-from tkinter import Tk, Toplevel, Text
+from tkinter import Tk
 from tkinter import messagebox
 from tkinter import ttk
 
@@ -35,7 +34,6 @@ from utils import container
 from utils import download
 from utils import exitcodes as status
 from utils import gui
-from utils import manual
 from utils.messaging import err, set_message_verbosity
 from utils.options import DefaultOptions
 
@@ -113,204 +111,6 @@ class Options:
             self.fallback_char = " "
 
 
-class ScrolledText(ttk.Frame):
-    """Custom version of ScrolledText with less hacks and modern Scrollbar."""
-
-    def __init__(self, master, **kwargs):
-        super(ScrolledText, self).__init__(master)
-        self.rowconfigure(0, weight=1)
-        self.columnconfigure(0, weight=1)
-
-        self.text = Text(self, **kwargs)
-        self.scroll = ttk.Scrollbar(self, command=self.text.yview)
-        self.text.configure(yscrollcommand=self.scroll.set)
-
-        self.text.grid(sticky="nesw")
-        self.scroll.grid(row=0, column=1, sticky="ns")
-
-
-class HelpWindow(Toplevel):
-    """Window to hold help and about text."""
-
-    ABOUT = dedent(
-        """
-        CoubDownloader
-
-        A simple downloader for coub.com
-
-        https://github.com/HelpSeeker/CoubDownloader
-        """
-    )
-
-    LICENSE = dedent(
-        """
-        Copyright (C) 2018-2020 HelpSeeker <AlmostSerious@protonmail.ch>
-
-        This program is free software: you can redistribute it and/or modify
-        it under the terms of the GNU General Public License as published by
-        the Free Software Foundation, either version 3 of the License, or
-        (at your option) any later version.
-
-        This program is distributed in the hope that it will be useful,
-        but WITHOUT ANY WARRANTY; without even the implied warranty of
-        MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-        GNU General Public License for more details.
-
-        You should have received a copy of the GNU General Public License
-        along with this program.  If not, see <https://www.gnu.org/licenses/>.
-        """
-    )
-
-    def __init__(self):
-        super(HelpWindow, self).__init__(padx=PADDING, pady=PADDING)
-        self.title("Help")
-        self.rowconfigure(0, weight=1)
-        self.columnconfigure(0, weight=1)
-
-        notebook = ttk.Notebook(self)
-        notebook.grid(sticky="nesw")
-
-        about = ScrolledText(self, width=72, height=16)
-        about.text.insert("1.0", self.ABOUT, ("centered"))
-        about.text.tag_configure("centered", justify="center")
-        about.text.configure(state="disabled")
-
-        gplv3 = ScrolledText(self, width=72, height=16)
-        gplv3.text.insert("1.0", self.LICENSE)
-        gplv3.text.configure(state="disabled")
-
-        basic = ScrolledText(self, width=72, height=16, wrap="word")
-        basic.text.insert("1.0", manual.GENERAL)
-        basic.text.configure(state="disabled")
-
-        sources = ScrolledText(self, width=72, height=16, wrap="word")
-        sources.text.insert("1.0", manual.INPUT)
-        sources.text.configure(state="disabled")
-
-        notebook.add(basic, text="General", sticky="nesw", padding=PADDING)
-        notebook.add(sources, text="Input", sticky="nesw", padding=PADDING)
-        notebook.add(about, text="About", sticky="nesw", padding=PADDING)
-        notebook.add(gplv3, text="License", sticky="nesw", padding=PADDING)
-
-
-class InputTree(ttk.Treeview):
-    """Treeview to visualize all added input sources."""
-
-    def __init__(self, master):
-        super(InputTree, self).__init__(master)
-        self.configure(
-            columns=("type", "name", "sort"),
-            show="headings",
-            selectmode="browse",
-            height=6,
-        )
-
-        self.column("type")
-        self.column("name")
-        self.column("sort")
-        self.heading("type", text="Type")
-        self.heading("name", text="Name")
-        self.heading("sort", text="Sort")
-
-        self.sources = {}
-
-        self.tag_configure("alternate", background="#f0f0ff")
-
-    def update_format(self):
-        """Update colorized lines for newest changes."""
-        for row, item in enumerate(self.get_children(), start=1):
-            if not row % 2:
-                self.item(item, tags=("alternate"))
-            else:
-                self.item(item, tags=())
-
-    def add_item(self, source=None):
-        """Add new item and/or update list view."""
-        if source:
-            item = self.insert("", "end")
-            if isinstance(source, str):
-                self.set(item, "type", "link")
-                self.set(item, "name", source)
-            else:
-                self.set(item, "type", source.type)
-                self.set(item, "name", source.id)
-                self.set(item, "sort", source.sort)
-            self.sources[item] = source
-            self.update_format()
-
-    def delete_item(self, *args):
-        """Remove selected source from list."""
-        selection = self.focus()
-        if selection:
-            self.delete(selection)
-            del self.sources[selection]
-            self.update_format()
-
-    def edit_item(self, old=None, new=None):
-        """Edit already existing source."""
-        if old:
-            if not new:
-                self.delete(old)
-                del self.sources[old]
-            elif isinstance(new, str):
-                self.set(old, "type", "link")
-                self.set(old, "name", new)
-                self.sources[old] = new
-            else:
-                self.set(old, "type", new.type)
-                self.set(old, "name", new.id)
-                self.set(old, "sort", new.sort)
-                self.sources[old] = new
-            self.update_format()
-
-
-class InputFrame(ttk.Frame):
-    """Frame to hold InputTree and its scrollbar widget."""
-
-    def __init__(self, master):
-        super(InputFrame, self).__init__(master)
-        self.columnconfigure(0, weight=1)
-
-        self.tree = InputTree(self)
-        self.scroll = ttk.Scrollbar(self, orient="vertical", command=self.tree.yview)
-        self.tree.configure(yscrollcommand=self.scroll.set)
-        self.tree.grid(sticky="nesw")
-
-    def update_widgets(self):
-        """Enable/disable scrollbar based on treeview item quantity."""
-        if len(self.tree.get_children()) > self.tree['height']:
-            self.scroll.grid(row=0, column=1, sticky="ns")
-        else:
-            self.scroll.grid_forget()
-
-
-class OutputFrame(ScrolledText):
-    """Textbox to redirect stdout and stderr to."""
-
-    def __init__(self, master):
-        super(OutputFrame, self).__init__(master)
-        self.text.configure(height=15, width=50, state="disabled")
-
-    def write(self, text):
-        """Print received text."""
-        # Disabling a textbox also deactivates its insert method
-        self.text.configure(state="normal")
-        self.text.insert("end", text)
-        self.text.see("end")
-        self.flush()
-        self.text.configure(state="disabled")
-
-    def flush(self):
-        """Refresh textbox to print in realtime."""
-        self.text.update_idletasks()
-
-    def clear(self):
-        """Clear all text from the textbox."""
-        self.text.configure(state="normal")
-        self.text.delete("1.0", "end")
-        self.text.configure(state="disabled")
-
-
 class MainWindow(ttk.Frame):
     """Frame to hold the main interface."""
 
@@ -321,14 +121,14 @@ class MainWindow(ttk.Frame):
         self.columnconfigure(3, weight=1)
         self.grid(sticky="news")
 
-        self.input = InputFrame(self)
+        self.input = gui.InputFrame(self)
         new_url = ttk.Button(self, text="New URL", command=self.new_url_press)
         new_item = ttk.Button(self, text="New Item", command=self.new_item_press)
         self.edit_item = ttk.Button(self, text="Edit Item",
                                     command=self.edit_item_press)
         prefs = ttk.Button(self, text="Settings", command=self.settings_press)
-        about = ttk.Button(self, text="Help", command=HelpWindow)
-        output = OutputFrame(self)
+        about = ttk.Button(self, text="Help", command=gui.HelpWindow)
+        output = gui.OutputFrame(self)
         sys.stdout = output
         sys.stderr = output
         #progress = ttk.Progressbar(self, orient=HORIZONTAL, mode="indeterminate")
