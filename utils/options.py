@@ -245,6 +245,7 @@ class CustomArgumentParser(argparse.ArgumentParser):
           -k, --keep            keep the individual video/audio parts
           -r, --repeat N        repeat video N times (def: until audio ends)
           -d, --duration TIME   specify max. coub duration (FFmpeg syntax)
+          -g, --gui             start Tkinter GUI
 
         Download options:
           --connections N       max. number of connections (def: {self.get_default("connections")})
@@ -704,6 +705,7 @@ def parse_cli(config_locations):
     parser.add_argument("-k", "--keep", action="store_true", default=defaults.KEEP)
     parser.add_argument("-d", "--duration", type=valid_dur,
                         default=defaults.DURATION)
+    parser.add_argument("-g", "--gui", action="store_true")
     # Download Options
     parser.add_argument("--connections", type=positive_int,
                         default=defaults.CONNECTIONS)
@@ -767,12 +769,19 @@ def parse_cli(config_locations):
         write_method=defaults.WRITE_METHOD,
         chunk_size=defaults.CHUNK_SIZE,
     )
-
-    if not sys.argv[1:]:
-        parser.print_help()
-        sys.exit(0)
-
     args = parser.parse_args()
+
+    # Implicitly set GUI mode if no command line options are provided
+    if not sys.argv[1:]:
+        args.gui = True
+    # GUI-specific tweaks
+    if args.gui:
+        args.verbosity = 1
+        args.input = []
+        args.raw_input = []
+        # Currently GUI uses the same default path as CLI (i.e. script location)
+        #if not args.path or args.path == ".":
+        #    args.path = os.path.join(os.path.expanduser("~"), "coubs")
 
     # Test for discrepancies between min/max video quality
     formats = {'med': 0, 'high': 1, 'higher': 2}
