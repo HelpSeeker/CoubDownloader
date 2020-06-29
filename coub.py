@@ -343,9 +343,6 @@ def clean_workspace(coubs):
 async def process(coubs):
     """Process (i.e. download) provided Coub objects."""
     level = 0
-    tout = aiohttp.ClientTimeout(total=None)
-    conn = aiohttp.TCPConnector(limit=opts.connections, ssl=SSLCONTEXT)
-
     while opts.retries < 0 or opts.retries >= level:
         if level > 0:
             err(f"Retrying... ({level} of "
@@ -353,6 +350,8 @@ async def process(coubs):
                 color=colors.WARNING)
 
         try:
+            tout = aiohttp.ClientTimeout(total=None)
+            conn = aiohttp.TCPConnector(limit=opts.connections, ssl=SSLCONTEXT)
             async with aiohttp.ClientSession(timeout=tout, connector=conn) as s:
                 tasks = [c.process(s, opts) for c in coubs]
                 await asyncio.gather(*tasks)
