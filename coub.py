@@ -346,7 +346,7 @@ async def process(coubs):
     tout = aiohttp.ClientTimeout(total=None)
     conn = aiohttp.TCPConnector(limit=opts.connections, ssl=SSLCONTEXT)
 
-    while opts.retries < -1 or opts.retries >= level:
+    while opts.retries < 0 or opts.retries >= level:
         if level > 0:
             err(f"Retrying... ({level} of "
                 f"{opts.retries if opts.retries > 0 else 'Inf'} attempts)",
