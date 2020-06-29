@@ -334,49 +334,45 @@ def write_list(ids):
         color=colors.SUCCESS)
 
 
-async def process(coubs):
-    """Call the process function of all parsed coubs."""
-    tout = aiohttp.ClientTimeout(total=None)
-    conn = aiohttp.TCPConnector(limit=opts.connections, ssl=SSLCONTEXT)
-    try:
-        async with aiohttp.ClientSession(timeout=tout, connector=conn) as session:
-            tasks = [c.process(session, opts) for c in coubs]
-            await asyncio.gather(*tasks)
-    except aiohttp.ClientConnectionError:
-        err("\nLost connection to coub.com!", color=colors.ERROR)
-        raise
-    except aiohttp.ClientPayloadError:
-        err("\nReceived malformed data!", color=colors.ERROR)
-        raise
-
-
 def clean_workspace(coubs):
     """Clean workspace by deleteing unfinished coubs."""
     for c in [c for c in coubs if not c.done]:
         c.delete()
 
 
-def attempt_process(coubs, level=0):
-    """Attempt to run the process function."""
-    if -1 < opts.retries < level:
-        err("Ran out of connection retries! Please check your connection.",
-            color=colors.ERROR)
-        clean_workspace(coubs)
-        sys.exit(status.CONN)
+async def process(coubs):
+    """Process (i.e. download) provided Coub objects."""
+    level = 0
+    tout = aiohttp.ClientTimeout(total=None)
+    conn = aiohttp.TCPConnector(limit=opts.connections, ssl=SSLCONTEXT)
 
-    if level > 0:
-        err(f"Retrying... ({level} of "
-            f"{opts.retries if opts.retries > 0 else 'Inf'} attempts)",
-            color=colors.WARNING)
+    while opts.retries < -1 or opts.retries >= level:
+        if level > 0:
+            err(f"Retrying... ({level} of "
+                f"{opts.retries if opts.retries > 0 else 'Inf'} attempts)",
+                color=colors.WARNING)
 
-    try:
-        asyncio.run(process(coubs), debug=False)
-    except (aiohttp.ClientConnectionError, aiohttp.ClientPayloadError):
-        check_connection()
-        # Reduce the list of coubs to only those yet to finish
-        coubs = [c for c in coubs if not c.done]
-        level += 1
-        attempt_process(coubs, level)
+        try:
+            async with aiohttp.ClientSession(timeout=tout, connector=conn) as s:
+                tasks = [c.process(s, opts) for c in coubs]
+                await asyncio.gather(*tasks)
+            return
+        except aiohttp.ClientError as e:
+            if isinstance(e, aiohttp.ClientConnectionError):
+                err("\nLost connection to coub.com!", color=colors.ERROR)
+            elif isinstance(e, aiohttp.ClientPayloadError):
+                err("\nReceived malformed data!", color=colors.ERROR)
+            else:
+                err(f"\nMisc. aiohttp.Clienterror ('{e}')!", color=colors.ERROR)
+            check_connection()
+            # Reduce the list of coubs to only those yet to finish
+            coubs = [c for c in coubs if not c.done]
+            level += 1
+
+    err("Ran out of connection retries! Please check your connection.",
+        color=colors.ERROR)
+    clean_workspace(coubs)
+    sys.exit(status.CONN)
 
 
 def overwrite(name, options):
@@ -421,7 +417,7 @@ def main():
 
             msg("\n### Download Coubs ###\n")
             try:
-                attempt_process(coubs)
+                asyncio.run(process(coubs), debug=False)
             finally:
                 clean_workspace(coubs)
         else:
