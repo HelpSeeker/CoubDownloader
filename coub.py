@@ -43,7 +43,7 @@ from utils import download
 from utils import exitcodes as status
 from utils import gui
 from utils.messaging import err, msg, set_message_verbosity
-from utils.options import parse_cli
+from utils.options import parse_cli, ConfigError
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # Global Variables
@@ -434,10 +434,10 @@ def main():
 
 # Execute main function
 if __name__ == '__main__':
-    opts = parse_cli(CONF_DIRS)
-    # parse_cli returns list with error messages on non-argparse failure
-    if isinstance(opts, list):
-        err("\n".join(opts), color=colors.ERROR)
+    try:
+        opts = parse_cli(CONF_DIRS)
+    except ConfigError as e:
+        err(e, color=colors.ERROR)
         sys.exit(status.OPT)
 
     set_message_verbosity(opts.verbosity)

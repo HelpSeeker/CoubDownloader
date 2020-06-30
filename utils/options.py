@@ -48,6 +48,9 @@ if hasattr(sys, 'frozen') and hasattr(sys, '_MEIPASS'):
 # Classes
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
+class ConfigError(Exception):
+    """Thrown when wrong default or unknown config options are encountered."""
+
 class DefaultOptions:
     """Define and store all import user settings."""
 
@@ -660,7 +663,7 @@ def parse_cli(config_locations):
     """
     defaults = DefaultOptions(config_locations)
     if defaults.error:
-        return defaults.error
+        raise ConfigError("\n".join(defaults.error))
 
     # Uses FFmpeg to test duration string, so it needs to know about custom paths
     valid_dur = partial(valid_time, defaults.FFMPEG_PATH)
@@ -786,7 +789,7 @@ def parse_cli(config_locations):
     # Test for discrepancies between min/max video quality
     formats = {'med': 0, 'high': 1, 'higher': 2}
     if formats[args.v_min] > formats[args.v_max]:
-        return ["Quality of --min-quality greater than --max-quality!"]
+        raise ConfigError("Quality of --min-quality greater than --max-quality!")
 
     # Append raw input (no option) to the regular input list
     if args.input:
