@@ -609,12 +609,14 @@ class OutputSettings(ttk.Frame):
         self.columnconfigure(0, weight=1)
 
         self.o_list = StringVar()
+        self.json = StringVar()
         self.path = StringVar()
         self.ext = StringVar()
         self.name = StringVar()
 
         self.o_list.set("" if not self.master.opts.output_list
                         else self.master.opts.output_list)
+        self.json.set("" if not self.master.opts.json else self.master.opts.json)
         self.path.set(self.master.opts.path)
         self.ext.set(self.master.opts.merge_ext)
         self.name.set("%id%" if not self.master.opts.name_template
@@ -625,6 +627,11 @@ class OutputSettings(ttk.Frame):
         ttk.Label(self, text="Output all parsed links to a list (no download)")
         ttk.Entry(self, textvariable=self.o_list)
         ttk.Button(self, text="Browse", command=self.ask_list)
+        # Print JSON
+        ttk.Label(self, text="Print JSON", style="Heading.TLabel")
+        ttk.Label(self, text="Output basic coub infos as JSON")
+        ttk.Entry(self, textvariable=self.json)
+        ttk.Button(self, text="Browse", command=self.ask_json)
         # Output path
         ttk.Label(self, text="Output Directory", style="Heading.TLabel")
         ttk.Label(self, text="Where to save downloaded coubs")
@@ -649,6 +656,42 @@ class OutputSettings(ttk.Frame):
                 child.grid(sticky="ew")
             elif isinstance(child, ttk.Button):
                 child.grid(row=row-1, column=1, sticky="e")
+
+    # There must be a better way than a separate function that is basically
+    # the same as ask_list()
+    def ask_json(self):
+        """Open filepicker to get output JSON path."""
+        j = self.json.get()
+        j_path = os.path.abspath(j)
+        if j and os.path.exists(j_path):
+            init = j_path
+        else:
+            init = os.path.expanduser("~")
+
+        if os.path.isfile(init):
+            path = filedialog.asksaveasfilename(
+                parent=self,
+                title="Output infos to file",
+                initialfile=init,
+            )
+        else:
+            path = filedialog.asksaveasfilename(
+                parent=self,
+                title="Output infos to file",
+                initialdir=init,
+            )
+
+        if path:
+            # For now no safe guard is in place, so just give visual feedback
+            try:
+                with open(path, "r") as f:
+                    _ = f.read(1)
+            except FileNotFoundError:
+                pass
+            except (OSError, UnicodeError):
+                path = "Error: Can't decode file"
+
+            self.o_list.set(path)
 
     def ask_list(self):
         """Open filepicker to get output list path."""
@@ -702,6 +745,7 @@ class OutputSettings(ttk.Frame):
     def apply_values(self):
         """Apply internal values to global options."""
         o_list = self.o_list.get()
+        json = self.json.get()
         path = self.path.get()
         name = self.name.get()
 
@@ -709,6 +753,7 @@ class OutputSettings(ttk.Frame):
         fallback_path = os.path.join(os.path.expanduser("~"), "coubs")
 
         self.master.opts.output_list = None if not o_list else o_list
+        self.master.opts.json = None if not json else json
         self.master.opts.path = fallback_path if not path else path
         self.master.opts.merge_ext = self.ext.get()
         self.master.opts.name_template = None if name == "%id%" else name

@@ -81,6 +81,7 @@ class DefaultOptions:
     V_ONLY = False
     OUTPUT_LIST = None
     ARCHIVE = None
+    JSON = None
     # Output defaults
     MERGE_EXT = "mkv"
     NAME_TEMPLATE = "%id%"
@@ -143,6 +144,7 @@ class DefaultOptions:
             "V_ONLY": (lambda x: isinstance(x, bool)),
             "OUTPUT_LIST": (lambda x: isinstance(x, str) or x is None),
             "ARCHIVE": (lambda x: isinstance(x, str) or x is None),
+            "JSON": (lambda x: isinstance(x, str) or x is None),
             "MERGE_EXT": (lambda x: x in ["mkv", "mp4", "asf", "avi", "flv", "f4v", "mov"]),
             "NAME_TEMPLATE": (lambda x: isinstance(x, str) or x is None),
             "FFMPEG_PATH": (lambda x: isinstance(x, str)),
@@ -177,6 +179,7 @@ class DefaultOptions:
             "PREVIEW",
             "OUTPUT_LIST",
             "ARCHIVE",
+            "JSON",
             "NAME_TEMPLATE",
             "FFMPEG_PATH",
             "TAG_SEP",
@@ -283,6 +286,8 @@ class CustomArgumentParser(argparse.ArgumentParser):
           --video-only          only download video streams
           --write-list FILE     write all parsed coub links to FILE
           --use-archive FILE    use FILE to keep track of already downloaded coubs
+          --print-json FILE     output basic coub infos as JSON to FILE
+                                  see --output for the currently available infos
 
         Output:
           --ext EXTENSION       merge output with the given extension (def: {self.get_default("merge_ext")})
@@ -484,8 +489,8 @@ def valid_time(ffmpeg_path, string):
     return string
 
 
-def valid_archive(string):
-    """Convert string provided by parse_cli() to an absolute path."""
+def valid_text_file(string):
+    """Check if a provided path points to a decodable text file."""
     path = os.path.abspath(string)
     try:
         with open(path, "r") as f:
@@ -493,7 +498,7 @@ def valid_archive(string):
     except FileNotFoundError:
         pass
     except (OSError, UnicodeError):
-        raise argparse.ArgumentTypeError("invalid archive file")
+        raise argparse.ArgumentTypeError(f"invalid text file '{string}'")
 
     return path
 
@@ -756,8 +761,10 @@ def parse_cli(config_locations):
     stream.add_argument("--share", action="store_true", default=defaults.SHARE)
     parser.add_argument("--write-list", dest="output_list", type=os.path.abspath,
                         default=defaults.OUTPUT_LIST)
-    parser.add_argument("--use-archive", dest="archive", type=valid_archive,
+    parser.add_argument("--use-archive", dest="archive", type=valid_text_file,
                         default=defaults.ARCHIVE)
+    parser.add_argument("--print-json", dest="json", type=valid_text_file,
+                        default=defaults.JSON)
     # Output
     parser.add_argument("--ext", dest="merge_ext", default=defaults.MERGE_EXT,
                         choices=["mkv", "mp4", "asf", "avi", "flv", "f4v", "mov"])

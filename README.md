@@ -98,6 +98,8 @@ Misc. options:
   --video-only          only download video streams
   --write-list FILE     write all parsed coub links to FILE
   --use-archive FILE    use FILE to keep track of already downloaded coubs
+  --print-json FILE     output basic coub infos as JSON to FILE
+                          see --output for the currently available infos
 
 Output:
   --ext EXTENSION       merge output with the given extension (def: mkv)

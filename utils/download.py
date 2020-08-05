@@ -66,6 +66,13 @@ class Coub:
         self.v_name = None
         self.a_name = None
         self.name = None
+        self.infos = {
+            '%id%': self.id,
+            '%title%': "",
+            '%creation%': "",
+            '%channel%': "",
+            '%tags%': "",
+        }
 
         self.unavailable = False
         self.exists = False
@@ -95,6 +102,54 @@ class Coub:
         if old_file and not overwrite(old_file, opts):
             self.exists = True
 
+    def update_infos(self, resp_json):
+        """Fetch basic coub information."""
+        self.infos['%title%'] = resp_json['title']
+        self.infos['%creation%'] = resp_json['created_at']
+        self.infos['%channel%'] = resp_json['channel']['title']
+        self.infos['%tags%'] = [t['title'] for t in resp_json['tags']]
+
+        # Coubs don't necessarily belong to a community (although it's rare)
+        try:
+            self.infos['%community%'] = resp_json['communities'][0]['permalink']
+        except (KeyError, TypeError, IndexError):
+            self.infos['%community%'] = "undefined"
+
+    def get_name(self, opts):
+        """Assemble final output name of a given coub."""
+        if not opts.name_template:
+            self.name = self.infos['%id%']
+            return
+
+        name = opts.name_template
+        for to_replace in self.infos:
+            if to_replace == '%tags%':
+                name = name.replace(to_replace, opts.tag_sep.join(self.infos['%tags%']))
+            else:
+                name = name.replace(to_replace, self.infos[to_replace])
+
+        # An attempt to remove the most blatant problematic characters
+        # Linux supports all except /, but \n and \t are only asking for trouble
+        # https://dwheeler.com/essays/fixing-unix-linux-filenames.html
+        # ' is problematic as it causes issues with FFmpeg's concat muxer
+        forbidden = ["\n", "\t", "'", "/"]
+        if os.name == "nt":
+            forbidden.extend(["<", ">", ":", "\"", "\\", "|", "?", "*"])
+        for to_replace in forbidden:
+            name = name.replace(to_replace, opts.fallback_char)
+
+        try:
+            # Add example extension to simulate the full name length
+            f = open(f"{name}.ext", "w")
+            f.close()
+            os.remove(f"{name}.ext")
+        except OSError:
+            err(f"Error: Filename invalid or too long! Falling back to '{self.infos['%id%']}'",
+                color=colors.WARNING)
+            name = self.infos['%id%']
+
+        self.name = name
+
     async def parse(self, session, opts):
         """Get all necessary coub infos from the Coub API."""
         if self.erroneous():
@@ -117,7 +172,8 @@ class Coub:
             self.unavailable = True
             return
 
-        self.name = get_name(resp_json, self.id, opts)
+        self.update_infos(resp_json)
+        self.get_name(opts)
 
         if not opts.a_only:
             self.v_name = f"{self.name}.mp4"
@@ -210,6 +266,16 @@ class Coub:
                 os.remove(self.v_name)
             os.remove(self.a_name)
 
+    def print_json(self, path):
+        """Output basic coub information to file."""
+        if self.erroneous():
+            return
+
+        # Strip surrounding % from the internally used keys
+        output = {i.strip("%"): self.infos[i] for i in self.infos}
+        with open(path, "a") as f:
+            print(json.dumps(output), file=f)
+
     def archive(self, opts):
         """Log a coub's ID in the archive file."""
         # This return also prevents users from creating new archive files
@@ -268,6 +334,8 @@ class Coub:
         # of valid streams with special format options (e.g. --video-only)
         self.done = True
 
+        if opts.json:
+            self.print_json(opts.json)
         if opts.archive:
             self.archive(opts)
         if opts.preview:
@@ -301,51 +369,6 @@ class Coub:
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # Functions
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-def get_name(req_json, c_id, opts):
-    """Assemble final output name of a given coub."""
-    if not opts.name_template:
-        return c_id
-
-    specials = {
-        '%id%': c_id,
-        '%title%': req_json['title'],
-        '%creation%': req_json['created_at'],
-        '%channel%': req_json['channel']['title'],
-        '%tags%': opts.tag_sep.join([t['title'] for t in req_json['tags']]),
-    }
-    # Coubs don't necessarily belong to a community (although it's rare)
-    try:
-        specials['%community%'] = req_json['communities'][0]['permalink']
-    except (KeyError, TypeError, IndexError):
-        specials['%community%'] = "undefined"
-
-    name = opts.name_template
-    for to_replace in specials:
-        name = name.replace(to_replace, specials[to_replace])
-
-    # An attempt to remove the most blatant problematic characters
-    # Linux supports all except /, but \n and \t are only asking for trouble
-    # https://dwheeler.com/essays/fixing-unix-linux-filenames.html
-    # ' is problematic as it causes issues with FFmpeg's concat muxer
-    forbidden = ["\n", "\t", "'", "/"]
-    if os.name == "nt":
-        forbidden.extend(["<", ">", ":", "\"", "\\", "|", "?", "*"])
-    for to_replace in forbidden:
-        name = name.replace(to_replace, opts.fallback_char)
-
-    try:
-        # Add example extension to simulate the full name length
-        f = open(f"{name}.ext", "w")
-        f.close()
-        os.remove(f"{name}.ext")
-    except OSError:
-        err(f"Error: Filename invalid or too long! Falling back to '{c_id}'",
-            color=colors.WARNING)
-        name = c_id
-
-    return name
-
 
 def exists(name, opts):
     """Test if a video with the given name and requested extension exists."""
