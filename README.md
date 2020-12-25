@@ -2,6 +2,8 @@
 
 CoubDownloader is a simple script to download videos (called coubs) from [Coub](https://coub.com).
 
+**Linux users might be interested in CoubDownloader's successor [Gyre](https://github.com/HelpSeeker/Gyre).**
+
 ## Contents
 
 1. [Usage](#usage)
