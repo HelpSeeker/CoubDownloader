@@ -4,6 +4,8 @@ CoubDownloader is a simple script to download videos (called coubs) from [Coub](
 
 **Linux users might be interested in CoubDownloader's successor [Gyre](https://github.com/HelpSeeker/Gyre).**
 
+**Update 2021-01-02: Gyre can now also be used on Windows, but requires an MSYS2 setup (see [Gyre on Windows](https://github.com/HelpSeeker/Gyre#gyre-on-windows)).**
+
 ## Contents
 
 1. [Usage](#usage)
