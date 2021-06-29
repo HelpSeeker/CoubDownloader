@@ -26,11 +26,6 @@ import sys
 
 from ssl import SSLCertVerificationError, SSLContext
 from textwrap import dedent
-from threading import Thread
-
-from tkinter import Tk
-from tkinter import messagebox
-from tkinter import ttk
 
 import urllib.error
 from urllib.request import urlopen
@@ -41,7 +36,6 @@ from utils import colors
 from utils import container
 from utils import download
 from utils import exitcodes as status
-from utils import gui
 from utils.messaging import err, msg, set_message_verbosity
 from utils.options import parse_cli, ConfigError
 
@@ -69,116 +63,6 @@ if hasattr(sys, 'frozen') and hasattr(sys, '_MEIPASS'):
         ENV.pop(lp_key, None)   # LD_LIBRARY_PATH was not set
 
 opts = None
-
-# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-# Classes
-# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-class MainWindow(ttk.Frame):
-    """Frame to hold the main interface."""
-
-    def __init__(self, master):
-        super(MainWindow, self).__init__(master)
-        self.configure(padding=(PADDING, PADDING, PADDING, 0))
-        self.rowconfigure(2, weight=1)
-        self.columnconfigure(3, weight=1)
-        self.grid(sticky="news")
-
-        self.input = gui.InputFrame(self)
-        new_url = ttk.Button(self, text="New URL", command=self.new_url_press)
-        new_item = ttk.Button(self, text="New Item", command=self.new_item_press)
-        self.edit_item = ttk.Button(self, text="Edit Item",
-                                    command=self.edit_item_press)
-        prefs = ttk.Button(self, text="Settings", command=self.settings_press)
-        about = ttk.Button(self, text="Help", command=gui.HelpWindow)
-        output = gui.OutputFrame(self)
-        sys.stdout = output
-        sys.stderr = output
-        #progress = ttk.Progressbar(self, orient=HORIZONTAL, mode="indeterminate")
-        clean = ttk.Button(self, text="Clean", command=output.clear)
-        start = ttk.Button(self, text="Start", command=self.start_press)
-        cancel = ttk.Button(self, text="Cancel", command=self.cancel_press)
-
-        self.input.grid(row=0, columnspan=6, sticky="news")
-        new_url.grid(row=1, pady=PADDING)
-        new_item.grid(row=1, column=1, padx=PADDING, pady=PADDING)
-        prefs.grid(row=1, column=4, padx=PADDING, pady=PADDING)
-        about.grid(row=1, column=5, pady=PADDING)
-        output.grid(row=2, columnspan=6, sticky="news")
-        #progress.grid(row=3, columnspan=2, sticky="ew")
-        clean.grid(row=3, column=0, pady=PADDING)
-        start.grid(row=3, column=4, padx=PADDING, pady=PADDING)
-        cancel.grid(row=3, column=5, pady=PADDING)
-
-        self.master.bind('u', self.new_url_press)
-        self.master.bind('i', self.new_item_press)
-        self.master.bind('e', self.edit_item_press)
-        self.input.tree.bind('<<TreeviewSelect>>', self.update_widgets)
-        self.input.tree.bind('<Delete>', self.input.tree.delete_item)
-        self.input.tree.bind('<Double-1>', self.edit_item_press)
-
-        self.thread = Thread(target=main)
-
-    def update_widgets(self, *args):
-        """Update widgets based on source selection/quantity."""
-        # Show "Edit Item" button if any item is selected
-        if self.input.tree.focus():
-            self.edit_item.grid(row=1, column=2, pady=PADDING)
-        else:
-            self.edit_item.grid_forget()
-
-        # Update widgets for input frame to show scrollbar if necessary
-        self.input.update_widgets()
-
-    def new_url_press(self, *args):
-        """Open new URL window."""
-        dialog = gui.NewURLWindow()
-        self.wait_window(dialog)
-        self.input.tree.add_item(dialog.get())
-        self.update_widgets()
-
-    def new_item_press(self, *args):
-        """"Open new item window."""
-        dialog = gui.NewItemWindow()
-        self.wait_window(dialog)
-        self.input.tree.add_item(dialog.get())
-        self.update_widgets()
-
-    def edit_item_press(self, *args):
-        """Open edit item window."""
-        selection = self.input.tree.focus()
-        if selection:
-            dialog = gui.EditItemWindow(self.input.tree.item(selection))
-            self.wait_window(dialog)
-            self.input.tree.edit_item(selection, dialog.get())
-            self.update_widgets()
-
-    def settings_press(self):
-        """Open settings window."""
-        global opts
-
-        dialog = gui.SettingsWindow(opts)
-        self.wait_window(dialog)
-        opts = dialog.get_settings()
-
-    def start_press(self):
-        """Start coub process in a separate thread."""
-        download.total = 0
-        download.count = 0
-        download.done = 0
-        container.CANCELLED = False
-        download.CANCELLED = False
-
-        if self.input.tree.sources:
-            opts.input = list(self.input.tree.sources.values())
-            self.thread = Thread(target=main)
-            self.thread.start()
-
-    @staticmethod
-    def cancel_press():
-        """Signal cancelation to coub processing thread."""
-        container.CANCELLED = True
-        download.CANCELLED = True
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # Functions
@@ -373,26 +257,6 @@ async def process(coubs):
     clean_workspace(coubs)
     sys.exit(status.CONN)
 
-
-def overwrite(name, options):
-    """Prompt the user if they want to overwrite an existing coub."""
-    if options.prompt == "yes":
-        return True
-    if options.prompt == "no":
-        return False
-
-    return messagebox.askyesno(title="File exists", icon="question",
-                               message=f"Overwrite file? ({name})")
-
-
-def close_prompt():
-    """Prompt user if main window should be closed during running coub process."""
-    if not win.thread.is_alive():
-        root.destroy()
-    elif messagebox.askokcancel("Quit", "Really quit while a download is running?"):
-        win.cancel_press()
-        root.destroy()
-
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # Main Function
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -442,19 +306,4 @@ if __name__ == '__main__':
 
     set_message_verbosity(opts.verbosity)
 
-    if opts.gui:
-        download.overwrite = overwrite
-        colors.disable()
-
-        root = Tk()
-        root.title("CoubDownloader")
-        root.columnconfigure(0, weight=1)
-        root.rowconfigure(0, weight=1)
-        root.protocol("WM_DELETE_WINDOW", close_prompt)
-
-        ttk.Style().configure("Heading.TLabel", font="TkHeadingFont")
-        win = MainWindow(root)
-
-        root.mainloop()
-    else:
-        main()
+    main()
