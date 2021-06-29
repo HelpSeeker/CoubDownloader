@@ -43,10 +43,6 @@ from utils.options import parse_cli, ConfigError
 # Global Variables
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-# List of directories to scan for config files
-# Only script's dir for now
-CONF_DIRS = [os.path.dirname(os.path.realpath(__file__))]
-
 PADDING = 5
 
 SSLCONTEXT = SSLContext()
@@ -299,7 +295,7 @@ def main():
 # Execute main function
 if __name__ == '__main__':
     try:
-        opts = parse_cli(CONF_DIRS)
+        opts = parse_cli()
     except ConfigError as e:
         err(e, color=colors.ERROR)
         sys.exit(status.OPT)

@@ -92,33 +92,9 @@ class DefaultOptions:
     WRITE_METHOD = "w"
     CHUNK_SIZE = 1024
 
-    def __init__(self, config_dirs):
+    def __init__(self):
         self.error = []
-
-        for d in config_dirs:
-            config_path = os.path.join(d, "coub.conf")
-            if os.path.exists(config_path):
-                self.read_from_config(config_path)
         self.check_values()
-
-    def read_from_config(self, path):
-        """Change default options based on user config file."""
-        try:
-            with open(path, "r") as f:
-                user_settings = [l for l in f
-                                 if "=" in l and not l.startswith("#")]
-        except (OSError, UnicodeError):
-            self.error.append(f"Error reading config file '{path}'!")
-            user_settings = []
-
-        for setting in user_settings:
-            name = setting.split("=")[0].strip()
-            value = setting.split("=")[1].strip()
-            if hasattr(self, name):
-                value = self.guess_string_type(name, value)
-                setattr(self, name, value)
-            else:
-                self.error.append(f"Unknown option in config file: {name}")
 
     def check_values(self):
         """Test defaults for valid ranges and types."""
@@ -162,38 +138,6 @@ class DefaultOptions:
         if errors:
             for e in errors:
                 self.error.append(f"{e[0]}: invalid default value '{e[1]}'")
-
-    @staticmethod
-    def guess_string_type(option, string):
-        """Convert values from config file (all strings) to the right type."""
-        specials = {
-            "None": None,
-            "True": True,
-            "False": False,
-        }
-        # Some options should not undergo integer conversion
-        # Usually options which are supposed to ONLY take strings
-        exceptions = [
-            "PATH",
-            "DURATION",
-            "PREVIEW",
-            "OUTPUT_LIST",
-            "ARCHIVE",
-            "JSON",
-            "NAME_TEMPLATE",
-            "FFMPEG_PATH",
-            "TAG_SEP",
-            "FALLBACK_CHAR",
-        ]
-
-        if string in specials:
-            return specials[string]
-        if option in exceptions:
-            return string
-        try:
-            return int(string)
-        except ValueError:
-            return string
 
 
 class InputHelp(argparse.Action):
@@ -251,7 +195,6 @@ class CustomArgumentParser(argparse.ArgumentParser):
           -k, --keep            keep the individual video/audio parts
           -r, --repeat N        repeat video N times (def: until audio ends)
           -d, --duration TIME   specify max. coub duration (FFmpeg syntax)
-          -g, --gui             start Tkinter GUI
 
         Download options:
           --connections N       max. number of connections (def: {self.get_default("connections")})
@@ -658,7 +601,7 @@ def mapped_input(string):
     return source
 
 
-def parse_cli(config_locations):
+def parse_cli():
     """
     Parse the command line.
 
@@ -666,7 +609,7 @@ def parse_cli(config_locations):
         On Success: Option object
         On Failure: List with error messages (unless argparse exits)
     """
-    defaults = DefaultOptions(config_locations)
+    defaults = DefaultOptions()
     if defaults.error:
         raise ConfigError("\n".join(defaults.error))
 
@@ -713,7 +656,6 @@ def parse_cli(config_locations):
     parser.add_argument("-k", "--keep", action="store_true", default=defaults.KEEP)
     parser.add_argument("-d", "--duration", type=valid_dur,
                         default=defaults.DURATION)
-    parser.add_argument("-g", "--gui", action="store_true")
     # Download Options
     parser.add_argument("--connections", type=positive_int,
                         default=defaults.CONNECTIONS)
@@ -780,18 +722,6 @@ def parse_cli(config_locations):
         chunk_size=defaults.CHUNK_SIZE,
     )
     args = parser.parse_args()
-
-    # Implicitly set GUI mode if no command line options are provided
-    if not sys.argv[1:]:
-        args.gui = True
-    # GUI-specific tweaks
-    if args.gui:
-        args.verbosity = 1
-        args.input = []
-        args.raw_input = []
-        # Currently GUI uses the same default path as CLI (i.e. script location)
-        #if not args.path or args.path == ".":
-        #    args.path = os.path.join(os.path.expanduser("~"), "coubs")
 
     # Test for discrepancies between min/max video quality
     formats = {'med': 0, 'high': 1, 'higher': 2}
