@@ -25,8 +25,7 @@ import os
 import subprocess
 import sys
 
-from utils import colors
-from utils.messaging import err, msg
+import utils.messaging as msg
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # Global Variables
@@ -144,8 +143,8 @@ class Coub:
             f.close()
             os.remove(f"{name}.ext")
         except OSError:
-            err(f"Error: Filename invalid or too long! Falling back to '{self.infos['%id%']}'",
-                color=colors.WARNING)
+            msg.err(f"Error: Filename invalid or too long! Falling back to '{self.infos['%id%']}'",
+                color=msg.WARNING)
             name = self.infos['%id%']
 
         self.name = name
@@ -305,7 +304,7 @@ class Coub:
             subprocess.run(command, env=ENV, check=True,
                            stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         except (subprocess.CalledProcessError, FileNotFoundError):
-            err("Warning: Preview command failed!", color=colors.WARNING)
+            msg.err("Warning: Preview command failed!", color=msg.WARNING)
 
     async def process(self, session, opts):
         """Process a single coub."""
@@ -345,19 +344,19 @@ class Coub:
         count += 1
         progress = f"[{count: >{len(str(total))}}/{total}]"
         if self.unavailable:
-            err(f"  {progress} {self.link: <30} ... ", end="")
-            err("unavailable", color=colors.ERROR)
+            msg.err(f"  {progress} {self.link: <30} ... ", end="")
+            msg.err("unavailable", color=msg.ERROR)
         elif self.corrupted:
-            err(f"  {progress} {self.link: <30} ... ", end="")
-            err("failed to download", color=colors.ERROR)
+            msg.err(f"  {progress} {self.link: <30} ... ", end="")
+            msg.err("failed to download", color=msg.ERROR)
         elif self.exists:
             done += 1
-            msg(f"  {progress} {self.link: <30} ... ", end="")
-            msg("exists", color=colors.WARNING)
+            msg.msg(f"  {progress} {self.link: <30} ... ", end="")
+            msg.msg("exists", color=msg.WARNING)
         else:
             done += 1
-            msg(f"  {progress} {self.link: <30} ... ", end="")
-            msg("finished", color=colors.SUCCESS)
+            msg.msg(f"  {progress} {self.link: <30} ... ", end="")
+            msg.msg("finished", color=msg.SUCCESS)
 
     def delete(self):
         """Delete any leftover streams."""

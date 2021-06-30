@@ -32,11 +32,10 @@ from urllib.request import urlopen
 
 import aiohttp
 
-from utils import colors
 from utils import container
 from utils import download
 from utils import exitcodes as status
-from utils.messaging import err, msg, set_message_verbosity
+import utils.messaging as msg
 from utils.options import parse_cli, ConfigError
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -72,7 +71,7 @@ def check_prereq():
                        stderr=subprocess.DEVNULL,
                        env=ENV, check=False)
     except FileNotFoundError:
-        err("Error: FFmpeg not found!", color=colors.ERROR)
+        msg.err("Error: FFmpeg not found!", color=msg.ERROR)
         sys.exit(status.DEP)
 
 
@@ -82,11 +81,11 @@ def check_connection():
         urlopen("https://coub.com/", context=SSLCONTEXT)
     except urllib.error.URLError as e:
         if isinstance(e.reason, SSLCertVerificationError):
-            err("Certificate verification failed! Please update your CA certificates.",
-                color=colors.ERROR)
+            msg.err("Certificate verification failed! Please update your CA certificates.",
+                color=msg.ERROR)
         else:
-            err("Unable to connect to coub.com! Please check your connection.",
-                color=colors.ERROR)
+            msg.err("Unable to connect to coub.com! Please check your connection.",
+                color=msg.ERROR)
         sys.exit(status.CONN)
 
 
@@ -124,8 +123,8 @@ def parse_input(sources):
         parsed = directs
 
     if parsed:
-        msg("\nReading command line:")
-        msg(f"  {len(parsed)} link{'s' if len(parsed) != 1 else ''} found")
+        msg.msg("\nReading command line:")
+        msg.msg(f"  {len(parsed)} link{'s' if len(parsed) != 1 else ''} found")
 
     # And now all containers
     for c in containers:
@@ -142,16 +141,16 @@ def parse_input(sources):
             c.prepare(rest)
 
         if not c.valid:
-            err("\n", c.error, color=colors.WARNING, sep="")
+            msg.err("\n", c.error, color=msg.WARNING, sep="")
             continue
 
         if isinstance(c, container.LinkList):
-            msg(f"\nReading input list ({c.id}):")
+            msg.msg(f"\nReading input list ({c.id}):")
         else:
-            msg(f"\nDownloading {c.type} info",
+            msg.msg(f"\nDownloading {c.type} info",
                 f": {c.id}"*bool(c.id),
                 f" (sorted by '{c.sort}')"*bool(c.sort), sep="")
-            msg(f"  {c.max_pages} out of {c.pages} pages")
+            msg.msg(f"  {c.max_pages} out of {c.pages} pages")
 
         level = 0
         while opts.retries < 0 or level <= opts.retries:
@@ -164,25 +163,25 @@ def parse_input(sources):
             except (aiohttp.ClientConnectionError, aiohttp.ClientPayloadError):
                 check_connection()
                 level += 1
-                err(f"  Retrying... ({level} of "
+                msg.err(f"  Retrying... ({level} of "
                     f"{opts.retries if opts.retries > 0 else 'Inf'} attempts)",
-                    color=colors.WARNING)
+                    color=msg.WARNING)
 
         if isinstance(c, container.LinkList):
-            msg(f"  {c.length} link{'s' if c.length != 1 else ''} found")
+            msg.msg(f"  {c.length} link{'s' if c.length != 1 else ''} found")
 
         if level > opts.retries >= 0:
-            err(f"  Can't fetch {c.type} info! Please check your connection.",
-                color=colors.ERROR)
+            msg.err(f"  Can't fetch {c.type} info! Please check your connection.",
+                color=msg.ERROR)
             sys.exit(status.CONN)
 
     if not parsed:
-        err("\nNo coub links specified!", color=colors.WARNING)
+        msg.err("\nNo coub links specified!", color=msg.WARNING)
         sys.exit(status.OPT)
 
     if opts.max_coubs and len(parsed) >= opts.max_coubs:
-        msg(f"\nDownload limit ({opts.max_coubs}) reached!",
-            color=colors.WARNING)
+        msg.msg(f"\nDownload limit ({opts.max_coubs}) reached!",
+            color=msg.WARNING)
 
     before = len(parsed)
     parsed = list(set(parsed))      # Weed out duplicates
@@ -191,14 +190,14 @@ def parse_input(sources):
     archived = before - dupes - len(parsed)
     after = len(parsed)
     if dupes or archived:
-        msg(dedent(f"""
+        msg.msg(dedent(f"""
             Results:
               {before} input link{'s' if before != 1 else ''}
               {dupes} duplicate{'s' if dupes != 1 else ''}
               {archived} found in archive file
               {after} final link{'s' if after != 1 else ''}"""))
     else:
-        msg(dedent(f"""
+        msg.msg(dedent(f"""
             Results:
               {after} link{'s' if after != 1 else ''}"""))
 
@@ -210,8 +209,8 @@ def write_list(ids):
     with open(opts.output_list, opts.write_method) as f:
         for i in ids:
             print(f"https://coub.com/view/{i}", file=f)
-    msg(f"\nParsed coubs written to '{opts.output_list}'!",
-        color=colors.SUCCESS)
+    msg.msg(f"\nParsed coubs written to '{opts.output_list}'!",
+        color=msg.SUCCESS)
 
 
 def clean_workspace(coubs):
@@ -225,9 +224,9 @@ async def process(coubs):
     level = 0
     while opts.retries < 0 or opts.retries >= level:
         if level > 0:
-            err(f"Retrying... ({level} of "
+            msg.err(f"Retrying... ({level} of "
                 f"{opts.retries if opts.retries > 0 else 'Inf'} attempts)",
-                color=colors.WARNING)
+                color=msg.WARNING)
 
         try:
             tout = aiohttp.ClientTimeout(total=None)
@@ -238,18 +237,18 @@ async def process(coubs):
             return
         except aiohttp.ClientError as e:
             if isinstance(e, aiohttp.ClientConnectionError):
-                err("\nLost connection to coub.com!", color=colors.ERROR)
+                msg.err("\nLost connection to coub.com!", color=msg.ERROR)
             elif isinstance(e, aiohttp.ClientPayloadError):
-                err("\nReceived malformed data!", color=colors.ERROR)
+                msg.err("\nReceived malformed data!", color=msg.ERROR)
             else:
-                err(f"\nMisc. aiohttp.Clienterror ('{e}')!", color=colors.ERROR)
+                msg.err(f"\nMisc. aiohttp.Clienterror ('{e}')!", color=msg.ERROR)
             check_connection()
             # Reduce the list of coubs to only those yet to finish
             coubs = [c for c in coubs if not c.done]
             level += 1
 
-    err("Ran out of connection retries! Please check your connection.",
-        color=colors.ERROR)
+    msg.err("Ran out of connection retries! Please check your connection.",
+        color=msg.ERROR)
     clean_workspace(coubs)
     sys.exit(status.CONN)
 
@@ -264,7 +263,7 @@ def main():
         resolve_paths()
         check_connection()
 
-        msg("\n### Parse Input ###")
+        msg.msg("\n### Parse Input ###")
         ids = parse_input(opts.input)
 
         if ids:
@@ -274,21 +273,21 @@ def main():
             download.total = len(ids)
             coubs = [download.Coub(i) for i in ids]
 
-            msg("\n### Download Coubs ###\n")
+            msg.msg("\n### Download Coubs ###\n")
             try:
                 asyncio.run(process(coubs), debug=False)
             finally:
                 clean_workspace(coubs)
         else:
-            msg("\nAll coubs present in archive file!", color=colors.WARNING)
+            msg.msg("\nAll coubs present in archive file!", color=msg.WARNING)
 
-        msg("\n### Finished ###\n")
+        msg.msg("\n### Finished ###\n")
 
         # Indicate failure if not all input coubs exist after execution
         if download.done < download.count:
             sys.exit(status.DOWN)
     except KeyboardInterrupt:
-        err("\nUser Interrupt!", color=colors.WARNING)
+        msg.err("\nUser Interrupt!", color=msg.WARNING)
         sys.exit(status.INT)
 
 
@@ -297,9 +296,9 @@ if __name__ == '__main__':
     try:
         opts = parse_cli()
     except ConfigError as e:
-        err(e, color=colors.ERROR)
+        msg.err(e, color=msg.ERROR)
         sys.exit(status.OPT)
 
-    set_message_verbosity(opts.verbosity)
+    msg.set_verbosity(opts.verbosity)
 
     main()
