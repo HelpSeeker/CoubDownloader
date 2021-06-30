@@ -34,13 +34,19 @@ import aiohttp
 
 from utils import container
 from utils import download
-from utils import exitcodes as status
 import utils.messaging as msg
 from utils.options import parse_cli, ConfigError
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # Global Variables
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+ERROR_DEP = 1     # missing required software
+ERROR_OPT = 2     # invalid user-specified option
+ERROR_RUN = 3     # misc. runtime error
+ERROR_DOWN = 4    # failed to download all input links (existence == success)
+ERROR_INT = 5     # early termination was requested by the user (i.e. Ctrl+C)
+ERROR_CONN = 6    # connection either couldn't be established or was lost
 
 PADDING = 5
 
@@ -72,7 +78,7 @@ def check_prereq():
                        env=ENV, check=False)
     except FileNotFoundError:
         msg.err("Error: FFmpeg not found!", color=msg.ERROR)
-        sys.exit(status.DEP)
+        sys.exit(ERROR_DEP)
 
 
 def check_connection():
@@ -86,7 +92,7 @@ def check_connection():
         else:
             msg.err("Unable to connect to coub.com! Please check your connection.",
                 color=msg.ERROR)
-        sys.exit(status.CONN)
+        sys.exit(ERROR_CONN)
 
 
 def resolve_paths():
@@ -173,11 +179,11 @@ def parse_input(sources):
         if level > opts.retries >= 0:
             msg.err(f"  Can't fetch {c.type} info! Please check your connection.",
                 color=msg.ERROR)
-            sys.exit(status.CONN)
+            sys.exit(ERROR_CONN)
 
     if not parsed:
         msg.err("\nNo coub links specified!", color=msg.WARNING)
-        sys.exit(status.OPT)
+        sys.exit(ERROR_OPT)
 
     if opts.max_coubs and len(parsed) >= opts.max_coubs:
         msg.msg(f"\nDownload limit ({opts.max_coubs}) reached!",
@@ -250,7 +256,7 @@ async def process(coubs):
     msg.err("Ran out of connection retries! Please check your connection.",
         color=msg.ERROR)
     clean_workspace(coubs)
-    sys.exit(status.CONN)
+    sys.exit(ERROR_CONN)
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # Main Function
@@ -285,10 +291,10 @@ def main():
 
         # Indicate failure if not all input coubs exist after execution
         if download.done < download.count:
-            sys.exit(status.DOWN)
+            sys.exit(ERROR_DOWN)
     except KeyboardInterrupt:
         msg.err("\nUser Interrupt!", color=msg.WARNING)
-        sys.exit(status.INT)
+        sys.exit(ERROR_INT)
 
 
 # Execute main function
@@ -297,7 +303,7 @@ if __name__ == '__main__':
         opts = parse_cli()
     except ConfigError as e:
         msg.err(e, color=msg.ERROR)
-        sys.exit(status.OPT)
+        sys.exit(ERROR_OPT)
 
     msg.set_verbosity(opts.verbosity)
 
