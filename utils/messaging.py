@@ -22,11 +22,11 @@ along with CoubDownloader.  If not, see <https://www.gnu.org/licenses/>.
 import os
 import sys
 
+from utils.settings import Settings
+
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # Global Variables
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-VERBOSITY = 0
 
 # https://en.wikipedia.org/wiki/ANSI_escape_code#Colors
 ERROR = '\033[31m'      # red
@@ -45,28 +45,14 @@ try:
     colorama.init()
 except ModuleNotFoundError:
     if os.name == "nt":
-        disable_colors()
+        ERROR = ''
+        SUCCESS = ''
+        WARNING = ''
+        RESET = ''
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # Functions
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-def set_verbosity(level):
-    """Adjust global verbosity level."""
-    global VERBOSITY
-
-    VERBOSITY = level
-
-
-def disable_colors():
-    """Disable colorized output by removing escape codes."""
-    global ERROR, WARNING, SUCCESS, RESET
-
-    ERROR = ''
-    SUCCESS = ''
-    WARNING = ''
-    RESET = ''
-
 
 def err(*args, color=None, **kwargs):
     """Print to stderr."""
@@ -82,7 +68,7 @@ def err(*args, color=None, **kwargs):
 
 def msg(*args, color=None, **kwargs):
     """Print to stdout based on verbosity level."""
-    if VERBOSITY < 1:
+    if Settings.get().verbosity < 1:
         return
 
     if color:

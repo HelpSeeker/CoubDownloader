@@ -35,7 +35,7 @@ import aiohttp
 from utils import container
 from utils import download
 import utils.messaging as msg
-from utils.options import parse_cli, ConfigError
+from utils.settings import Settings, parse_cli
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # Global Variables
@@ -63,8 +63,6 @@ if hasattr(sys, 'frozen') and hasattr(sys, '_MEIPASS'):
     else:
         ENV.pop(lp_key, None)   # LD_LIBRARY_PATH was not set
 
-opts = None
-
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # Functions
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -72,7 +70,7 @@ opts = None
 def check_prereq():
     """Test if all required 3rd-party tools are installed."""
     try:
-        subprocess.run([opts.ffmpeg_path],
+        subprocess.run([Settings.get().ffmpeg_path],
                        stdout=subprocess.DEVNULL,
                        stderr=subprocess.DEVNULL,
                        env=ENV, check=False)
@@ -97,9 +95,9 @@ def check_connection():
 
 def resolve_paths():
     """Change into (and create) the destination directory."""
-    if not os.path.exists(opts.path):
-        os.makedirs(opts.path)
-    os.chdir(opts.path)
+    if not os.path.exists(Settings.get().path):
+        os.makedirs(Settings.get().path)
+    os.chdir(Settings.get().path)
 
 
 def remove_container_dupes(containers):
@@ -123,8 +121,8 @@ def parse_input(sources):
     containers = [s for s in sources if not isinstance(s, str)]
     containers = remove_container_dupes(containers)
 
-    if opts.max_coubs:
-        parsed = directs[:opts.max_coubs]
+    if Settings.get().max_coubs:
+        parsed = directs[:Settings.get().max_coubs]
     else:
         parsed = directs
 
@@ -134,15 +132,15 @@ def parse_input(sources):
 
     # And now all containers
     for c in containers:
-        if opts.max_coubs:
-            rest = opts.max_coubs - len(parsed)
+        if Settings.get().max_coubs:
+            rest = Settings.get().max_coubs - len(parsed)
             if not rest:
                 break
         else:
             rest = None
 
         if isinstance(c, container.Channel):
-            c.set_recoubs(opts.recoubs)
+            c.set_recoubs(Settings.get().recoubs)
         if not isinstance(c, container.LinkList):
             c.prepare(rest)
 
@@ -159,24 +157,24 @@ def parse_input(sources):
             msg.msg(f"  {c.max_pages} out of {c.pages} pages")
 
         level = 0
-        while opts.retries < 0 or level <= opts.retries:
+        while Settings.get().retries < 0 or level <= Settings.get().retries:
             try:
                 if isinstance(c, container.LinkList):
                     parsed.extend(asyncio.run(c.process(rest)))
                 else:
-                    parsed.extend(asyncio.run(c.process(opts.connections, rest)))
+                    parsed.extend(asyncio.run(c.process(Settings.get().connections, rest)))
                 break   # Exit loop on successful completion
             except (aiohttp.ClientConnectionError, aiohttp.ClientPayloadError):
                 check_connection()
                 level += 1
                 msg.err(f"  Retrying... ({level} of "
-                    f"{opts.retries if opts.retries > 0 else 'Inf'} attempts)",
+                    f"{Settings.get().retries if Settings.get().retries > 0 else 'Inf'} attempts)",
                     color=msg.WARNING)
 
         if isinstance(c, container.LinkList):
             msg.msg(f"  {c.length} link{'s' if c.length != 1 else ''} found")
 
-        if level > opts.retries >= 0:
+        if level > Settings.get().retries >= 0:
             msg.err(f"  Can't fetch {c.type} info! Please check your connection.",
                 color=msg.ERROR)
             sys.exit(ERROR_CONN)
@@ -185,14 +183,14 @@ def parse_input(sources):
         msg.err("\nNo coub links specified!", color=msg.WARNING)
         sys.exit(ERROR_OPT)
 
-    if opts.max_coubs and len(parsed) >= opts.max_coubs:
-        msg.msg(f"\nDownload limit ({opts.max_coubs}) reached!",
+    if Settings.get().max_coubs and len(parsed) >= Settings.get().max_coubs:
+        msg.msg(f"\nDownload limit ({Settings.get().max_coubs}) reached!",
             color=msg.WARNING)
 
     before = len(parsed)
     parsed = list(set(parsed))      # Weed out duplicates
     dupes = before - len(parsed)
-    parsed = [i for i in parsed if i not in opts.archive_content]
+    parsed = [i for i in parsed if i not in Settings.get().archive]
     archived = before - dupes - len(parsed)
     after = len(parsed)
     if dupes or archived:
@@ -212,10 +210,10 @@ def parse_input(sources):
 
 def write_list(ids):
     """Output parsed links to a list and exit."""
-    with open(opts.output_list, opts.write_method) as f:
+    with open(Settings.get().output_list, Settings.get().write_method) as f:
         for i in ids:
             print(f"https://coub.com/view/{i}", file=f)
-    msg.msg(f"\nParsed coubs written to '{opts.output_list}'!",
+    msg.msg(f"\nParsed coubs written to '{Settings.get().output_list}'!",
         color=msg.SUCCESS)
 
 
@@ -228,17 +226,17 @@ def clean_workspace(coubs):
 async def process(coubs):
     """Process (i.e. download) provided Coub objects."""
     level = 0
-    while opts.retries < 0 or opts.retries >= level:
+    while Settings.get().retries < 0 or Settings.get().retries >= level:
         if level > 0:
             msg.err(f"Retrying... ({level} of "
-                f"{opts.retries if opts.retries > 0 else 'Inf'} attempts)",
+                f"{Settings.get().retries if Settings.get().retries > 0 else 'Inf'} attempts)",
                 color=msg.WARNING)
 
         try:
             tout = aiohttp.ClientTimeout(total=None)
-            conn = aiohttp.TCPConnector(limit=opts.connections, ssl=SSLCONTEXT)
+            conn = aiohttp.TCPConnector(limit=Settings.get().connections, ssl=SSLCONTEXT)
             async with aiohttp.ClientSession(timeout=tout, connector=conn) as s:
-                tasks = [c.process(s, opts) for c in coubs]
+                tasks = [c.process(s) for c in coubs]
                 await asyncio.gather(*tasks)
             return
         except aiohttp.ClientError as e:
@@ -264,47 +262,44 @@ async def process(coubs):
 
 def main():
     """Download all requested coubs."""
-    try:
-        check_prereq()
-        resolve_paths()
-        check_connection()
+    check_prereq()
+    resolve_paths()
+    check_connection()
 
-        msg.msg("\n### Parse Input ###")
-        ids = parse_input(opts.input)
+    msg.msg("\n### Parse Input ###")
+    ids = parse_input(Settings.get().input)
 
-        if ids:
-            if opts.output_list:
-                write_list(ids)
-                sys.exit(0)
-            download.total = len(ids)
-            coubs = [download.Coub(i) for i in ids]
+    if ids:
+        if Settings.get().output_list:
+            write_list(ids)
+            sys.exit(0)
+        download.total = len(ids)
+        coubs = [download.Coub(i) for i in ids]
 
-            msg.msg("\n### Download Coubs ###\n")
-            try:
-                asyncio.run(process(coubs), debug=False)
-            finally:
-                clean_workspace(coubs)
-        else:
-            msg.msg("\nAll coubs present in archive file!", color=msg.WARNING)
+        msg.msg("\n### Download Coubs ###\n")
+        try:
+            asyncio.run(process(coubs), debug=False)
+        finally:
+            clean_workspace(coubs)
+    else:
+        msg.msg("\nAll coubs present in archive file!", color=msg.WARNING)
 
-        msg.msg("\n### Finished ###\n")
+    msg.msg("\n### Finished ###\n")
 
-        # Indicate failure if not all input coubs exist after execution
-        if download.done < download.count:
-            sys.exit(ERROR_DOWN)
-    except KeyboardInterrupt:
-        msg.err("\nUser Interrupt!", color=msg.WARNING)
-        sys.exit(ERROR_INT)
+    # Indicate failure if not all input coubs exist after execution
+    if download.done < download.count:
+        sys.exit(ERROR_DOWN)
 
 
 # Execute main function
 if __name__ == '__main__':
+    parse_cli()
+    # TODO: Exit on settings error
+    #     msg.err(e, color=msg.ERROR)
+    #     sys.exit(ERROR_OPT)
+
     try:
-        opts = parse_cli()
-    except ConfigError as e:
-        msg.err(e, color=msg.ERROR)
-        sys.exit(ERROR_OPT)
-
-    msg.set_verbosity(opts.verbosity)
-
-    main()
+        main()
+    except KeyboardInterrupt:
+        msg.err("\nUser Interrupt!", color=msg.WARNING)
+        sys.exit(ERROR_INT)
