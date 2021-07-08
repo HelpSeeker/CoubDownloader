@@ -5,7 +5,4 @@
 !COPYING
 !README.md
 !coub.py
-!coub-gui.py
-!example.conf
-!/utils/
-!/images/
+!/core/

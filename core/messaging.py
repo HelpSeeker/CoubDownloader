@@ -22,7 +22,7 @@ along with CoubDownloader.  If not, see <https://www.gnu.org/licenses/>.
 import os
 import sys
 
-from utils.settings import Settings
+from core.settings import Settings
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # Global Variables

@@ -25,8 +25,8 @@ import os
 import subprocess
 import sys
 
-import utils.messaging as msg
-from utils.settings import Settings
+import core.messaging as msg
+from core.settings import Settings
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # Global Variables

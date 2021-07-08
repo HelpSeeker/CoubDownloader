@@ -32,10 +32,10 @@ from urllib.request import urlopen
 
 import aiohttp
 
-from utils import container
-from utils import download
-import utils.messaging as msg
-from utils.settings import Settings, parse_cli
+from core import container
+from core import download
+import core.messaging as msg
+from core.settings import Settings, parse_cli
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # Global Variables
