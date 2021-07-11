@@ -1,120 +1,130 @@
-#!/usr/bin/env python3
-
-"""
-Copyright (C) 2018-2020 HelpSeeker <AlmostSerious@protonmail.ch>
-
-This file is part of CoubDownloader.
-
-CoubDownloader is free software: you can redistribute it and/or modify
-it under the terms of the GNU General Public License as published by
-the Free Software Foundation, either version 3 of the License, or
-(at your option) any later version.
-
-CoubDownloader is distributed in the hope that it will be useful,
-but WITHOUT ANY WARRANTY; without even the implied warranty of
-MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
-GNU General Public License for more details.
-
-You should have received a copy of the GNU General Public License
-along with CoubDownloader.  If not, see <https://www.gnu.org/licenses/>.
-"""
+# Copyright (C) 2018-2021 HelpSeeker <AlmostSerious@protonmail.ch>
+#
+# This file is part of CoubDownloader.
+#
+# CoubDownloader is free software: you can redistribute it and/or modify
+# it under the terms of the GNU General Public License as published by
+# the Free Software Foundation, either version 3 of the License, or
+# (at your option) any later version.
+#
+# CoubDownloader is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU General Public License for more details.
+#
+# You should have received a copy of the GNU General Public License
+# along with CoubDownloader.  If not, see <https://www.gnu.org/licenses/>.
 
 import asyncio
 import json
-
-from math import ceil
-from os.path import abspath
-from ssl import SSLContext
-
-import urllib.error
-from urllib.request import urlopen
+import math
+import pathlib
 from urllib.parse import quote as urlquote
 from urllib.parse import unquote as urlunquote
 
-import aiohttp
+from aiohttp import ClientError
 
-# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-# Global Variables
-# ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-PER_PAGE = 25
-RECOUBS = None
-CONTEXT = SSLContext()
-CANCELLED = False
+from core import checker
+from core.settings import Settings
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # Classes
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
+class ContainerUnavailableError(Exception):
+    pass
+
+
+class APIResponseError(Exception):
+    pass
+
+
+class InvalidSortingError(Exception):
+    pass
+
+
 class BaseContainer:
-    """Base class for link containers (timelines)."""
-    type = None
+    type = ""
+    id = ""
+    sort = ""
+    supported = []
 
-    def __init__(self, id_):
-        self.valid = True
-        self.error = ""
-        self.pages = 0
-        self.max_pages = 0
-        self.template = ""
+    # Attempts are done on a per-page level, but the attempt limit is for all pages
+    attempt = 0
 
-        try:
-            self.id, self.sort = id_.split("#")
-        except ValueError:
-            self.id = id_
-            self.sort = None
+    pages = 0
 
+    PER_PAGE = 25
+
+    def __init__(self, id_, sort):
         # Links copied from the browser already have special characters escaped
-        # Using urlquote on them again in the template functions would lead
-        # to invalid templates
-        # Also prettifies messages that show the ID as info
-        self.id = urlunquote(self.id)
+        # Using urlquote again leads to invalid templates
+        self.id = urlunquote(id_)
+        self.sort = sort
 
-    def get_template(self):
-        """Placeholder function, which must be overwritten by subclasses."""
-        self.template = ""
+    def _get_template(self):
+        if self.sort not in self.supported:
+            raise InvalidSortingError from None
 
-    def get_pages(self):
-        """Contact API once to get page count and check validity."""
-        # BaseContainer cannot be invalid at this point, but its ancestors can
-        if not self.valid:
-            return
+        return ""
 
+    async def _fetch_page_count(self, request, session):
         try:
-            with urlopen(self.template, context=CONTEXT) as resp:
-                resp_json = json.loads(resp.read())
-        except urllib.error.HTTPError:
-            self.error = f"Invalid {self.type} ('{self.id}')!"
-            self.valid = False
-            return
+            async with session.get(request) as response:
+                api_json = json.loads(await response.read())
+                if api_json.get("error") is not None:
+                    raise ContainerUnavailableError from None
+                self.pages = api_json.get("total_pages")
+        except ClientError:
+            raise APIResponseError from None
 
-        self.pages = resp_json['total_pages']
+    async def _fetch_api_json(self, request, session):
+        try:
+            async with session.get(request) as response:
+                api_json = await response.read()
+                api_json = json.loads(api_json)
+        except ClientError:
+            api_json = None
 
-    def prepare(self, quantity):
-        """Get all relevant values for processing."""
-        self.get_template()
-        self.get_pages()
+        return api_json
 
+    async def _fetch_page_ids(self, request, session):
+        retries = Settings.get().retries
+        while retries < 0 or self.attempt <= retries:
+            api_json = await self._fetch_api_json(request, session)
+            if api_json:
+                break
+            self.attempt += 1
+
+        if not api_json:
+            raise APIResponseError from None
+
+        ids = []
+        for coub in api_json["coubs"]:
+            if coub["recoub_to"]:
+                c_id = coub["recoub_to"]["permalink"]
+            else:
+                c_id = coub["permalink"]
+
+            if not (checker.in_archive(c_id) or checker.in_session(c_id)):
+                ids.append(c_id)
+
+        return ids
+
+    async def get_ids(self, session, quantity):
+        base_request = self._get_template()
+        await self._fetch_page_count(base_request, session)
+
+        # TODO: Rewrite logic to stop prematurely on quantity instead of limiting pages
+        #       (same for Gyre)
         if quantity:
-            self.max_pages = ceil(quantity/PER_PAGE)
-            if self.pages < self.max_pages:
-                self.max_pages = self.pages
-        else:
-            self.max_pages = self.pages
+            max_pages = math.ceil(quantity/self.PER_PAGE)
+            if self.pages > max_pages:
+                self.pages = max_pages
 
-    async def process(self, connections, quantity):
-        """
-        Parse the coub links from tags, channels, etc.
-
-        The Coub API refers to the list of coubs from a tag, channel,
-        community, etc. as a timeline.
-        """
-        requests = [f"{self.template}&page={p}" for p in range(1, self.max_pages+1)]
-
-        tout = aiohttp.ClientTimeout(total=None)
-        conn = aiohttp.TCPConnector(limit=connections, ssl=CONTEXT)
-        async with aiohttp.ClientSession(timeout=tout, connector=conn) as session:
-            tasks = [parse_page(req, session) for req in requests]
-            ids = await asyncio.gather(*tasks)
+        requests = [f"{base_request}&page={p}" for p in range(1, self.pages+1)]
+        tasks = [self._fetch_page_ids(r, session) for r in requests]
+        ids = await asyncio.gather(*tasks)
         ids = [i for page in ids for i in page]
 
         if quantity:
@@ -122,343 +132,287 @@ class BaseContainer:
         return ids
 
 
+class SingleCoub(BaseContainer):
+    type = "Coub"
+
+    def __init__(self, id_, sort=""):
+        super().__init__(id_, sort)
+
+    # async is unnecessary here, but avoids the need for special treatment
+    async def get_ids(self, session, quantity):
+        # Only here to test if coub exists
+        await self._fetch_page_count(f"https://coub.com/api/v2/coubs/{self.id}", session)
+        return [self.id]
+
+
+class LinkList(BaseContainer):
+    type = "List"
+
+    def __init__(self, id_, sort=""):
+        super().__init__(id_, sort)
+        self.list = pathlib.Path(id_)
+        self.id = self.list.resolve()
+
+    def _valid_list_file(self):
+        # Avoid using path object methods as they always read the whole file
+        with self.list.open("r") as f:
+            _ = f.read(1)
+
+    # async is unnecessary here, but avoids the need for special treatment
+    async def get_ids(self, session, quantity):
+        self._valid_list_file()
+
+        ids = self.list.read_text().splitlines()
+        ids = [i for i in ids if i.startswith("https://coub.com/view/")]
+        ids = [i.replace("https://coub.com/view/", "") for i in ids]
+
+        if quantity:
+            return ids[:quantity]
+        return ids
+
+
 class Channel(BaseContainer):
-    """Store and parse channels."""
-    type = "channel"
+    type = "Channel"
+    supported = ["newest", "likes_count", "views_count", "oldest", "random"]
 
-    def __init__(self, id_):
-        super(Channel, self).__init__(id_)
-        # Available:      most_recent, most_liked, most_viewed, oldest, random
-        # Coub's default: most_recent
-        if not self.sort:
-            self.sort = "most_recent"
-        self.recoubs = None
+    def __init__(self, id_, sort="newest"):
+        super().__init__(id_, sort)
 
-    def set_recoubs(self, recoubs):
-        """Specify how channel recoubs should be handled."""
-        self.recoubs = recoubs
-
-    def get_template(self):
-        """Return API request template for channels."""
-        methods = {
-            'most_recent': "newest",
-            'most_liked': "likes_count",
-            'most_viewed': "views_count",
-            'oldest': "oldest",
-            'random': "random",
-        }
-
+    def _get_template(self):
+        super()._get_template()
         template = f"https://coub.com/api/v2/timeline/channel/{urlquote(self.id)}"
-        template = f"{template}?per_page={PER_PAGE}"
+        template = f"{template}?per_page={self.PER_PAGE}"
 
-        if self.recoubs == 0:
+        if not Settings.get().recoubs:
             template = f"{template}&type=simples"
-        elif self.recoubs == 2:
+        elif Settings.get().recoubs == 2:
             template = f"{template}&type=recoubs"
-        elif self.recoubs is None:
-            self.valid = False
-            self.error = f"Error: Recoub setting for {self.id} not set!"
 
-        if self.sort in methods:
-            template = f"{template}&order_by={methods[self.sort]}"
-        else:
-            self.error = f"Invalid channel sort order '{self.sort}' ({self.id})!"
-            self.valid = False
+        template = f"{template}&order_by={self.sort}"
 
-        self.template = template
+        return template
 
 
 class Tag(BaseContainer):
-    """Store and parse tags."""
-    type = "tag"
+    type = "Tag"
+    supported = ["newest_popular", "likes_count", "views_count", "newest"]
 
-    def __init__(self, id_):
-        super(Tag, self).__init__(id_)
-        # Available:      popular, top, views_count, fresh
-        # Coub's default: popular
-        if not self.sort:
-            self.sort = "popular"
+    def __init__(self, id_, sort="newest_popular"):
+        super().__init__(id_, sort)
 
-    def get_template(self):
-        """Return API request template for tags."""
-        methods = {
-            'popular': "newest_popular",
-            'top': "likes_count",
-            'views_count': "views_count",
-            'fresh': "newest"
-        }
-
+    def _get_template(self):
+        super()._get_template()
         template = f"https://coub.com/api/v2/timeline/tag/{urlquote(self.id)}"
-        template = f"{template}?per_page={PER_PAGE}"
+        template = f"{template}?per_page={self.PER_PAGE}&order_by={self.sort}"
 
-        if self.sort in methods:
-            template = f"{template}&order_by={methods[self.sort]}"
-        else:
-            self.error = f"Invalid tag sort order '{self.sort}' ({self.id})!"
-            self.valid = False
+        return template
 
-        self.template = template
-
-    def get_pages(self):
-        super(Tag, self).get_pages()
+    async def _fetch_page_count(self, request, session):
+        await super()._fetch_page_count(request, session)
         # API limits tags to 99 pages
         if self.pages > 99:
             self.pages = 99
 
 
 class Search(BaseContainer):
-    """Store and parse searches."""
-    type = "search"
+    type = "Search"
+    supported = ["", "likes_count", "views_count", "newest"]
 
-    def __init__(self, id_):
-        super(Search, self).__init__(id_)
-        # Available:      relevance, top, views_count, most_recent
-        # Coub's default: relevance
-        if not self.sort:
-            self.sort = "relevance"
+    def __init__(self, id_, sort=""):
+        if sort == "relevance":
+            sort = ""
+        super().__init__(id_, sort)
 
-    def get_template(self):
-        """Return API request template for coub searches."""
-        methods = {
-            'relevance': None,
-            'top': "likes_count",
-            'views_count': "views_count",
-            'most_recent': "newest"
-        }
-
+    def _get_template(self):
+        super()._get_template()
         template = f"https://coub.com/api/v2/search/coubs?q={urlquote(self.id)}"
-        template = f"{template}&per_page={PER_PAGE}"
+        template = f"{template}&per_page={self.PER_PAGE}"
 
-        if self.sort not in methods:
-            self.error = f"Invalid search sort order '{self.sort}' ({self.id})!"
-            self.valid = False
-        # The default tab on coub.com is labelled "Relevance", but the
-        # default sort order is actually no sort order
-        elif self.sort != "relevance":
-            template = f"{template}&order_by={methods[self.sort]}"
+        if self.sort:
+            template = f"{template}&order_by={self.sort}"
 
-        self.template = template
+        return template
 
 
 class Community(BaseContainer):
-    """Store and parse communities."""
-    type = "community"
+    type = "Community"
+    supported = [
+        "daily",
+        "weekly",
+        "monthly",
+        "quarter",
+        "half",
+        "rising",
+        "fresh",
+        "likes_count",
+        "views_count",
+        "random",
+    ]
 
-    def __init__(self, id_):
-        super(Community, self).__init__(id_)
-        # Available:      hot_daily, hot_weekly, hot_monthly, hot_quarterly,
-        #                 hot_six_months, rising, fresh, top, views_count, random
-        # Coub's default: hot_monthly
-        if not self.sort:
-            if self.id in ("featured", "coub-of-the-day"):
-                self.sort = "recent"
-            else:
-                self.sort = "hot_monthly"
+    def __init__(self, id_, sort="monthly"):
+        super().__init__(id_, sort)
 
-    def get_template(self):
-        """Return API request template for communities."""
-        if self.id == "featured":
-            methods = {
-                'recent': None,
-                'top_of_the_month': "top_of_the_month",
-                'undervalued': "undervalued",
-            }
-            template = "https://coub.com/api/v2/timeline/explore?"
-        elif self.id == "coub-of-the-day":
-            methods = {
-                'recent': None,
-                'top': "top",
-                'views_count': "views_count",
-            }
-            template = "https://coub.com/api/v2/timeline/explore/coub_of_the_day?"
+    def _get_template(self):
+        super()._get_template()
+        template = f"https://coub.com/api/v2/timeline/community/{urlquote(self.id)}"
+
+        if self.sort in ("likes_count", "views_count"):
+            template = f"{template}/fresh?order_by={self.sort}&"
+        elif self.sort == "random":
+            template = f"https://coub.com/api/v2/timeline/random/{self.id}?"
         else:
-            methods = {
-                'hot_daily': "daily",
-                'hot_weekly': "weekly",
-                'hot_monthly': "monthly",
-                'hot_quarterly': "quarter",
-                'hot_six_months': "half",
-                'rising': "rising",
-                'fresh': "fresh",
-                'top': "likes_count",
-                'views_count': "views_count",
-                'random': "random",
-            }
-            template = f"https://coub.com/api/v2/timeline/community/{urlquote(self.id)}"
+            template = f"{template}/{self.sort}?"
 
-        if self.sort not in methods:
-            self.error = f"Invalid community sort order '{self.sort}' ({self.id})!"
-            self.valid = False
-            return
+        template = f"{template}per_page={self.PER_PAGE}"
 
-        if self.id in ("featured", "coub-of-the-day"):
-            if self.sort != "recent":
-                template = f"{template}order_by={methods[self.sort]}&"
-        else:
-            if self.sort in ("top", "views_count"):
-                template = f"{template}/fresh?order_by={methods[self.sort]}&"
-            elif self.sort == "random":
-                template = f"https://coub.com/api/v2/timeline/random/{self.id}?"
-            else:
-                template = f"{template}/{methods[self.sort]}?"
+        return template
 
-        self.template = f"{template}per_page={PER_PAGE}"
-
-    def get_pages(self):
-        super(Community, self).get_pages()
+    async def _fetch_page_count(self, request, session):
+        await super()._fetch_page_count(request, session)
         # API limits communities to 99 pages
         if self.pages > 99:
             self.pages = 99
 
 
+class Featured(Community):
+    type = "Featured"
+    supported = ["", "top_of_the_month", "undervalued"]
+
+    def __init__(self, id_="", sort="recent"):
+        if sort == "recent":
+            sort = ""
+        super().__init__(id_, sort)
+
+    def _get_template(self):
+        super()._get_template()
+        template = "https://coub.com/api/v2/timeline/explore?"
+
+        if self.sort:
+            template = f"{template}order_by={self.sort}&"
+
+        template = f"{template}per_page={self.PER_PAGE}"
+
+        return template
+
+
+class CoubOfTheDay(Community):
+    type = "Coub of the Day"
+    supported = ["", "top", "views_count"]
+
+    def __init__(self, id_="", sort=""):
+        if sort == "recent":
+            sort = ""
+        super().__init__(id_, sort)
+
+    def _get_template(self):
+        super()._get_template()
+        template = "https://coub.com/api/v2/timeline/explore/coub_of_the_day?"
+
+        if self.sort:
+            template = f"{template}order_by={self.sort}&"
+
+        template = f"{template}per_page={self.PER_PAGE}"
+
+        return template
+
+
 class Story(BaseContainer):
-    """Store and parse stories."""
-    type = "story"
+    type = "Story"
+    PER_PAGE = 20
 
-    def __init__(self, id_):
-        super(Story, self).__init__(id_)
-        self.sort = None
+    def __init__(self, id_, sort=""):
+        super().__init__(id_, sort)
 
-    def get_template(self):
+    def _get_template(self):
         # Story URL contains ID + title separated by a dash
         template = f"https://coub.com/api/v2/stories/{self.id.split('-')[0]}/coubs"
-        template = f"{template}?per_page={PER_PAGE}"
+        template = f"{template}?per_page={self.PER_PAGE}"
 
-        self.template = template
+        return template
 
 
 class HotSection(BaseContainer):
-    """Store and parse the hot section."""
-    type = "hot section"
+    type = "Hot Section"
+    supported = [
+        "daily",
+        "weekly",
+        "monthly",
+        "quarter",
+        "half",
+        "rising",
+        "fresh",
+    ]
 
-    def __init__(self, sort=None):
-        super(HotSection, self).__init__("hot")
-        self.id = None
-        self.sort = sort
-        # Available:      hot_daily, hot_weekly, hot_monthly, hot_quarterly,
-        #                 hot_six_months, rising, fresh
-        # Coub's default: hot_monthly
-        if not self.sort:
-            self.sort = "hot_monthly"
 
-    def get_template(self):
-        """Return API request template for Coub's hot section."""
-        methods = {
-            'hot_daily': "daily",
-            'hot_weekly': "weekly",
-            'hot_monthly': "monthly",
-            'hot_quarterly': "quarter",
-            'hot_six_months': "half",
-            'rising': "rising",
-            'fresh': "fresh",
-        }
+    def __init__(self, id_="", sort="monthly"):
+        super().__init__(id_, sort)
 
+    def _get_template(self):
+        super()._get_template()
         template = "https://coub.com/api/v2/timeline/subscriptions"
+        template = f"{template}/{self.sort}?per_page={self.PER_PAGE}"
 
-        if self.sort in methods:
-            template = f"{template}/{methods[self.sort]}"
-        else:
-            self.error = f"Invalid hot section sort order '{self.sort}'!"
-            self.valid = False
+        return template
 
-        template = f"{template}?per_page={PER_PAGE}"
-
-        self.template = template
-
-    def get_pages(self):
-        super(HotSection, self).get_pages()
+    async def _fetch_page_count(self, request, session):
+        await super()._fetch_page_count(request, session)
         # API limits hot section to 99 pages
         if self.pages > 99:
             self.pages = 99
 
 
-class RandomCategory(BaseContainer):
-    """Store and parse the random category."""
-    type = "random"
+class Random(BaseContainer):
+    type = "Random"
+    supported = ["", "top"]
 
-    def __init__(self, sort=None):
-        super(RandomCategory, self).__init__("random")
-        self.id = None
-        self.sort = sort
-        # Available:      popular, top
-        # Coub's default: popular
-        if not self.sort:
-            self.sort = "popular"
+    def __init__(self, id_="", sort=""):
+        if sort == "popular":
+            sort = ""
+        super().__init__(id_, sort)
 
-    def get_template(self):
-        """Return API request template for Coub's random category."""
-        methods = {
-            'popular': None,
-            'top': "top",
-        }
+    def _get_template(self):
+        super()._get_template()
         template = "https://coub.com/api/v2/timeline/explore/random?"
 
-        if self.sort not in methods:
-            self.error = f"Invalid random sort order '{self.sort}'!"
-            self.valid = False
-            return
-        if self.sort == "top":
-            template = f"{template}order_by={methods[self.sort]}&"
+        if self.sort:
+            template = f"{template}order_by={self.sort}&"
 
-        self.template = f"{template}per_page={PER_PAGE}"
+        template = f"{template}per_page={self.PER_PAGE}"
 
-
-class LinkList:
-    """Store and parse link lists."""
-    type = "list"
-
-    def __init__(self, path):
-        self.valid = True
-        self.id = abspath(path)
-        try:
-            with open(self.id, "r") as f:
-                _ = f.read(1)
-        except FileNotFoundError:
-            self.error = f"Input list {self.id} doesn't exist!"
-            self.valid = False
-        except (OSError, UnicodeError):
-            self.error = f"Invalid input list {self.id}!"
-            self.valid = False
-
-        self.sort = None
-        self.length = 0
-
-    async def process(self, quantity):
-        """Parse coub links provided in via an external text file."""
-        with open(self.id, "r") as f:
-            content = f.read()
-
-        # Replace tabs and spaces with newlines
-        # Emulates default wordsplitting in Bash
-        content = content.replace("\t", "\n")
-        content = content.replace(" ", "\n")
-        content = content.splitlines()
-
-        links = [
-            l.partition("https://coub.com/view/")[2]
-            for l in content if "https://coub.com/view/" in l
-        ]
-        self.length = len(links)
-
-        if quantity:
-            return links[:quantity]
-        return links
+        return template
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # Functions
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-async def parse_page(req, session):
-    """Request a single timeline page and parse its content."""
-    if CANCELLED:
-        raise KeyboardInterrupt
+# def create_container(type, id_, sort, quantity):
+#     args = {}
+#     if id_:
+#         args["id"] = id_
+#     if sort:
+#         args["sort"] = sort
+#     if quantity:
+#         args["quantity"] = quantity
 
-    async with session.get(req) as resp:
-        resp_json = await resp.read()
-        resp_json = json.loads(resp_json)
-
-    ids = [
-        c['recoub_to']['permalink'] if c['recoub_to'] else c['permalink']
-        for c in resp_json['coubs']
-    ]
-    return ids
+#     if type == "Coub":
+#         return SingleCoub(**args)
+#     if type == "List":
+#         return LinkList(**args)
+#     if type == "Channel":
+#         return Channel(**args)
+#     if type == "Tag":
+#         return Tag(**args)
+#     if type == "Search":
+#         return Search(**args)
+#     if type == "Community":
+#         return Community(**args)
+#     if type == "Featured":
+#         return Featured(**args)
+#     if type == "Coub of the Day":
+#         return CoubOfTheDay(**args)
+#     if type == "Story":
+#         return Story(**args)
+#     if type == "Hot Section":
+#         return HotSection(**args)
+#     if type == "Random":
+#         return Random(**args)

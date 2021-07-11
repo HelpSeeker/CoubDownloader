@@ -15,15 +15,12 @@
 # You should have received a copy of the GNU General Public License
 # along with CoubDownloader.  If not, see <https://www.gnu.org/licenses/>.
 
-from fnmatch import fnmatch
 import os
 import pathlib
 from ssl import SSLContext
 import subprocess
 import sys
 from textwrap import dedent
-
-from core import container
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # Classes
@@ -32,6 +29,7 @@ from core import container
 class DefaultSettings:
 
     def __init__(self):
+        # TODO: Add descriptions for allowed values, etc. again
         self._verbosity = 1
         self._prompt = None
         self._path = pathlib.Path().resolve()
@@ -54,11 +52,10 @@ class DefaultSettings:
         # preview defaults
         self._preview = None
         # misc. defaults
-        self._a_only = False
-        self._v_only = False
+        self._audio = True
+        self._video = True
         self._output_list = None
-        self._archive = set()
-        self._archive_path = None
+        self._archive = None
         self._json = None
         # output defaults
         self._merge_ext = "mkv"
@@ -69,6 +66,7 @@ class DefaultSettings:
         self._fallback_char = "-"
         self._write_method = "w"
         self._chunk_size = 1024
+        self._allow_unicode = True
 
         self.input = []
 
@@ -218,7 +216,7 @@ class Settings:
         try:
             value = int(value)
             if value < 1:
-                raise ConfigurationError("nothing to do with less than one coub to download") from None
+                raise ConfigurationError("quantity limit must be >0") from None
         except ValueError:
             raise ConfigurationError("quantity limit must be an interger") from None
 
@@ -248,7 +246,9 @@ class Settings:
     @v_max.setter
     def v_max(self, value):
         if value not in ["higher", "high", "med"]:
-            raise ConfigurationError("max video quality must be 'higher', 'high' or 'med'") from None
+            raise ConfigurationError(
+                "max video quality must be 'higher', 'high' or 'med'"
+            ) from None
 
         self._v_max = value
 
@@ -259,7 +259,9 @@ class Settings:
     @v_min.setter
     def v_min(self, value):
         if value not in ["higher", "high", "med"]:
-            raise ConfigurationError("min video quality must be 'higher', 'high' or 'med'") from None
+            raise ConfigurationError(
+                "min video quality must be 'higher', 'high' or 'med'"
+            ) from None
 
         self._v_min = value
 
@@ -296,20 +298,24 @@ class Settings:
         self._preview = value
 
     @property
-    def a_only(self):
-        return self._a_only
+    def audio(self):
+        return self._audio
 
-    @a_only.setter
-    def a_only(self, value):
-        self._a_only = value
+    @audio.setter
+    def audio(self, value):
+        if not (value or self.video):
+            raise ConfigurationError("can't disable both video and audio") from None
+        self._audio = value
 
     @property
-    def v_only(self):
-        return self._v_only
+    def video(self):
+        return self._video
 
-    @v_only.setter
-    def v_only(self, value):
-        self._v_only = value
+    @video.setter
+    def video(self, value):
+        if not (value or self.audio):
+            raise ConfigurationError("can't disable both video and audio") from None
+        self._video = value
 
     @property
     def output_list(self):
@@ -325,24 +331,7 @@ class Settings:
 
     @archive.setter
     def archive(self, value):
-        # TODO: Change archive path from string to pathlib.Path
-        self.archive_path = value
-        try:
-            with open(self.archive_path, "r") as f:
-                self._archive = {l.strip() for l in f}
-        except FileNotFoundError:
-            pass
-        except (OSError, UnicodeError):
-            # TODO: Look up exception types
-            raise ConfigurationError("unable to open archive file") from None
-
-    @property
-    def archive_path(self):
-        return self._archive_path
-
-    @archive_path.setter
-    def archive_path(self, value):
-        self._archive_path = value
+        self._archive = pathlib.Path(value).resolve()
 
     @property
     def json(self):
@@ -414,6 +403,14 @@ class Settings:
         self._chunk_size = value
 
     @property
+    def allow_unicode(self):
+        return self._allow_unicode
+
+    @allow_unicode.setter
+    def allow_unicode(self, value):
+        self._allow_unicode = value
+
+    @property
     def context(self):
         return self._context
 
@@ -439,6 +436,8 @@ class ConfigurationError(Exception):
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # Functions
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+# TODO: Update help texts to reflect featured/coub of the day as own switch
 
 def print_help():
     print(dedent(f"""\
@@ -628,30 +627,30 @@ def print_help_input():
           Supported sort orders
           ---------------------
 
-            Channels:         most_recent (default)
-                              most_liked
-                              most_viewed
+            Channels:         newest (default)
+                              likes_count
+                              views_count
                               oldest
                               random
 
             Searches:         relevance (default)
-                              top
+                              likes_count
                               views_count
-                              most_recent
+                              newest
 
-            Tags:             popular (default)
-                              top
+            Tags:             newest_popular (default)
+                              likes_count
                               views_count
-                              fresh
+                              newest
 
-            Communities:      hot_daily
-                              hot_weekly
-                              hot_monthly (default)
-                              hot_quarterly
-                              hot_six_months
+            Communities:      daily
+                              weekly
+                              monthly (default)
+                              quarter
+                              half
                               rising
                               fresh
-                              top
+                              likes_count
                               views_count
                               random
 
@@ -663,11 +662,11 @@ def print_help_input():
             (community)       top
                               views_count
 
-            Hot section:      hot_daily
-                              hot_weekly
-                              hot_monthly (default)
-                              hot_quarterly
-                              hot_six_months
+            Hot section:      daily
+                              weekly
+                              monthly (default)
+                              quarter
+                              half
                               rising
                               fresh
 
@@ -677,6 +676,8 @@ def print_help_input():
 
 
 def parse_cli():
+    from core import container
+
     settings = Settings.get()
 
     needs_value = [
@@ -701,39 +702,65 @@ def parse_cli():
         "--ext",
         "-o", "--output",
     ]
+    supports_sort = [
+        "-c", "--channel",
+        "-t", "--tag",
+        "-e", "--search",
+        "-m", "--community",
+    ]
+    special_sort_items = [
+        "--hot#",
+        "--random#",
+        "--featured#",
+        "--coub-of-the-day#"
+    ]
 
     treat_as_input = False
     i = 1
     while i < len(sys.argv):
         option = sys.argv[i]
+        args = {}   # Container arguments dict
+
         if option in needs_value and not treat_as_input:
             try:
                 value = sys.argv[i+1]
+                args["id_"] = value
             except IndexError:
                 raise ConfigurationError(f"missing value for '{option}'") from None
             i += 2
         else:
             i += 1
 
+        if option in supports_sort and "#" in value:
+            args["id_"], args["sort"] = value.split("#")
+
+        for item in special_sort_items:
+            if option.startswith(item):
+                option, args["sort"] = option.split("#")
+
         # Input
-        if treat_as_input or not fnmatch(option, "-*"):
-            settings.input.append(option)
-        elif option in ("-i", "--id"):
-            settings.input.append(value)
-        # elif option in ("-l", "--list"):
-        #     settings.input.append(container.LinkList(value))
-        # elif option in ("-c", "--channel"):
-        #     settings.input.append(container.Channel(value))
-        # elif option in ("-t", "--tag"):
-        #     settings.input.append(container.Tag(value))
-        # elif option in ("-e", "--search"):
-        #     settings.input.append(container.Search(value))
-        # elif option in ("-m", "--community",):
-        #     settings.input.append(container.Community(value))
-        # Hot section selection doesn't have an argument, so the option
-        # itself can come with a sort order attached
-        # elif fnmatch(option, "--hot*"):
-        #     settings.input.append(container.HotSection(option))
+        # if treat_as_input or not option.startswith("-"):
+        #     settings.input.append(option)
+        if option in ("-i", "--id"):
+            settings.input.append(container.SingleCoub(**args))
+        elif option in ("-l", "--list"):
+            settings.input.append(container.LinkList(**args))
+        elif option in ("-c", "--channel"):
+            settings.input.append(container.Channel(**args))
+        elif option in ("-t", "--tag"):
+            settings.input.append(container.Tag(**args))
+        elif option in ("-e", "--search"):
+            settings.input.append(container.Search(**args))
+        elif option in ("-m", "--community",):
+            settings.input.append(container.Community(**args))
+        elif option.startswith("--hot"):
+            settings.input.append(container.HotSection(**args))
+        elif option.startswith("--random"):
+            settings.input.append(container.Random(**args))
+        elif option.startswith("--featured"):
+            settings.input.append(container.Featured(**args))
+        elif option.startswith("--coub-of-the-day"):
+            settings.input.append(container.CoubOfTheDay(**args))
         elif option in ("--input-help",):
             print_help_input()
             sys.exit(0)
@@ -785,11 +812,11 @@ def parse_cli():
             settings.share = True
         # Channel options
         elif option in ("--recoubs",):
-            settings.recoubs = True
+            settings.recoubs = 1
         elif option in ("--no-recoubs",):
-            settings.recoubs = False
+            settings.recoubs = 0
         elif option in ("--only-recoubs",):
-            settings.only_recoubs = True
+            settings.recoubs = 2
         # Preview options
         elif option in ("--preview",):
             settings.preview = True
@@ -798,9 +825,9 @@ def parse_cli():
             settings.preview = False
         # Misc options
         elif option in ("--audio-only",):
-            settings.a_only = True
+            settings.video = False
         elif option in ("--video-only",):
-            settings.v_only = True
+            settings.audio = False
         elif option in ("--write-list",):
             settings.out_file = value
         elif option in ("--use-archive",):
