@@ -367,7 +367,6 @@ class Settings:
 
     @name_template.setter
     def name_template(self, value):
-        # TODO: Port over Gyre string check
         self._name_template = value
 
     @property

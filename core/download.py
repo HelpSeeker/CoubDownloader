@@ -247,7 +247,6 @@ class Coub:
                     self._log_archive_entry()
                 if Settings.get().json:
                     self._log_infos()
-                # TODO: Print proper progress messages
                 done += 1
                 msg.msg(
                     f"  [{done: >{len(str(total))}}/{total}] "
