@@ -148,12 +148,22 @@ def clean_workspace():
     for file in Settings.get().path.glob("*.gyre"):
         file.unlink()
 
+
+def custom_exception_ignorer(loop, context):
+    if isinstance(context.exception, KeyboardInterrupt):
+        pass
+    else:
+        loop.default_exception_handler(context)
+
+
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # Main Function
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 async def main():
     """Download all requested coubs."""
+    asyncio.get_running_loop().set_exception_handler(custom_exception_ignorer)
+
     # TODO: Move error handling outside of main
     try:
         parse_cli()
