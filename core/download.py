@@ -24,7 +24,7 @@ import unicodedata
 
 from aiohttp import ClientError
 
-from core.messaging import msg, err
+import core.messaging as msg
 from core.settings import Settings
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -248,24 +248,44 @@ class Coub:
                 if Settings.get().json:
                     self._log_infos()
                 # TODO: Print proper progress messages
-                msg(f"https://coub.com/view/{self.id} ... done")
                 done += 1
+                msg.msg(
+                    f"  [{done: >{len(str(total))}}/{total}] "
+                    f"https://coub.com/view/{self.id: <8} ... ",
+                    end="",
+                )
+                msg.msg("finished", color=msg.SUCCESS)
                 break
             except ClientError:
                 attempt += 1
             except CoubUnavailableError:
-                err(f"https://coub.com/view/{self.id} ... unavailable")
                 done += 1
                 errors += 1
+                msg.err(
+                    f"  [{done: >{len(str(total))}}/{total}] "
+                    f"https://coub.com/view/{self.id: <8} ... ",
+                    end="",
+                )
+                msg.err("unavailable", color=msg.ERROR)
                 break
             except CoubExistsError:
-                err(f"https://coub.com/view/{self.id} ... exists")
                 done += 1
+                msg.msg(
+                    f"  [{done: >{len(str(total))}}/{total}] "
+                    f"https://coub.com/view/{self.id: <8} ... ",
+                    end="",
+                )
+                msg.msg("exists", color=msg.WARNING)
                 break
             except CoubCorruptedError:
-                err(f"https://coub.com/view/{self.id} ... corrupted")
                 done += 1
                 errors += 1
+                msg.err(
+                    f"  [{done: >{len(str(total))}}/{total}] "
+                    f"https://coub.com/view/{self.id: <8} ... ",
+                    end="",
+                )
+                msg.err("failed to download", color=msg.ERROR)
                 break
 
         self._clean_up()

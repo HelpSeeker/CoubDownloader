@@ -116,13 +116,13 @@ async def parse_input(session):
                 if not quantity:
                     break
         except container.ContainerUnavailableError:
-            msg.err(f"{item.type}: {item.id} doesn't exist", color=msg.ERROR)
+            msg.err(f"\n{item.type}: {item.id} doesn't exist", color=msg.ERROR)
         except container.APIResponseError:
-            msg.err(f"{item.type}: {item.id} invalid or missing API response", color=msg.ERROR)
+            msg.err(f"\n{item.type}: {item.id} invalid or missing API response", color=msg.ERROR)
         except FileNotFoundError:
-            msg.err(f"{item.id} doesn't exits", color=msg.ERROR)
+            msg.err(f"\n{item.id} doesn't exits", color=msg.ERROR)
         except (OSError, UnicodeError):
-            msg.err(f"{item.id} can't be read", color=msg.ERROR)
+            msg.err(f"\n{item.id} can't be read", color=msg.ERROR)
 
     checker.uninit()
 
@@ -177,6 +177,7 @@ async def main():
 
         if not ids:
             msg.msg("\nNo new coubs!", color=msg.WARNING)
+            msg.msg("\n### Finished ###\n")
             sys.exit(0)
 
         if Settings.get().output_list:
