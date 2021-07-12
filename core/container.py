@@ -142,7 +142,11 @@ class SingleCoub(BaseContainer):
     async def get_ids(self, session, quantity):
         # Only here to test if coub exists
         await self._fetch_page_count(f"https://coub.com/api/v2/coubs/{self.id}", session)
-        return [self.id]
+
+        # TODO: Add check to Gyre
+        if not (checker.in_archive(self.id) or checker.in_session(self.id)):
+            return [self.id]
+        return []
 
 
 class LinkList(BaseContainer):
@@ -165,6 +169,8 @@ class LinkList(BaseContainer):
         ids = self.list.read_text().splitlines()
         ids = [i for i in ids if i.startswith("https://coub.com/view/")]
         ids = [i.replace("https://coub.com/view/", "") for i in ids]
+        # TODO: Add check to Gyre
+        ids = [i for i in ids if not (checker.in_archive(i) or checker.in_session(i))]
 
         if quantity:
             return ids[:quantity]
