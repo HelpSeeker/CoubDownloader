@@ -352,7 +352,6 @@ class Settings:
 
     @property
     def merge_ext(self):
-        # TODO: Add extension support
         return self._merge_ext
 
     @merge_ext.setter
@@ -842,6 +841,8 @@ def parse_cli():
         elif option in ("--use-archive",):
             settings.archive = value
         # Output
+        elif option in ("--ext",):
+            settings.merge_ext = value
         elif option in ("-o", "--output"):
             # The default naming scheme is the same as using %id%
             # but internally the default value is None
