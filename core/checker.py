@@ -34,7 +34,6 @@ def init():
     session = set()
     archive = set()
     if Settings.get().archive and Settings.get().archive.exists():
-        # TODO: Check for errors (also for Gyre)
         archive = set(Settings.get().archive.read_text().splitlines())
 
 

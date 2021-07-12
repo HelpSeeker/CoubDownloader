@@ -331,7 +331,16 @@ class Settings:
 
     @archive.setter
     def archive(self, value):
-        self._archive = pathlib.Path(value).resolve()
+        path = pathlib.Path(value).resolve()
+        try:
+            with path.open("r") as f:
+                _ = f.read(1)
+        except FileNotFoundError:
+            pass
+        except (PermissionError, OSError, UnicodeError):
+            raise ConfigurationError("can't access archive file") from None
+
+        self._archive = path
 
     @property
     def json(self):
@@ -831,7 +840,6 @@ def parse_cli():
         elif option in ("--write-list",):
             settings.out_file = value
         elif option in ("--use-archive",):
-            # TODO: Check for file validity
             settings.archive = value
         # Output
         elif option in ("-o", "--output"):
