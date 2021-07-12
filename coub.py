@@ -168,7 +168,7 @@ async def main():
     try:
         parse_cli()
     except ConfigurationError as error:
-        msg.err(error.cause, color=msg.ERROR)
+        msg.err(f"Error: {error.cause}", color=msg.ERROR)
         sys.exit(ERROR_OPT)
 
     if not Settings.get().input:
