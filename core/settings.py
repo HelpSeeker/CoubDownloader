@@ -718,8 +718,6 @@ def parse_cli():
     special_sort_items = [
         "--hot#",
         "--random#",
-        "--featured#",
-        "--coub-of-the-day#"
     ]
 
     treat_as_input = False
@@ -759,15 +757,16 @@ def parse_cli():
         elif option in ("-e", "--search"):
             settings.input.append(container.Search(**args))
         elif option in ("-m", "--community",):
-            settings.input.append(container.Community(**args))
+            if value.startswith("featured"):
+                settings.input.append(container.Featured(**args))
+            elif value.startswith("coub-of-the-day"):
+                settings.input.append(container.CoubOfTheDay(**args))
+            else:
+                settings.input.append(container.Community(**args))
         elif option.startswith("--hot"):
             settings.input.append(container.HotSection(**args))
         elif option.startswith("--random"):
             settings.input.append(container.Random(**args))
-        elif option.startswith("--featured"):
-            settings.input.append(container.Featured(**args))
-        elif option.startswith("--coub-of-the-day"):
-            settings.input.append(container.CoubOfTheDay(**args))
         elif option in ("--input-help",):
             print_help_input()
             sys.exit(0)

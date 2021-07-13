@@ -281,7 +281,6 @@ class Community(BaseContainer):
 
 
 class Featured(Community):
-    type = "Featured"
     supported = ["", "top_of_the_month", "undervalued"]
 
     def __init__(self, id_="", sort="recent"):
@@ -302,7 +301,6 @@ class Featured(Community):
 
 
 class CoubOfTheDay(Community):
-    type = "Coub of the Day"
     supported = ["", "top", "views_count"]
 
     def __init__(self, id_="", sort=""):
