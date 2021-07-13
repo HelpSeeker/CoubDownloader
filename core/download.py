@@ -173,8 +173,7 @@ class Coub:
         elif self.audio_file.exists():
             exists = self.audio_file
 
-        # TODO: Add overwrite prompt
-        if exists:  # and not Settings.get().overwrite:
+        if exists and not Settings.get().overwrite:
             raise CoubExistsError(exists)
 
     async def _download(self):

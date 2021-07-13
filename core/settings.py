@@ -31,7 +31,7 @@ class DefaultSettings:
     def __init__(self):
         # TODO: Add descriptions for allowed values, etc. again
         self._verbosity = 1
-        self._prompt = None
+        self._overwrite = False
         self._path = pathlib.Path().resolve()
         self._keep = False
         self._repeat = 1000
@@ -114,12 +114,12 @@ class Settings:
         self._verbosity = value
 
     @property
-    def prompt(self):
-        return self._prompt
+    def overwrite(self):
+        return self._overwrite
 
-    @prompt.setter
-    def prompt(self, value):
-        self._prompt = value
+    @overwrite.setter
+    def overwrite(self, value):
+        self._overwrite = value
 
     @property
     def path(self):
@@ -472,9 +472,9 @@ def print_help():
 
         Common options:
           -h, --help            show this help
-          -q, --quiet           suppress all non-error/prompt messages
-          -y, --yes             answer all prompts with yes
-          -n, --no              answer all prompts with no
+          -q, --quiet           suppress all non-error messages
+          -y, --overwrite       overwrite any existing files
+          -n, --no-overwrite    skip any existing files (def)
           -s, --short           disable video looping
           -p, --path PATH       set output destination (def: '{Settings.get().path}')
           -k, --keep            keep the individual video/audio parts
@@ -778,9 +778,9 @@ def parse_cli():
         elif option in ("-q", "--quiet"):
             settings.verbosity = 0
         elif option in ("-y", "--yes"):
-            settings.prompt_answer = "yes"
+            settings.overwrite = True
         elif option in ("-n", "--no"):
-            settings.prompt_answer = "no"
+            settings.overwrite = False
         elif option in ("-s", "--short"):
             settings.repeat = 1
         elif option in ("-p", "--path"):
