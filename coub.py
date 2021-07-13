@@ -150,11 +150,12 @@ def clean_workspace():
 
 
 def custom_exception_ignorer(loop, context):
-    if isinstance(context.exception, KeyboardInterrupt):
+    try:
+        raise context["exception"]
+    except (KeyboardInterrupt, asyncio.exceptions.CancelledError):
         pass
-    else:
+    except:
         loop.default_exception_handler(context)
-
 
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 # Main Function
