@@ -120,9 +120,6 @@ class Coub:
             self.community = "undefined"
 
     def _assemble_name(self):
-        if not Settings.get().name_template:
-            return self.id
-
         name = Settings.get().name_template
         name = name.replace("%id%", self.id)
         name = name.replace("%title%", self.title)
@@ -235,8 +232,7 @@ class Coub:
         attempt = 0
         while retries < 0 or attempt <= retries:
             try:
-                if not (self.video_link or self.audio_link):
-                    await self._fetch_infos()
+                await self._fetch_infos()
                 self._check_existence()
                 await self._download()
                 self._check_integrity()

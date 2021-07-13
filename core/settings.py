@@ -842,21 +842,12 @@ def parse_cli():
         elif option in ("--ext",):
             settings.merge_ext = value
         elif option in ("-o", "--output"):
-            # The default naming scheme is the same as using %id%
-            # but internally the default value is None
-            # So simply don't assign the argument if it's only %id%
-            if value != "%id%":
-                settings.out_format = value
+            settings.out_format = value
         elif option in ("--",):
             treat_as_input = True
         # Unknown options
         else:
             raise ConfigurationError(f"unknown flag '{option}'") from None
-
-    # The default naming scheme is the same as using %id%
-    # but internally the default value is None
-    # if args.name_template == "%id%":
-    #     args.name_template = None
 
 
 # def normalize_link(string):
