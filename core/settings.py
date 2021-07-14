@@ -68,7 +68,7 @@ class DefaultSettings:
         self._chunk_size = 1024
         self._allow_unicode = True
 
-        self.input = []
+        self.input = set()
 
         self._context = SSLContext()
         self._env = dict(os.environ)
@@ -447,6 +447,7 @@ class ConfigurationError(Exception):
 # TODO: Update help texts to reflect featured/coub of the day as own switch
 
 def print_help():
+    # TODO: Show "(def)" based on default value
     print(dedent(f"""\
         CoubDownloader is a simple download script for coub.com
 
@@ -747,26 +748,26 @@ def parse_cli():
         # if treat_as_input or not option.startswith("-"):
         #     settings.input.append(option)
         if option in ("-i", "--id"):
-            settings.input.append(container.SingleCoub(**args))
+            settings.input.add(container.SingleCoub(**args))
         elif option in ("-l", "--list"):
-            settings.input.append(container.LinkList(**args))
+            settings.input.add(container.LinkList(**args))
         elif option in ("-c", "--channel"):
-            settings.input.append(container.Channel(**args))
+            settings.input.add(container.Channel(**args))
         elif option in ("-t", "--tag"):
-            settings.input.append(container.Tag(**args))
+            settings.input.add(container.Tag(**args))
         elif option in ("-e", "--search"):
-            settings.input.append(container.Search(**args))
+            settings.input.add(container.Search(**args))
         elif option in ("-m", "--community",):
             if value.startswith("featured"):
-                settings.input.append(container.Featured(**args))
+                settings.input.add(container.Featured(**args))
             elif value.startswith("coub-of-the-day"):
-                settings.input.append(container.CoubOfTheDay(**args))
+                settings.input.add(container.CoubOfTheDay(**args))
             else:
-                settings.input.append(container.Community(**args))
+                settings.input.add(container.Community(**args))
         elif option.startswith("--hot"):
-            settings.input.append(container.HotSection(**args))
+            settings.input.add(container.HotSection(**args))
         elif option.startswith("--random"):
-            settings.input.append(container.Random(**args))
+            settings.input.add(container.Random(**args))
         elif option in ("--input-help",):
             print_help_input()
             sys.exit(0)

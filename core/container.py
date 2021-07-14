@@ -43,11 +43,12 @@ class InvalidSortingError(Exception):
     pass
 
 
+# TODO: Change type names to lowercase to look nicer in the terminal output
 class BaseContainer:
     type = ""
     id = ""
     sort = ""
-    supported = []
+    supported = set()
 
     # Attempts are done on a per-page level, but the attempt limit is for all pages
     attempt = 0
@@ -61,6 +62,15 @@ class BaseContainer:
         # Using urlquote again leads to invalid templates
         self.id = urlunquote(id_)
         self.sort = sort
+
+    def __eq__(self, other):
+        if isinstance(other, self.__class__):
+            # Not necessary to check type again, as it is a unique class trait
+            return (self.id, self.sort) == (other.id, other.sort)
+        return False
+
+    def __hash__(self):
+        return hash((self.type, self.id, self.sort))
 
     def _get_template(self):
         if self.sort not in self.supported:
@@ -179,7 +189,7 @@ class LinkList(BaseContainer):
 
 class Channel(BaseContainer):
     type = "Channel"
-    supported = ["newest", "likes_count", "views_count", "oldest", "random"]
+    supported = {"newest", "likes_count", "views_count", "oldest", "random"}
 
     def __init__(self, id_, sort="newest"):
         super().__init__(id_, sort)
@@ -201,7 +211,7 @@ class Channel(BaseContainer):
 
 class Tag(BaseContainer):
     type = "Tag"
-    supported = ["newest_popular", "likes_count", "views_count", "newest"]
+    supported = {"newest_popular", "likes_count", "views_count", "newest"}
 
     def __init__(self, id_, sort="newest_popular"):
         super().__init__(id_, sort)
@@ -222,7 +232,7 @@ class Tag(BaseContainer):
 
 class Search(BaseContainer):
     type = "Search"
-    supported = ["", "likes_count", "views_count", "newest"]
+    supported = {"", "likes_count", "views_count", "newest"}
 
     def __init__(self, id_, sort=""):
         if sort == "relevance":
@@ -242,7 +252,7 @@ class Search(BaseContainer):
 
 class Community(BaseContainer):
     type = "Community"
-    supported = [
+    supported = {
         "daily",
         "weekly",
         "monthly",
@@ -253,7 +263,7 @@ class Community(BaseContainer):
         "likes_count",
         "views_count",
         "random",
-    ]
+    }
 
     def __init__(self, id_, sort="monthly"):
         super().__init__(id_, sort)
@@ -281,7 +291,7 @@ class Community(BaseContainer):
 
 
 class Featured(Community):
-    supported = ["", "top_of_the_month", "undervalued"]
+    supported = {"", "top_of_the_month", "undervalued"}
 
     def __init__(self, id_="", sort="recent"):
         if sort == "recent":
@@ -301,7 +311,7 @@ class Featured(Community):
 
 
 class CoubOfTheDay(Community):
-    supported = ["", "top", "views_count"]
+    supported = {"", "top", "views_count"}
 
     def __init__(self, id_="", sort=""):
         if sort == "recent":
@@ -337,7 +347,7 @@ class Story(BaseContainer):
 
 class HotSection(BaseContainer):
     type = "Hot Section"
-    supported = [
+    supported = {
         "daily",
         "weekly",
         "monthly",
@@ -345,7 +355,7 @@ class HotSection(BaseContainer):
         "half",
         "rising",
         "fresh",
-    ]
+    }
 
 
     def __init__(self, id_="", sort="monthly"):
@@ -367,7 +377,7 @@ class HotSection(BaseContainer):
 
 class Random(BaseContainer):
     type = "Random"
-    supported = ["", "top"]
+    supported = {"", "top"}
 
     def __init__(self, id_="", sort=""):
         if sort == "popular":

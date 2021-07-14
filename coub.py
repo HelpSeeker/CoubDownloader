@@ -76,21 +76,6 @@ def check_connection():
         sys.exit(ERROR_CONN)
 
 
-# def remove_container_dupes(containers):
-#     """Remove duplicate containers to avoid unnecessary parsing."""
-#     no_dupes = []
-    # Brute-force sorting
-#     for c in containers:
-#         unique = True
-#         for u in no_dupes:
-#             if (c.type, c.id, c.sort) == (u.type, u.id, u.sort):
-#                 unique = False
-#         if unique or c.type == "random":
-#             no_dupes.append(c)
-
-#     return no_dupes
-
-
 async def parse_input(session):
     checker.init()
 
