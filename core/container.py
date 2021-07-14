@@ -43,7 +43,6 @@ class InvalidSortingError(Exception):
     pass
 
 
-# TODO: Change type names to lowercase to look nicer in the terminal output
 class BaseContainer:
     type = ""
     id = ""
@@ -143,7 +142,7 @@ class BaseContainer:
 
 
 class SingleCoub(BaseContainer):
-    type = "Coub"
+    type = "coub"
 
     def __init__(self, id_, sort=""):
         super().__init__(id_, sort)
@@ -160,7 +159,7 @@ class SingleCoub(BaseContainer):
 
 
 class LinkList(BaseContainer):
-    type = "List"
+    type = "list"
 
     def __init__(self, id_, sort=""):
         super().__init__(id_, sort)
@@ -188,7 +187,7 @@ class LinkList(BaseContainer):
 
 
 class Channel(BaseContainer):
-    type = "Channel"
+    type = "channel"
     supported = {"newest", "likes_count", "views_count", "oldest", "random"}
 
     def __init__(self, id_, sort="newest"):
@@ -210,7 +209,7 @@ class Channel(BaseContainer):
 
 
 class Tag(BaseContainer):
-    type = "Tag"
+    type = "tag"
     supported = {"newest_popular", "likes_count", "views_count", "newest"}
 
     def __init__(self, id_, sort="newest_popular"):
@@ -231,8 +230,8 @@ class Tag(BaseContainer):
 
 
 class Search(BaseContainer):
-    type = "Search"
     supported = {"", "likes_count", "views_count", "newest"}
+    type = "search"
 
     def __init__(self, id_, sort=""):
         if sort == "relevance":
@@ -251,7 +250,7 @@ class Search(BaseContainer):
 
 
 class Community(BaseContainer):
-    type = "Community"
+    type = "community"
     supported = {
         "daily",
         "weekly",
@@ -331,7 +330,7 @@ class CoubOfTheDay(Community):
 
 
 class Story(BaseContainer):
-    type = "Story"
+    type = "story"
     PER_PAGE = 20
 
     def __init__(self, id_, sort=""):
@@ -346,7 +345,7 @@ class Story(BaseContainer):
 
 
 class HotSection(BaseContainer):
-    type = "Hot Section"
+    type = "Hot section"
     supported = {
         "daily",
         "weekly",
@@ -376,8 +375,8 @@ class HotSection(BaseContainer):
 
 
 class Random(BaseContainer):
-    type = "Random"
     supported = {"", "top"}
+    type = "random coubs"
 
     def __init__(self, id_="", sort=""):
         if sort == "popular":
