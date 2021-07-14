@@ -230,12 +230,10 @@ class Tag(BaseContainer):
 
 
 class Search(BaseContainer):
-    supported = {"", "likes_count", "views_count", "newest"}
     type = "search"
+    supported = {"relevance", "likes_count", "views_count", "newest"}
 
-    def __init__(self, id_, sort=""):
-        if sort == "relevance":
-            sort = ""
+    def __init__(self, id_, sort="relevance"):
         super().__init__(id_, sort)
 
     def _get_template(self):
@@ -243,7 +241,7 @@ class Search(BaseContainer):
         template = f"https://coub.com/api/v2/search/coubs?q={urlquote(self.id)}"
         template = f"{template}&per_page={self.PER_PAGE}"
 
-        if self.sort:
+        if self.sort != "relevance":
             template = f"{template}&order_by={self.sort}"
 
         return template
@@ -290,18 +288,16 @@ class Community(BaseContainer):
 
 
 class Featured(Community):
-    supported = {"", "top_of_the_month", "undervalued"}
+    supported = {"recent", "top_of_the_month", "undervalued"}
 
     def __init__(self, id_="", sort="recent"):
-        if sort == "recent":
-            sort = ""
         super().__init__(id_, sort)
 
     def _get_template(self):
         super()._get_template()
         template = "https://coub.com/api/v2/timeline/explore?"
 
-        if self.sort:
+        if self.sort != "recent":
             template = f"{template}order_by={self.sort}&"
 
         template = f"{template}per_page={self.PER_PAGE}"
@@ -310,18 +306,16 @@ class Featured(Community):
 
 
 class CoubOfTheDay(Community):
-    supported = {"", "top", "views_count"}
+    supported = {"recent", "top", "views_count"}
 
-    def __init__(self, id_="", sort=""):
-        if sort == "recent":
-            sort = ""
+    def __init__(self, id_="", sort="recent"):
         super().__init__(id_, sort)
 
     def _get_template(self):
         super()._get_template()
         template = "https://coub.com/api/v2/timeline/explore/coub_of_the_day?"
 
-        if self.sort:
+        if self.sort != "recent":
             template = f"{template}order_by={self.sort}&"
 
         template = f"{template}per_page={self.PER_PAGE}"
@@ -375,19 +369,17 @@ class HotSection(BaseContainer):
 
 
 class Random(BaseContainer):
-    supported = {"", "top"}
     type = "random coubs"
+    supported = {"popular", "top"}
 
-    def __init__(self, id_="", sort=""):
-        if sort == "popular":
-            sort = ""
+    def __init__(self, id_="", sort="popular"):
         super().__init__(id_, sort)
 
     def _get_template(self):
         super()._get_template()
         template = "https://coub.com/api/v2/timeline/explore/random?"
 
-        if self.sort:
+        if self.sort != "popular":
             template = f"{template}order_by={self.sort}&"
 
         template = f"{template}per_page={self.PER_PAGE}"
