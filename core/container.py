@@ -390,34 +390,35 @@ class Random(BaseContainer):
 # Functions
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-# def create_container(type, id_, sort, quantity):
-#     args = {}
-#     if id_:
-#         args["id"] = id_
-#     if sort:
-#         args["sort"] = sort
-#     if quantity:
-#         args["quantity"] = quantity
+def create_container(type_, id_, sort):
+    args = {}
+    if id_:
+        args["id_"] = id_
+    if sort:
+        args["sort"] = sort
 
-#     if type == "Coub":
-#         return SingleCoub(**args)
-#     if type == "List":
-#         return LinkList(**args)
-#     if type == "Channel":
-#         return Channel(**args)
-#     if type == "Tag":
-#         return Tag(**args)
-#     if type == "Search":
-#         return Search(**args)
-#     if type == "Community":
-#         return Community(**args)
-#     if type == "Featured":
-#         return Featured(**args)
-#     if type == "Coub of the Day":
-#         return CoubOfTheDay(**args)
-#     if type == "Story":
-#         return Story(**args)
-#     if type == "Hot Section":
-#         return HotSection(**args)
-#     if type == "Random":
-#         return Random(**args)
+    # TODO: Error handling for container creation
+    if type_ == "coub":
+        return SingleCoub(**args)
+    if type_ == "list":
+        return LinkList(**args)
+    if type_ == "channel":
+        return Channel(**args)
+    if type_ == "tag":
+        return Tag(**args)
+    if type_ == "search":
+        return Search(**args)
+    if type_ == "community":
+        if id_ == "featured":
+            del args["id_"]
+            return Featured(**args)
+        if id_ == "coub-of-the-day":
+            del args["id_"]
+            return CoubOfTheDay(**args)
+        return Community(**args)
+    if type_ == "story":
+        return Story(**args)
+    if type_ == "Hot section":
+        return HotSection(**args)
+    if type_ == "random coubs":
+        return Random(**args)

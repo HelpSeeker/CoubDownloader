@@ -684,7 +684,7 @@ def print_help_input():
 
 
 def parse_cli():
-    from core import container
+    from core.container import create_container
 
     settings = Settings.get()
 
@@ -725,12 +725,11 @@ def parse_cli():
     i = 1
     while i < len(sys.argv):
         option = sys.argv[i]
-        args = {}   # Container arguments dict
+        id_ = sort = None
 
         if option in needs_value and not treat_as_input:
             try:
-                value = sys.argv[i+1]
-                args["id_"] = value
+                id_ = value = sys.argv[i+1]
             except IndexError:
                 raise ConfigurationError(f"missing value for '{option}'") from None
             i += 2
@@ -738,36 +737,31 @@ def parse_cli():
             i += 1
 
         if option in supports_sort and "#" in value:
-            args["id_"], args["sort"] = value.split("#")
+            id_, sort = value.split("#")
 
         for item in special_sort_items:
             if option.startswith(item):
-                option, args["sort"] = option.split("#")
+                option, sort = option.split("#")
 
         # Input
-        # if treat_as_input or not option.startswith("-"):
-        #     settings.input.append(option)
-        if option in ("-i", "--id"):
-            settings.input.add(container.SingleCoub(**args))
+        if treat_as_input or not option.startswith("-"):
+            settings.input.add(create_container(*map_raw_input(option)))
+        elif option in ("-i", "--id"):
+            settings.input.add(create_container("coub", id_, sort))
         elif option in ("-l", "--list"):
-            settings.input.add(container.LinkList(**args))
+            settings.input.add(create_container("list", id_, sort))
         elif option in ("-c", "--channel"):
-            settings.input.add(container.Channel(**args))
+            settings.input.add(create_container("channel", id_, sort))
         elif option in ("-t", "--tag"):
-            settings.input.add(container.Tag(**args))
+            settings.input.add(create_container("tag", id_, sort))
         elif option in ("-e", "--search"):
-            settings.input.add(container.Search(**args))
+            settings.input.add(create_container("search", id_, sort))
         elif option in ("-m", "--community",):
-            if value.startswith("featured"):
-                settings.input.add(container.Featured(**args))
-            elif value.startswith("coub-of-the-day"):
-                settings.input.add(container.CoubOfTheDay(**args))
-            else:
-                settings.input.add(container.Community(**args))
+            settings.input.add(create_container("community", id_, sort))
         elif option.startswith("--hot"):
-            settings.input.add(container.HotSection(**args))
+            settings.input.add(create_container("Hot section", id_, sort))
         elif option.startswith("--random"):
-            settings.input.add(container.Random(**args))
+            settings.input.add(create_container("random coubs", id_, sort))
         elif option in ("--input-help",):
             print_help_input()
             sys.exit(0)
@@ -851,156 +845,98 @@ def parse_cli():
             raise ConfigurationError(f"unknown flag '{option}'") from None
 
 
-# def normalize_link(string):
-#     """Format link to guarantee strict adherence to https://coub.com/<info>#<sort>"""
-#     to_replace = {
-#         'channel': {
-#             '/coubs': None,
-#             '/reposts': None,
-#             '/stories': None,
-#         },
-#         'tag': {
-#             '/likes': "top",
-#             '/views': "views_count",
-#             '/fresh': "fresh"
-#         },
-#         'search': {
-#             '/likes': "top",
-#             '/views': "views_count",
-#             '/fresh': "most_recent",
-#             '/channels': None,
-#         },
-#         'community': {
-#             '/rising': "rising",
-#             '/fresh': "fresh",
-#             '/top': "top",
-#             '/views': "views_count",
-#             '/random': "random",
-#         },
-#         'featured': {
-#             'featured/coubs/top_of_the_month': "top_of_the_month",
-#             'featured/coubs/undervalued': "undervalued",
-#             'featured/stories': None,
-#             'featured/channels': None,
-#             'featured': "recent",
-#         },
-#         'random': {
-#             '/top': "top",
-#         },
-#     }
+def map_raw_input(string):
+    if pathlib.Path(string).exists():
+        return ("list", string, None)
 
-#     try:
-#         link, sort = string.split("#")
-#     except ValueError:
-#         link = string
-#         sort = None
+    sort_map = {
+        "channel": {
+            "/coubs": None,
+            "/reposts": None,
+            "/stories": None,
+        },
+        "search": {
+            "/likes": "likes_count",
+            "/views": "views_count",
+            "/fresh": "newest",
+            "/channels": None,
+        },
+        "tag": {
+            "/likes": "likes_count",
+            "/views": "views_count",
+            "/fresh": "newest"
+        },
+        "community": {
+            "/rising": "rising",
+            "/fresh": "fresh",
+            "/top": "likes_count",
+            "/views": "views_count",
+            "/random": "random",
+            # The following are special values for the featured community
+            "/coubs/top_of_the_month": "top_of_the_month",
+            "/coubs/undervalued": "undervalued",
+            "/stories": None,
+            "/channels": None,
+        },
+        "Hot Section": {
+            "/rising": "rising",
+            "/fresh": "fresh",
+            "/hot": "monthly",
+        },
+        "Random": {
+            "/top": "top",
+        },
+    }
 
-#     info = link.rpartition("coub.com")[2]
-#     info = info.strip("/")
+    # Shorten URL for easier parsing
+    url = string.strip(" /").lstrip("htps:/")
 
-#     if "tags/" in info:
-#         for r in to_replace['tag']:
-#             parts = info.partition(r)
-#             if parts[1]:
-#                 if not sort:
-#                     sort = to_replace['tag'][r]
-#                 info = parts[0]
-#     If search is followed by ?q= then it shouldn't have any suffixes anyway
-#     elif "search/" in info:
-#         for r in to_replace['search']:
-#             parts = info.partition(r)
-#             if parts[1]:
-#                 if not sort:
-#                     sort = to_replace['search'][r]
-#                 info = f"{parts[0]}{parts[2]}"
-#     elif "community/" in info:
-#         for r in to_replace['community']:
-#             parts = info.partition(r)
-#             if parts[1]:
-#                 if not sort:
-#                     sort = to_replace['community'][r]
-#                 info = parts[0]
-#     elif "stories/" in info:
-#         pass
-#     elif "featured" in info:
-#         for r in to_replace['featured']:
-#             parts = info.partition(r)
-#             if parts[1]:
-#                 if not sort:
-#                     sort = to_replace['featured'][r]
-#                 info = "community/featured"
-#     elif "random" in info:
-#         for r in to_replace['random']:
-#             parts = info.partition(r)
-#             if parts[1]:
-#                 if not sort:
-#                     sort = to_replace['random'][r]
-#                 info = parts[0]
-#     These are the 2 special cases for the hot section
-#     elif info in ("rising", "fresh"):
-#         if not sort:
-#             sort = info
-#         info = ""
-#     else:
-#         for r in to_replace['channel']:
-#             parts = info.partition(r)
-#             if parts[1]:
-#                 if not sort:
-#                     sort = to_replace['channel'][r]
-#                 info = parts[0]
+    # Type detection
+    if url.startswith("coub.com/view"):
+        type_ = "coub"
+    elif url.startswith("coub.com/search"):
+        type_ = "search"
+    elif url.startswith("coub.com/tags"):
+        type_ = "tag"
+    elif url.startswith(("coub.com/community/featured", "coub.com/featured")):
+        type_ = "community"
+        id_ = "featured"
+    elif url.startswith("coub.com/community/coub-of-the-day"):
+        type_ = "community"
+        id_ = "coub-of-the-day"
+    elif url.startswith("coub.com/community"):
+        type_ = "community"
+    elif url.startswith("coub.com/stories"):
+        type_ = "story"
+    elif url.startswith("coub.com/random"):
+        type_ = "random coubs"
+    elif url in ["coub.com", "coub.com/rising", "coub.com/fresh", "coub.com/hot"]:
+        type_ = "Hot section"
+    else:
+        type_ = "channel"
 
-#     if info:
-#         normalized = f"https://coub.com/{info}"
-#     else:
-#         normalized = "https://coub.com"
-#     if sort:
-#         normalized = f"{normalized}#{sort}"
+    # Sort detection
+    sort = None
+    if type_ in sort_map:
+        for suffix in sort_map[type_]:
+            # Despite its name, this string isn't necessarily at the very end (e.g. searches)
+            if suffix in url:
+                sort = sort_map[type_][suffix]
+                url = url.replace(suffix, "")
 
-#     return normalized
+    # ID detection
+    id_ = None
+    if type_ == "coub":
+        id_ = url.partition("coub.com/view/")[2]
+    elif type_ == "channel":
+        id_ = url.partition("coub.com/")[2]
+    elif type_ == "search":
+        id_ = url.partition("coub.com/search?q=")[2]
+    elif type_ == "tag":
+        id_ = url.partition("coub.com/tags/")[2]
+    elif type_ == "community" and not id_:
+        id_ = url.partition("coub.com/community/")[2]
+    elif type_ == "story":
+        id_ = url.partition("coub.com/stories/")[2]
 
-
-# def mapped_input(string):
-#     """Convert string provided by parse_cli() to valid input source."""
-#     Categorize existing paths as lists
-#     Otherwise the paths would be forced into a coub link like form
-#     which obviously leads to garbled nonsense
-#     if os.path.exists(string):
-#         return container.LinkList(string)
-
-#     link = normalize_link(string)
-
-#     if "https://coub.com/view/" in link:
-#         source = link.partition("https://coub.com/view/")[2]
-#     elif "https://coub.com/tags/" in link:
-#         name = link.partition("https://coub.com/tags/")[2]
-#         source = container.Tag(name)
-#     elif "https://coub.com/search?q=" in link:
-#         term = link.partition("https://coub.com/search?q=")[2]
-#         source = container.Search(term)
-#     elif "https://coub.com/community/" in link:
-#         name = link.partition("https://coub.com/community/")[2]
-#         source = container.Community(name)
-#     elif "https://coub.com/stories/" in link:
-#         name = link.partition("https://coub.com/stories/")[2]
-#         source = container.Story(name)
-#     elif "https://coub.com/random" in link:
-#         try:
-#             _, sort = link.split("#")
-#         except ValueError:
-#             sort = None
-#         source = container.RandomCategory(sort)
-#     elif "https://coub.com/hot" in link or \
-#          "https://coub.com#" in link or \
-#          link.strip("/") == "https://coub.com":
-#         try:
-#             _, sort = link.split("#")
-#         except ValueError:
-#             sort = None
-#         source = container.HotSection(sort)
-#     Unfortunately channel URLs don't have any special characteristics
-#     and are basically the fallthrough link type
-#     else:
-#         name = link.partition("https://coub.com/")[2]
-#         source = container.Channel(name)
-
-#     return source
+    return (type_, id_, sort)
