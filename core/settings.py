@@ -311,7 +311,8 @@ class Settings:
 
     @output_list.setter
     def output_list(self, value):
-        self._output_list = value
+        # We're gonna trust the user not to output to a location without write permission
+        self._output_list = pathlib.Path(value).resolve()
 
     @property
     def archive(self):
@@ -325,6 +326,7 @@ class Settings:
                 _ = f.read(1)
         except FileNotFoundError:
             pass
+        # Only checks read and not write permission
         except (PermissionError, OSError, UnicodeError):
             raise ConfigurationError("can't access archive file") from None
 
@@ -336,7 +338,8 @@ class Settings:
 
     @json.setter
     def json(self, value):
-        self._json = value
+        # We're gonna trust the user not to output to a location without write permission
+        self._json = pathlib.Path(value).resolve()
 
     @property
     def merge_ext(self):
@@ -693,6 +696,7 @@ def parse_cli():
         "--preview",
         "--write-list",
         "--use-archive",
+        "--print-json",
         "--ext",
         "-o", "--output",
     ]
@@ -812,9 +816,11 @@ def parse_cli():
         elif option in ("--video-only",):
             settings.audio = False
         elif option in ("--write-list",):
-            settings.out_file = value
+            settings.output_list = value
         elif option in ("--use-archive",):
             settings.archive = value
+        elif option in ("--print-json",):
+            settings.json = value
         # Output
         elif option in ("--ext",):
             settings.merge_ext = value
