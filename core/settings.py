@@ -29,43 +29,147 @@ from textwrap import dedent
 class DefaultSettings:
 
     def __init__(self):
-        # TODO: Add descriptions for allowed values, etc. again
+        # Change terminal output verbosity
+        #   0 -> print only errors
+        # >=1 -> all messages
+        # Supported values: 0, 1
         self._verbosity = 1
+
+        # How to treat already existing files
+        #   True  -> overwrite existing files
+        #   False -> skip existing files
+        # Supported values: True, False
         self._overwrite = False
+
+        # Output location for downloaded coubs
+        # Supported values: pathlib.Path objects
+        # See https://docs.python.org/3/library/pathlib.html
         self._path = pathlib.Path().resolve()
+
+        # What to do with the individual streams after merging
+        #   True  -> keep the extra files
+        #   False -> delete the extra files
+        # Supported values: True, False
         self._keep = False
+
+        # How often to loop the video to the audio
+        # The resulting looped video length will never exceed the audio length
+        # Supported values: Positive integers (excl. 0)
         self._repeat = 1000
+
+        # Max merged video duration
+        # Can be used to restrict the looped video duration further
+        # Ignored if looped video already shorter than the max duration
+        # Supported values: FFmpeg time syntax (excl. negative values) or None
+        # See https://ffmpeg.org/ffmpeg-utils.html#time-duration-syntax
         self._duration = None
-        # download defaults
+
+        # Maximum number of connections
+        # Only raise this value, if your internet connection isn't yet fully utilized
+        # Too many connections can result in Coub simply refusing them
+        # Supported values: Positive integers (excl. 0)
         self._connections = 25
+
+        # How often to reestablish connections before giving up
+        #  >0 -> retry the specified number of times
+        #   0 -> don't retry
+        #  <0 -> retry indefinitely
+        # Supported values: Integers
         self._retries = 5
+
+        # Max number of coubs to download during one script invocation
+        # Supported values: Positive integers (excl. 0) or None
         self._max_coubs = None
-        # format defaults
+
+        # What available video resolution and audio quality to select
+        # The list of available video resolutions can be reduced via _v_max, _v_min
+        #   0 ->  lowest resolution / worst quality
+        #  -1 -> highest resolution /  best quality
+        # Supported values: 0, -1
         self._v_quality = -1
         self._a_quality = -1
+
+        # Limit the list of available video resolutions
+        #   _v_max -> highest allowed resolution
+        #   _v_min ->  lowest allowed resolution
+        # Supported values:
+        #   "med"    (max 640x480)
+        #   "high"   (max 1280x960)
+        #   "higher" (max 1600x1200)
         self._v_max = "higher"
         self._v_min = "med"
+
+        # Download special 'share' version
+        # Usually shorter, low resolution videos with AAC audio
+        # This is what you get when you click the download button on their website
+        # Supported values: True, False
         self._share = False
-        # channel defaults
+
+        # How to treat recoubs during channel downloads
+        #   0 -> no recoubs
+        #   1 -> with recoubs
+        #   2 -> only recoubs
+        # Supported values: 0, 1, 2
         self._recoubs = 1
-        # misc. defaults
+
+        # Enable/disable audio/video download
+        # _video and _audio mustn't both be False at the same time
+        #   True  -> download stream (if it exists)
+        #   False -> don't download stream
+        # Supported values: True, False
         self._audio = True
         self._video = True
+
+        # Print parsed coub links to a file
+        # This option will make the script exit after the parsing stage
+        # Supported values: pathlib.Path objects or None
+        # See https://docs.python.org/3/library/pathlib.html
         self._output_list = None
+
+        # Use an archive file to keep track of already downloaded coubs
+        # Supported values: pathlib.Path objects or None
+        # See https://docs.python.org/3/library/pathlib.html
         self._archive = None
+
+        # Output additional information about downloaded coubs to a JSON file
+        # The following information will be recorded:
+        #   -) ID (identifier in the URL)
+        #   -) Title
+        #   -) Creation date/time
+        #   -) Channel
+        #   -) Community
+        #   -) Tags
+        # Supported values: pathlib.Path objects or None
+        # See https://docs.python.org/3/library/pathlib.html
         self._json = None
-        # output defaults
+
+        # Container to merge separate video/audio streams into
+        # Supported values: Containers with support for AVC video and MP3 audio
+        # See: https://en.wikipedia.org/wiki/Comparison_of_video_container_formats
+        # Some common examples: mkv, mp4, asf, avi, flv, f4v, mov
         self._merge_ext = "mkv"
+
+        # Name template for downloaded coubs
+        # Supports the following special keywords:
+        #   %id%        - ID (identifier in the URL)
+        #   %title%     - Title
+        #   %creation%  - Creation date/time
+        #   %community% - Which community the coub belongs to
+        #   %channel%   - The uploader's channel name
+        #   %tags%      - All tags (separated by tag_sep, see below)
+        # All other strings are interpreted literally.
+        # Supported values: Strings
         self._name_template = "%id%"
-        # advanced defaults
+
+        # Advanced Settings
         self._ffmpeg_path = "ffmpeg"
-        self._tag_sep = "_"
-        self._write_method = "w"
+        self._tag_sep = "_"             # tag seperator in output filenames
+        self._write_method = "w"        # for _output_list; w -> overwrite / a -> append
         self._chunk_size = 1024
-        self._allow_unicode = True
+        self._allow_unicode = True      # for output filenames
 
+        # DO NOT TOUCH
         self.input = set()
-
         self._context = SSLContext()
         self._env = dict(os.environ)
         # Change library search path based on script usage
@@ -92,6 +196,7 @@ class Settings:
         return Settings.instance
 
     def check(self):
+        # TODO: Add more checks
         #Test for discrepancies between min/max video quality
         formats = {
             'med': 0,
@@ -305,6 +410,7 @@ class Settings:
             raise ConfigurationError("can't disable both video and audio") from None
         self._video = value
 
+    # TODO: Add write permission error handling during runtime
     @property
     def output_list(self):
         return self._output_list
