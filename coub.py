@@ -124,8 +124,7 @@ def write_list(ids):
     """Output parsed links to a list and exit."""
     with Settings.get().output_list.open(Settings.get().write_method) as f:
         print(*[f"https://coub.com/view/{i}" for i in ids], sep="\n", file=f)
-    msg.msg(f"\nParsed coubs written to '{Settings.get().output_list}'!",
-        color=msg.SUCCESS)
+    msg.msg(f"\nParsed coubs written to '{Settings.get().output_list}'!")
 
 
 def clean_workspace():
