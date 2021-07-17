@@ -45,12 +45,9 @@ class DefaultSettings:
         self._a_quality = -1
         self._v_max = "higher"
         self._v_min = "med"
-        self._aac = 1
         self._share = False
         # channel defaults
         self._recoubs = 1
-        # preview defaults
-        self._preview = None
         # misc. defaults
         self._audio = True
         self._video = True
@@ -63,7 +60,6 @@ class DefaultSettings:
         # advanced defaults
         self._ffmpeg_path = "ffmpeg"
         self._tag_sep = "_"
-        self._fallback_char = "-"
         self._write_method = "w"
         self._chunk_size = 1024
         self._allow_unicode = True
@@ -264,14 +260,6 @@ class Settings:
             ) from None
 
         self._v_min = value
-
-    @property
-    def aac(self):
-        return self._aac
-
-    @aac.setter
-    def aac(self, value):
-        self._aac = value
 
     @property
     def share(self):
@@ -497,8 +485,6 @@ def print_help():
                                   Supported values: med, high, higher
           --bestaudio           download best available audio quality (def)
           --worstaudio          download worst available audio quality
-          --aac                 prefer AAC over higher quality MP3 audio
-          --aac-strict          only download AAC audio (never MP3)
           --share               download 'share' video (shorter and includes audio)
 
         Channel options:
@@ -805,10 +791,6 @@ def parse_cli():
             settings.a_quality = -1
         elif option in ("--worstaudio",):
             settings.a_quality = 0
-        elif option in ("--aac",):
-            settings.aac = 2
-        elif option in ("--aac-strict",):
-            settings.aac = 3
         elif option in ("--share",):
             settings.share = True
         # Channel options
