@@ -62,8 +62,8 @@ class Coub:
 
     session = None
 
-    video = Settings.get().video
-    audio = Settings.get().video
+    video = False
+    audio = False
 
     video_link = ""
     audio_link = ""
@@ -76,6 +76,8 @@ class Coub:
         super().__init__()
         self.id = id_
         self.session = session
+        self.video = Settings.get().video
+        self.audio = Settings.get().audio
         # share version is basically like a video-only download
         if Settings.get().share:
             self.video = True
