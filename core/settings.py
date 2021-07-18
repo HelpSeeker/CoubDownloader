@@ -903,6 +903,9 @@ def parse_cli():
             settings.a_quality = 0
         elif option in ("--share",):
             settings.share = True
+            # share version is basically like a video-only download
+            settings.video = True
+            settings.audio = False
         # Channel options
         elif option in ("--recoubs",):
             settings.recoubs = 1

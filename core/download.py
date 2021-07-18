@@ -78,10 +78,6 @@ class Coub:
         self.session = session
         self.video = Settings.get().video
         self.audio = Settings.get().audio
-        # share version is basically like a video-only download
-        if Settings.get().share:
-            self.video = True
-            self.audio = False
 
     def _log_infos(self):
         infos = {
