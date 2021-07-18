@@ -157,19 +157,22 @@ class Coub:
         name = self._assemble_name()
         path = Settings.get().path
 
-        self.video_file = path / f"{name}.mp4"
-        self.audio_file = path / f"{name}.mp3"
-        self.merged_file = path / f"{name}.{Settings.get().merge_ext}"
+        if self.video:
+            self.video_file = path / f"{name}.mp4"
+        if self.audio:
+            self.audio_file = path / f"{name}.mp3"
+        if self.video and self.audio:
+            self.merged_file = path / f"{name}.{Settings.get().merge_ext}"
         if Settings.get().share:
             self.merged_file = self.video_file
 
     def _check_existence(self):
         exists = None
-        if self.merged_file.exists():
+        if self.merged_file and self.merged_file.exists():
             exists = self.merged_file
-        elif self.video_file.exists():
+        elif self.video_file and self.video_file.exists():
             exists = self.video_file
-        elif self.audio_file.exists():
+        elif self.audio_file and self.audio_file.exists():
             exists = self.audio_file
 
         if exists and not Settings.get().overwrite:
