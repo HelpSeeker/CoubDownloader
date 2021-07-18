@@ -541,10 +541,11 @@ class ConfigurationError(Exception):
 # Functions
 # ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-# TODO: Update help texts to reflect featured/coub of the day as own switch
+# TODO: Add counter-switch for all bool switches
+# TODO: Show defaults where appropriate
+# TODO: Show "(def)" based on default value
 
 def print_help():
-    # TODO: Show "(def)" based on default value
     print(dedent(f"""\
         CoubDownloader is a simple download script for coub.com
 
@@ -600,10 +601,6 @@ def print_help():
           --recoubs             include recoubs during channel downloads (def)
           --no-recoubs          exclude recoubs during channel downloads
           --only-recoubs        only download recoubs during channel downloads
-
-        Preview options:
-          --preview COMMAND     play finished coub via the given command
-          --no-preview          explicitly disable coub preview
 
         Misc. options:
           --audio-only          only download audio streams
