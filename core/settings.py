@@ -877,7 +877,7 @@ def parse_cli():
         elif option in ("-r", "--repeat"):
             settings.repeat = value
         elif option in ("-d", "--duration"):
-            settings.dur = value
+            settings.duration = value
         # Download options
         elif option in ("--connections",):
             settings.connect = value
