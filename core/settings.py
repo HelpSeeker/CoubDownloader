@@ -931,7 +931,7 @@ def parse_cli():
         elif option in ("--ext",):
             settings.merge_ext = value
         elif option in ("-o", "--output"):
-            settings.out_format = value
+            settings.name_template = value
         elif option in ("--",):
             treat_as_input = True
         # Unknown options
