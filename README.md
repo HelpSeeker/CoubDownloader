@@ -1,3 +1,17 @@
+# RIP Coub
+
+Coub will soon be gone, so now is the time to download your favorite coubs, before it's too late.
+
+Because of this many new people have stumbled upon this project and started using it. As much as it hurts to lose Coub, I'm happy to see you all here.
+
+Personally I haven't used CoubDownloader in quite a while. My main focus was Gyre and even that worked well enough for my personal use to not touch its code for almost a year. Because of this you may stumble upon bugs and other problems, that have evaded me all these years.
+
+I will try to address any issues asap during the next two weeks, but please understand that this will be only a life support. My main priority are issues that prevent the correct download of coubs. I won't work on QoL features or force any changes on the dev branch into master. It's too late for that.
+
+Hotfix releases will be available on the release page. Although I advise setting up a Python environment for CoubDownloader and running it directly, as it removes another point of failure and makes debugging easier.
+
+Thank you very much.
+
 # CoubDownloader
 
 CoubDownloader is a simple script to download videos (called coubs) from [Coub](https://coub.com).
