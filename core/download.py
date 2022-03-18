@@ -206,7 +206,7 @@ class Coub:
         temp_file = pathlib.Path(self.merged_file.parent, f"temp_{self.merged_file.name}")
         concat_file = self.merged_file.with_suffix(".txt")
 
-        with concat_file.open("w") as f:
+        with concat_file.open("w", encoding="utf-8") as f:
             for _ in range(Settings.get().repeat):
                 print(f"file '{self.video_file}'", file=f)
 
