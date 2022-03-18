@@ -1026,7 +1026,7 @@ class Coub:
 
         try:
             # Print .txt for FFmpeg's concat
-            with open(t_name, "w") as f:
+            with open(t_name, "w", encoding="utf-8") as f:
                 for _ in range(opts.repeat):
                     print(f"file 'file:{self.v_name}'", file=f)
 
