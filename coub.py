@@ -1958,6 +1958,13 @@ def attempt_process(coubs, level=0):
 
     try:
         asyncio.run(process(coubs), debug=False)
+    except json.decoder.JSONDecodeError:
+        err("\nCoub API temporarily not available!")
+        check_connection()
+        # Reduce the list of coubs to only those yet to finish
+        coubs = [c for c in coubs if not c.done]
+        level += 1
+        attempt_process(coubs, level)
     except Exception as e:
         if aio and isinstance(e, (aiohttp.ClientConnectionError, aiohttp.ClientPayloadError)):
             check_connection()
@@ -1982,7 +1989,18 @@ def main():
     check_connection()
 
     msg("\n### Parse Input ###")
-    ids = parse_input(opts.input)
+
+    attempt = 0
+    ids = []
+    while opts.retries < 0 or attempt <= opts.retries:
+        try:
+            ids = parse_input(opts.input)
+            break
+        except json.decoder.JSONDecodeError:
+            err("\nCoub API temporarily not available!")
+            check_connection()
+            attempt += 1
+
     if ids:
         if opts.output_list:
             write_list(ids)
@@ -1995,6 +2013,8 @@ def main():
             attempt_process(coubs)
         finally:
             clean(coubs)
+    elif opts.retries >= 0 and attempt > opts.retries:
+        err("\nRan out of connection retries! Please try again later.")
     else:
         msg("\nAll coubs present in archive file!", color=fgcolors.WARNING)
 
