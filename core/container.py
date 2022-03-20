@@ -84,7 +84,7 @@ class BaseContainer:
                 if api_json.get("error") is not None:
                     raise ContainerUnavailableError from None
                 self.pages = api_json.get("total_pages")
-        except ClientError:
+        except (ClientError, json.decoder.JSONDecodeError):
             raise APIResponseError from None
 
     async def _fetch_api_json(self, request, session):
@@ -92,7 +92,7 @@ class BaseContainer:
             async with session.get(request) as response:
                 api_json = await response.read()
                 api_json = json.loads(api_json)
-        except ClientError:
+        except (ClientError, json.decoder.JSONDecodeError):
             api_json = None
 
         return api_json
