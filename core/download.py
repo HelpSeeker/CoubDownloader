@@ -251,7 +251,7 @@ class Coub:
                 )
                 msg.msg("finished", color=msg.SUCCESS)
                 break
-            except ClientError:
+            except (ClientError, json.decoder.JSONDecodeError):
                 attempt += 1
             except CoubUnavailableError:
                 done += 1
