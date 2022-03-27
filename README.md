@@ -1,3 +1,16 @@
+# What's new in the fork 
+
+There are new bash commands:
+
+* `./save example` saves coubs by specified list example.txt
+* `./save_channel undefined-isotope` saves specified channel
+* `./save_tag coub_vault` saves coubs by specified tag
+* `./save_search vault` saves coubs by specified search term
+* `./save_community memes` saves specified community
+* `./save_story 2154597-coub_vault` saves specified community
+* `./save_hot` saves coubs from the hot section
+* `./save_all` saves random coubs again and again
+
 # RIP Coub
 
 Coub will soon be gone, so now is the time to download your favorite coubs, before it's too late.

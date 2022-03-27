@@ -1,0 +1,5 @@
+LIST="story_$1"
+wget https://coub.com/stories/$1 --output-document "$LIST.htm"
+echo "Downloaded just list, not coubs"
+
+

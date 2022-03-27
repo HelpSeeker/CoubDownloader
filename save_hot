@@ -1,0 +1,14 @@
+DT=$(date '+%Y-%d-%m-%H-%M-%S');
+LIST="hot_$DT"
+if [ -e "$LIST.txt" ]; then
+    echo "$LIST.txt already exist"
+else
+    ./coub.py --hot --write-list "$LIST.txt"
+    if [ $? -eq 0 ]
+    then
+        ./save $LIST
+    else
+        exit 1
+    fi
+fi
+

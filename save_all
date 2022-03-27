@@ -1,0 +1,21 @@
+SUBDIR="all"
+if [ -e "$SUBDIR" ]; then
+    echo "Continue saving all coubs..."
+else
+    mkdir "$SUBDIR"
+    echo "Saving all coubs..."
+fi
+cd "$SUBDIR"
+while true
+do
+    DT=$(date '+%Y-%d-%m-%H-%M-%S');
+    LIST="random_$DT.txt"
+    LOGFILE="random_$DT.log"
+    ../coub.py --random --write-list $LIST
+    if [ $? -eq 0 ]; then
+        cat $LIST | xargs -L1 wget --adjust-extension 2>&1 | tee -a $LOGFILE
+        ../coub.py -k -r 1 -l $LIST --use-archive saved.txt 2>&1 | tee -a $LOGFILE
+    fi
+    sleep 5
+done
+cd ..

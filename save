@@ -1,0 +1,28 @@
+SUBDIR="$1"
+if [ -e "$SUBDIR" ]; then
+    echo "$SUBDIR already exist (completely downloaded, but when?)"
+elif [ -e "~$SUBDIR" ]; then
+    echo "~$SUBDIR already exist (incompletely downloaded), you should remove it"
+    exit 1
+else
+    mkdir "~$SUBDIR"
+    cd "~$SUBDIR"
+    LIST="../$1.txt"
+    LOGFILE="../$1.log"
+    cat $LIST | xargs -L1 wget --adjust-extension --timeout=10 2>&1 | tee -a $LOGFILE
+    FILESCOUNT=$(ls *.htm* | wc -l)
+    RECORDSCOUNT=$(cat $LIST | wc -l)
+    echo "$FILESCOUNT/$RECORDSCOUNT files" | tee -a $LOGFILE
+    ../coub.py -k -r 1 -l $LIST 2>&1 | tee -a $LOGFILE
+    if [ $? -eq 0 ]
+    then
+        cd ..
+        mv "~$SUBDIR" "$SUBDIR"
+        echo "$SUBDIR downloaded successfully (perhaps)"
+    else
+        cd ..
+        echo "~$SUBDIR downloaded partially (check if sufficient disk space)"
+        exit 1
+    fi
+fi
+
