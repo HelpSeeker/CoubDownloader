@@ -1,4 +1,4 @@
-# What's new in the fork 
+# What's new in the last days
 
 There are new bash commands:
 
