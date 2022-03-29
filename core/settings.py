@@ -125,6 +125,11 @@ class DefaultSettings:
         # Supported values: pathlib.Path objects or None
         # See https://docs.python.org/3/library/pathlib.html
         self._output_list = None
+        
+        # Print unavaiable coub links to a file
+        # Supported values: pathlib.Path objects or None
+        # See https://docs.python.org/3/library/pathlib.html
+        self._unavaiable_list = None
 
         # Use an archive file to keep track of already downloaded coubs
         # Supported values: pathlib.Path objects or None
@@ -421,6 +426,15 @@ class Settings:
         self._output_list = pathlib.Path(value).resolve()
 
     @property
+    def unavaiable_list(self):
+        return self._unavaiable_list
+
+    @unavaiable_list.setter
+    def unavaiable_list(self, value):
+        # We're gonna trust the user not to output to a location without write permission
+        self._unavaiable_list = pathlib.Path(value).resolve()    
+    
+    @property
     def archive(self):
         return self._archive
 
@@ -603,12 +617,13 @@ def print_help():
           --only-recoubs        only download recoubs during channel downloads
 
         Misc. options:
-          --audio-only          only download audio streams
-          --video-only          only download video streams
-          --write-list FILE     write all parsed coub links to FILE
-          --use-archive FILE    use FILE to keep track of already downloaded coubs
-          --print-json FILE     output basic coub infos as JSON to FILE
-                                  see --output for the currently available infos
+          --audio-only              only download audio streams
+          --video-only              only download video streams
+          --write-list FILE         write all parsed coub links to FILE
+          --unavaiable-list FILE    write unavaiable coubs links to FILE
+          --use-archive FILE        use FILE to keep track of already downloaded coubs
+          --print-json FILE         output basic coub infos as JSON to FILE
+                                       see --output for the currently available infos
 
         Output:
           --ext EXTENSION       merge output with the given extension (def: {Settings.get().merge_ext})
@@ -798,6 +813,7 @@ def parse_cli():
         "--min-video",
         "--preview",
         "--write-list",
+        "--unavaiable-list",
         "--use-archive",
         "--print-json",
         "--ext",
@@ -923,6 +939,8 @@ def parse_cli():
             settings.audio = False
         elif option in ("--write-list",):
             settings.output_list = value
+        elif option in ("--unavaiable-list",):
+            settings.unavaiable_list = value
         elif option in ("--use-archive",):
             settings.archive = value
         elif option in ("--print-json",):
