@@ -91,8 +91,8 @@ class Coub:
         with Settings.get().json.open("a") as f:
             print(json.dumps(infos), file=f)
     
-    def _log_unavaiable(self):
-        with Settings.get().unavaiable_list.open("a") as f:
+    def _log_unavailable(self):
+        with Settings.get().unavailable_list.open("a") as f:
             print(f"https://coub.com/view/{self.id}", file = f)
     
     def _log_archive_entry(self):
@@ -267,8 +267,8 @@ class Coub:
                 )
                 msg.err("unavailable", color=msg.ERROR)
                 
-                if Settings.get().unavaiable_list:
-                    self._log_unavaiable()
+                if Settings.get().unavailable_list:
+                    self._log_unavailable()
                 
                 break
             except CoubExistsError:
