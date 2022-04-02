@@ -23,9 +23,10 @@ import json
 import os
 import subprocess
 import sys
+import certifi
 
 from math import ceil
-from ssl import SSLCertVerificationError
+from ssl import SSLCertVerificationError, create_default_context
 from textwrap import dedent
 
 import urllib.error
@@ -534,7 +535,7 @@ class BaseContainer:
             return
 
         try:
-            with urlopen(self.template) as resp:
+            with urlopen(self.template, context=context) as resp:
                 resp_json = json.loads(resp.read())
         except urllib.error.HTTPError:
             err(f"\nInvalid {self.type} ('{self.id}')!",
@@ -941,7 +942,7 @@ class Coub:
                 resp_json = json.loads(resp_json)
         else:
             try:
-                with urlopen(self.req) as resp:
+                with urlopen(self.req, context=context) as resp:
                     resp_json = resp.read()
                     resp_json = json.loads(resp_json)
             except (urllib.error.HTTPError, urllib.error.URLError):
@@ -1179,7 +1180,7 @@ def check_prereq():
 def check_connection():
     """Check if user can connect to coub.com."""
     try:
-        urlopen("https://coub.com/")
+        urlopen('https://coub.com/', context=context)
     except urllib.error.URLError as e:
         if isinstance(e.reason, SSLCertVerificationError):
             err("Certificate verification failed! Please update your CA certificates.")
@@ -1566,7 +1567,7 @@ async def parse_page(req, session=None):
             resp_json = await resp.read()
             resp_json = json.loads(resp_json)
     else:
-        with urlopen(req) as resp:
+        with urlopen(req, context=context) as resp:
             resp_json = resp.read()
             resp_json = json.loads(resp_json)
 
@@ -1873,7 +1874,7 @@ async def save_stream(link, path, session=None):
                     f.write(chunk)
     else:
         try:
-            with urlopen(link) as stream, open(path, "wb") as f:
+            with urlopen(link, context=context) as stream, open(path, "wb") as f:
                 while True:
                     chunk = stream.read(opts.chunk_size)
                     if not chunk:
@@ -2023,6 +2024,7 @@ def main():
 
 # Execute main function
 if __name__ == '__main__':
+    context = create_default_context(cafile=certifi.where())
     opts = parse_cli()
     try:
         main()
