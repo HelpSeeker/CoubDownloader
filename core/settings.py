@@ -572,12 +572,12 @@ def print_help():
         Common options:
           -h, --help            show this help
           -q, --quiet           suppress all non-error messages
-          -y, --overwrite       overwrite any existing files
-          -n, --no-overwrite    skip any existing files (def)
+          -y, --overwrite       overwrite any existing files {'(def)' * Settings.get().overwrite}
+          -n, --no-overwrite    skip any existing files {'(def)' * (not Settings.get().overwrite)}
           -s, --short           disable video looping
           -p, --path PATH       set output destination (def: '{Settings.get().path}')
           -k, --keep            keep the individual video/audio parts
-          -r, --repeat N        repeat video N times (def: until audio ends)
+          -r, --repeat N        repeat video N times (def: {'until audio ends' if Settings.get().repeat > 100 else Settings.get().repeat})
           -d, --duration TIME   specify max. coub duration (FFmpeg syntax)
 
         Download options:
@@ -587,20 +587,20 @@ def print_help():
           --limit-num LIMIT     limit max. number of downloaded coubs
 
         Format selection:
-          --bestvideo           download best available video quality (def)
-          --worstvideo          download worst available video quality
+          --bestvideo           download best available video quality {'(def)' * bool(Settings.get().v_quality)}
+          --worstvideo          download worst available video quality {'(def)' * (not Settings.get().v_quality)}
           --max-video FORMAT    set limit for the best video format (def: {Settings.get().v_max})
                                   Supported values: med, high, higher
           --min-video FORMAT    set limit for the worst video format (def: {Settings.get().v_min})
                                   Supported values: med, high, higher
-          --bestaudio           download best available audio quality (def)
-          --worstaudio          download worst available audio quality
-          --share               download 'share' video (shorter and includes audio)
+          --bestaudio           download best available audio quality {'(def)' * bool(Settings.get().a_quality)}
+          --worstaudio          download worst available audio quality {'(def)' * (not Settings.get().a_quality)}
+          --share               download 'share' video (shorter and includes audio) {'(def)' * Settings.get().share}
 
         Channel options:
-          --recoubs             include recoubs during channel downloads (def)
-          --no-recoubs          exclude recoubs during channel downloads
-          --only-recoubs        only download recoubs during channel downloads
+          --recoubs             include recoubs during channel downloads {'(def)' * (Settings.get().recoubs == 1)}
+          --no-recoubs          exclude recoubs during channel downloads {'(def)' * (Settings.get().recoubs == 0)}
+          --only-recoubs        only download recoubs during channel downloads {'(def)' * (Settings.get().recoubs == 2)}
 
         Misc. options:
           --audio-only          only download audio streams
