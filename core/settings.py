@@ -790,7 +790,7 @@ def parse_cli():
         "-p", "--path",
         "-r", "--repeat",
         "-d", "--duration",
-        "--story"
+        "--story",
         "--connections",
         "--retries",
         "--limit-num",
